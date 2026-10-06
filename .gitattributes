@@ -1,0 +1,5 @@
+# Every text file in this repo has LF line endings on every OS. The Linux half
+# runs under sh and awk, which cannot read CRLF, and the Windows clone that
+# Publish-ManatechMotd.ps1 publishes from would otherwise be checked out as
+# CRLF by Git's core.autocrlf. PowerShell reads LF files as well.
+* text=auto eol=lf

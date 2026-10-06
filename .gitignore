@@ -1,0 +1,9 @@
+# Spreadsheet exports the TSVs are built from stay local: every host clones
+# this repo, and an inventory export can hold far more than the banner needs.
+*.xlsx
+
+# Merge-request description drafts (not code).
+.mr/
+
+# Review worktrees live inside the repo folder.
+.review-worktrees/
