@@ -27,6 +27,12 @@
 | D14 | B, plus an "update available" line, and installed files writable only by root/SYSTEM |
 | D15 | Windows Server 2022 and later |
 | D17 | min/max over the last 24 hours, sampled every 15 minutes. A scheduled reboot is read live at every login |
+| D18 | One entry point on Windows: each command checks for PowerShell 7 in `begin {}`, installs it when missing and runs itself again in `pwsh`. A GPO uses deploy-usawinssh's staged MSI, and `-UpdatePoSHMSI` refreshes it |
+| D19 | A and B, with Windows' own decoder on Windows. On Linux, formats other than PNG need ImageMagick, and the cmdlet says so |
+| D20 | Ship the naming standard as written. FortiOS and Unifi go back into the public `schema-names.tsv` |
+| D21 | deploy-usawinssh owns SSH and the PowerShell 7 install. This module calls it |
+| D22 | later |
+| D23 | as proposed |
 
 ## Contents
 
@@ -49,12 +55,12 @@
 | D15 | Windows Server 2019 | decided: 2022 and later |
 | D16 | Ubuntu: stop the apt prompts | decided |
 | D17 | Slow facts, and min/max over what window | decided: 24 h |
-| D18 | Installing PowerShell 7 before the module can run | recommendation |
-| D19 | New-UsaBannerArt: which image formats | recommendation |
-| D20 | The naming standard as the shipped default | recommendation |
-| D21 | Who owns SSH: this module or deploy-usawinssh | recommendation |
-| D22 | Network devices (stretch) | later |
-| D23 | Names and paths without "Manatech" | recommendation |
+| D18 | Installing PowerShell 7 before the module can run | decided: one entry point |
+| D19 | New-UsaBannerArt: which image formats | decided: A and B |
+| D20 | The naming standard as the shipped default | decided |
+| D21 | Who owns SSH: this module or deploy-usawinssh | decided: deploy-usawinssh |
+| D22 | Network devices (stretch) | decided: later |
+| D23 | Names and paths without "Manatech" | decided |
 | D24 | A LICENSE | decided: MIT |
 
 ## D1. Where the code lives, and its name
@@ -785,6 +791,48 @@ PowerShell 5.1 bootstrap must not name a function `Deploy-*`.
 Then: install or import the module, and run `Deploy-UsaBanner`. The
 Quickstart becomes one bootstrap line per OS.
 
+**Decided (2026-10-09): one entry point on Windows, no separate bootstrap.**
+Each command checks the PowerShell it runs in from `begin {}`, instead of
+`#Requires -PSEdition Core`. Under Windows PowerShell 5.1 it installs
+PowerShell 7 when it is missing, then runs itself again in `pwsh` with the
+same parameters, so a 5.1 console just works.
+
+- **Interactive**: the newest MSI, checked against the release's
+  `hashes.sha256` and its Microsoft signature, the way deploy-usawinssh
+  checks an unpinned MSI today [fetched: the v7.6.6 release lists
+  `hashes.sha256`].
+- **GPO**: the MSI deploy-usawinssh stages, installed unattended at startup
+  (D21). `Deploy-UsaBannerGPO -UpdatePoSHMSI` downloads the newest MSI, checks
+  it, and stages it through deploy-usawinssh's own `-PwshMsi` code, so both
+  policies share one MSI and one installer.
+- **The `Deploy` verb**: Windows PowerShell 5.1 warns about it when the module
+  loads. Accepted, and documented.
+- **Ubuntu** keeps its `sh` bootstrap: it has no older PowerShell to run a
+  check in.
+
+What makes it work: Windows PowerShell 5.1 parses a whole file before it runs
+any of it [known], so one PowerShell 7 operator anywhere in that file (`??`,
+`? :`, `&&`) stops it before `begin {}` runs. The module's loader and the
+check stay 5.1-safe, and the PowerShell 7 code lives in files the loader
+dot-sources only under `pwsh`. PSScriptAnalyzer's `PSUseCompatibleSyntax`
+rule, aimed at 5.1, can hold the loader to that in the tests [known].
+
+**The MSI has an end date.** "Beginning with the PowerShell 7.7.0 release,
+there is no MSI package available. WinGet only installs the MSIX package"
+[fetched: Install PowerShell 7 on Windows, updated 2026-09-22]. 7.6 is the
+current LTS, supported until 14 November 2028 [fetched: PowerShell Support
+Lifecycle]. WinGet isn't available on Windows Server 2022, and the MSIX
+package installs for one user, in a sandbox that blocks changes to `$PSHOME`
+[fetched], so it can't be every admin's SSH shell. The MSI line carries V1 to
+late 2028. After that the ZIP package (machine-wide, the PATH set by us, no
+Microsoft Update) is the fallback, to decide then.
+
+Until then the MSI opts in to Microsoft Update by default (`USE_MU=1`,
+`ENABLE_MU=1`), "whether that's with Windows Update for Business, WSUS,
+Microsoft Endpoint Configuration Manager" [fetched]. So 7.6 patches arrive
+the way Windows patches do, and `-UpdatePoSHMSI` mostly sets what a new host
+installs.
+
 ## D19. New-UsaBannerArt: which image formats
 
 PowerShell 7 on Linux has no image decoder of its own. "Starting in .NET 7,
@@ -807,6 +855,13 @@ operating systems" [fetched: .NET breaking changes]. PowerShell 7.4 runs on
 
 The art is stored as text either way (D12).
 
+**Decided (2026-10-09): A and B, with option C's decoder on Windows.** Windows
+needs nothing extra: PowerShell 7 on Windows ships `System.Drawing`, so there
+the cmdlet reads PNG, JPEG, GIF, BMP and TIFF [known; one line to confirm on a
+lab host]. On Linux, PNG works out of the box, and any other format needs
+ImageMagick. When it is missing, the cmdlet says so with the install line
+(`sudo apt install imagemagick`) instead of a bare "unsupported format".
+
 ## D20. The naming standard as the shipped default
 
 The author is fine with publishing the naming standard (SPEC §5.4). Today's
@@ -816,6 +871,10 @@ public copy, MR !1, replaced two OS codes with generic names ("Firewall OS",
 **Recommendation:** ship the standard as written, as the default
 `schema-names.tsv`: types, subtypes and OS codes. Keep the site codes as
 examples, since every user's sites differ.
+
+**Decided (2026-10-09): as recommended.** FortiOS and Unifi go back into the
+public `schema-names.tsv`, exactly as the private copy has them, in their own
+small MR. They are vendor names, not lab details.
 
 ## D21. Who owns SSH: this module or deploy-usawinssh
 
@@ -845,6 +904,10 @@ classic trap, so the module sets those permissions itself. It uses the SID
 form (`*S-1-5-32-544`), which works on localized Windows. Microsoft Entra ID
 accounts cannot use key authentication at all [fetched].
 
+**Decided (2026-10-09): as recommended.** deploy-usawinssh owns SSH, and with
+it the PowerShell 7 install (D18). This module calls it rather than carrying a
+second OpenSSH setup.
+
 ## D22. Network devices (stretch)
 
 Most network OSes have a static banner command: Cisco IOS and NX-OS have
@@ -855,6 +918,8 @@ compute on the device. They need either device-side scripting (EEM on
 Cisco) or a collector that rewrites the banner every few minutes.
 **Recommendation: later**, after the two OSes ship. Start with static
 banners pushed by `Deploy-UsaBannerRemote`.
+
+**Decided (2026-10-09): later**, as recommended.
 
 ## D23. Names and paths without "Manatech"
 
@@ -875,6 +940,8 @@ GPO. A Manatech host moves when its old install is removed, by a step that
 `Deploy-UsaBanner` offers when it finds one. The Manatech art and name live
 only in the private site fork.
 
+**Decided (2026-10-09): as proposed.**
+
 ## D24. A LICENSE
 
 **Decided: MIT**, with the same text as deploy-usawinssh ("Copyright (c)
@@ -892,21 +959,45 @@ its footing, and it gives a logo contribution (D4) terms to be given under
 ## Appendix A. Art mock-ups (rough)
 
 Plain ASCII, so each works before login too. Final art gets drawn properly
-in V1. In colour, the rabbit takes the UsagiTools palette, and the server and
-terminal take the OS colour (Windows blue, Ubuntu orange: D3, option B).
+in V1.
+
+**The UsagiTools rabbit**, as the author redrew it (2026-10-09): pointed ears,
+because it is a hare (nousagi), three eyes, and USAGITOOLS 2 down the side.
 
 ```text
-The UsagiTools rabbit         A server                       A terminal
+   ^^       ^^    U
+  /  \     /  \   S
+ |    |   |    |  A
+ |    |   |    |  G
+  \   |   |   /   I
+ .-\__/---\__/-.  T
+/   oo (o) oo   \ O
+| (o)       (o) | O
+|      ,',      | L
+|    \_/ \_/    | S
+ '-.__________.-' 2
+```
 
-          __      __          .------------------------.     .------------------------.
-         /  \    /  \         | [=====]  o o o   ..... |     | > usabanner_           |
-        |    |  |    |        |------------------------|     |                        |
-        |    |  |    |        | [=====]  o o o   ..... |     |                        |
-         \   |  |   /         |------------------------|     '------------------------'
-       .--\__/--\__/--.       | [=====]  o o o   ..... |            _____||_____
-      /                \      '------------------------'
-     |   (o)      (o)   |
-     |        ,,        |
-      \     \_/\_/     /
-       '-.__________.-'
+In colour (post-login, D7), the eyes take the UsagiTools palette. Left and
+right are as the viewer sees them:
+
+| Part | Colour | 256-colour fallback | 16-colour fallback |
+|---|---|---|---|
+| left eye, and the `oo` left of centre | `#0099FF` | 33 (`#0087FF`) | bright blue |
+| centre eye | `#99FFFF` | 123 (`#87FFFF`) | bright cyan |
+| right eye, and the `oo` right of centre | `#FF9900` | 208 (`#FF8700`) | yellow |
+
+**A server and a terminal** take the OS colour (Windows blue, Ubuntu orange:
+D3, option B):
+
+```text
+A server                       A terminal
+
+.------------------------.     .------------------------.
+| [=====]  o o o   ..... |     | > usabanner_           |
+|------------------------|     |                        |
+| [=====]  o o o   ..... |     |                        |
+|------------------------|     '------------------------'
+| [=====]  o o o   ..... |            _____||_____
+'------------------------'
 ```
