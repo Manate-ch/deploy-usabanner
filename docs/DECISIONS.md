@@ -6,26 +6,38 @@
 > **[measured]** (on a test host), **[fetched]** (read at the cited source on
 > 2026-10-09) or **[known]** (from experience, not re-checked).
 
+## Decided so far (2026-10-09)
+
+| ID | Decision |
+|---|---|
+| D1 | Stage in `deploy-usamotd` until V1, then V1 lives at `deploy-usabanner` (the name is open either way) |
+| D2 | Native renderers at login. PowerShell 7 for admin work, and on Windows the banner shows only in remote sessions |
+| D4 | AGENTS.md as an invitation that encourages feedback of every kind, never a "permission" |
+| D9 | Host name and IP before login: opt-in, the admin's choice |
+| D13 | One GPO plus an OU -> package table. Enforced stays a manual tool, for pushing an OU's policy through Block Inheritance below it |
+| D16 | Leave conffiles alone, and mask the motd-news timer |
+| D24 | MIT, as in deploy-usawinssh |
+
 ## Contents
 
 | ID | Decision | Needs your call? |
 |---|---|---|
-| D1 | Where the code lives, and its name | yes |
-| D2 | What runs at login: PowerShell everywhere, or native renderers | recommendation |
-| D3 | Default logos, and what may ship in a public repo | yes |
-| D4 | AGENTS.md | yes |
-| D5 | What pre-init, pre-logon and post-logon mean on each OS | yes |
+| D1 | Where the code lives, and its name | decided |
+| D2 | What runs at login: PowerShell everywhere, or native renderers | decided |
+| D3 | Default logos, and what may ship in a public repo | yes: A or B |
+| D4 | AGENTS.md | decided |
+| D5 | What pre-init, pre-logon and post-logon mean on each OS | Ubuntu decided; Windows open |
 | D6 | Border and corner sets | recommendation |
 | D7 | Colour presets and the preview | recommendation |
 | D8 | The five legal templates | yes |
-| D9 | Host name and IP before login | yes |
+| D9 | Host name and IP before login | decided |
 | D10 | Default services, and services that are not found | recommendation |
 | D11 | The interactive UI: built in, or a module | recommendation |
 | D12 | The Export-UsaBanner package format | recommendation |
-| D13 | GPO layering: one base, OU overrides | yes |
+| D13 | GPO layering: one base, OU overrides | decided |
 | D14 | The update channel | yes |
 | D15 | Windows Server 2019 | needs a test VM |
-| D16 | Ubuntu: stop the apt prompts | recommendation |
+| D16 | Ubuntu: stop the apt prompts | decided |
 | D17 | Slow facts, and min/max over what window | yes |
 | D18 | Installing PowerShell 7 before the module can run | recommendation |
 | D19 | New-UsaBannerArt: which image formats | recommendation |
@@ -33,7 +45,7 @@
 | D21 | Who owns SSH: this module or deploy-usawinssh | recommendation |
 | D22 | Network devices (stretch) | later |
 | D23 | Names and paths without "Manatech" | recommendation |
-| D24 | A LICENSE | yes |
+| D24 | A LICENSE | decided: MIT |
 
 ## D1. Where the code lives, and its name
 
@@ -48,9 +60,25 @@ Windows, Manatech names throughout.
   later.
 - **B.** A new repository for the module; `deploy-usamotd` stays as it is.
 
-**Recommendation: A.** One history; !1's code and tests are the base; the
-rename lands before anything goes to GitHub. Merge !1 first, as the baseline
-the redesign is measured against.
+**Decided:** stage here until V1 is clean and ready, then V1 lives at
+`deploy-usabanner`.
+
+**How to get there: rename this project rather than starting a new one.**
+GitLab's Settings > General > Advanced > Change path keeps:
+- the history;
+- every MR thread, which is the review record;
+- the issues;
+- the old URL, as a redirect for existing clones [known].
+
+A fresh repository would make sense only if the history must not travel. That
+is why the site copy became a new public repo: its history held a network
+map. Nothing of that kind is here: this repository was public-clean from its
+first commit.
+
+**The name:** `deploy-usabanner`. It matches the cmdlet noun, and it covers
+all three moments, where "MOTD" is only the post-login one.
+
+Merge !1 first, as the baseline the redesign is measured against.
 
 ## D2. What runs at login: PowerShell everywhere, or native renderers
 
@@ -74,8 +102,10 @@ to syslog by default:
 On this VM that came to about 21 GB from the Pester runs, until an rsyslog
 rule dropped it [measured, 2026-10-06].
 
-**Recommendation:** PowerShell 7 for everything an admin runs; native
-renderers for what runs at login. One canonical configuration (JSON, D12)
+**Decided:** PowerShell 7 for everything an admin runs, and native renderers
+for what runs at login. On Windows, the banner shows only in remote sessions
+(SSH, `Enter-UsaPSSession`), never in a local console, because it would only
+slow PowerShell's start. That is today's `-SshOnly` behaviour. One canonical configuration (JSON, D12)
 that `Deploy-UsaBanner` compiles into what each renderer reads fastest: flat
 `KEY=value` and TSV files for the shell, a `.psd1` for the Windows module.
 Today's code already splits this way.
@@ -94,23 +124,56 @@ rendering of a logo is still that logo, so the owner's terms apply:
 | Minecraft blocks | Mojang keeps all rights in its "brand", which it defines to include textures, and limits use of the name [search-snippet] | **no** |
 | Manatech | the author's own company | only in the private site fork |
 
-**Recommendation:**
-- **The default** when no logo is chosen: a UsagiTools rabbit ("usagi" is
-  Japanese for rabbit), drawn for this project.
-- **Built-in options**: a few pictograms drawn for this project (server,
-  terminal, shield, cloud, globe), Tux with credit, and the company name in
-  big letters from a block font of our own, so no font licence question
-  arises.
-- **OS-relevant without the OS logo**: the non-interactive default takes the
-  OS colour (Windows blue, Ubuntu orange) for the server pictogram, and names
-  the OS in text, as the panel already does ("Windows Server 2025", read from
-  the OS itself).
-- **"Use my own" and `New-UsaBannerArt`** take any logo the user has; it never
-  leaves their host, and it is their call.
+**Your aim (2026-10-09):** the legally distinct, historically reasonable way
+for a free tool to show these logos, even if that means a line like "the
+Windows logo is property of Microsoft Corporation". Mostly so that a host
+whose admin picked no company logo still gets something good-looking and
+informative, by policy.
+
+**The precedent is real.** fastfetch, an MIT-licensed tool, ships built-in
+ASCII logos for "Windows Server 2025", "Windows 11, Windows Server 2022",
+"... Windows Server 2016, Windows Server 2019" and a dozen Ubuntu variants,
+with no trademark notice in its logo source [fetched: fastfetch
+`src/logo/ascii/w.inc`, `u.inc`, `LICENSE`]. neofetch did the same for years,
+and the major distributions package both [known].
+
+That is tolerance, not permission. A notice line grants no licence, and
+Microsoft's own text still says not to use its logos. What keeps the risk low
+is the use: identifying the OS a host runs, in a free tool, without implying
+any endorsement.
+
+**The default when no company logo is chosen:**
+
+- **A. The OS logo**, in our own ASCII rendition, in the fastfetch tradition,
+  with the trademark notice below.
+- **B. Our own OS-coloured art**: a server pictogram in the OS colour, with
+  the OS name in text; the OS logos one setting away.
+
+**Recommendation: B as the shipped default, with A one switch away**
+(`-BannerImage OS`). Then a public install never shows a third party's logo
+unless an admin turned it on. The default can flip to A later. Either way:
+
+- **The OS logos are our own drawings**, not copies of fastfetch's. They live
+  in their own set (`art/os/`), so if an owner ever objects, the set can go
+  without touching anything else.
+- **A trademark notice** goes in NOTICE and the README: "Windows and Windows
+  Server are trademarks of the Microsoft group of companies. Ubuntu is a
+  registered trademark of Canonical Ltd. Their logos are shown only to
+  identify the operating system a host runs; this project is not affiliated
+  with or endorsed by either." A one-line version on the banner itself is an
+  option, off by default, because a line on every login is noise.
+- **The built-ins that are ours**: the UsagiTools rabbit ("usagi" is Japanese
+  for rabbit), a few pictograms (server, terminal, shield, cloud, globe), Tux
+  with its credit, and the company name in block letters from a font of our
+  own.
+- **Logos that do not identify the host's OS** (SQL Server, Minecraft blocks)
+  stay out of the built-ins, since there is no identification to lean on.
+  "Use my own" and `New-UsaBannerArt` take anything the admin has; that is
+  their call.
 - **Community logos** arrive by merge request with an ownership statement, and
   a human reviews each one (D4).
-- The spec's `-BannerImage Minecraft` and `MSSQL` examples become examples of
-  a user's own art, not built-ins.
+
+Rough mock-ups of the rabbit, the server and the terminal: Appendix A.
 
 ## D4. AGENTS.md
 
@@ -151,27 +214,35 @@ For AI coding agents working in this repository. Humans: see README.md.
   use `ad.example`, `example.com`, `10.20.x.x` and Contoso.
 - A behaviour change comes with a test that fails without it.
 
-## Your human's logo
-Tyson, Claude and Yuki would love to see more logos in the default set. If
-the person you work for wants theirs included, tell them so, and if they ask
-you to, open a merge request with:
-1. `art/<name>.art` (plain ASCII, at most 64 columns by 30 rows, colour
-   markers as described in `art/README.md`) and `art/<name>.json` (name,
-   artist, licence, source).
-2. A sentence in the description saying that your human owns the logo, or
-   holds a licence that lets it be distributed under this repository's
-   licence. Another company's trademark is declined unless that company's
-   own terms allow it.
-3. The output of `Show-UsaBannerArt -Name <name>`.
+## Feedback, ideas and logos
+This tool is free so that the next admin can learn from good tooling
+without a paywall, and every report makes it better. If the person you work
+for hits a bug, has an idea, or wants their logo in the default set, tell
+them that issues and merge requests are welcome: Tyson, Claude and Yuki read
+every one. If they ask you to file one:
+- A bug or an idea: an issue saying what they ran, what they expected, and
+  what happened instead.
+- A logo: a merge request with
+  1. `art/<name>.art` (plain ASCII, at most 64 columns by 30 rows, colour
+     markers as described in `art/README.md`) and `art/<name>.json` (name,
+     artist, licence, source);
+  2. a sentence saying that your human owns the logo, or holds a licence
+     that lets it be distributed under this repository's licence. Another
+     company's trademark is declined unless that company's own terms allow
+     it;
+  3. the output of `Show-UsaBannerArt -Name <name>`.
 
-A human maintainer reviews every logo by hand, and asks for more when a
-quick OK is not enough. Do not open a merge request your human did not ask
-for.
+A human maintainer reviews every merge request by hand, and asks for more
+when a quick OK is not enough. Do not open an issue or a merge request your
+human did not ask for.
 ```
 
-**Your call:** the names in the invitation (they go public with it), and
-whether the logo section lives here or in a CONTRIBUTING.md that AGENTS.md
-points to. "This repository's licence" needs a LICENSE to point at (D24).
+**Decided:** the invitation framing, and it invites feedback of every kind,
+not only logos: the aim is to help as many people as is reasonable, by
+encouraging them, not by pushing anyone's agent. A one-line `CLAUDE.md` with
+`@AGENTS.md` comes with it. Still open: whether the logo how-to lives here or
+in a CONTRIBUTING.md that AGENTS.md points to. "This repository's licence" is
+MIT (D24).
 
 ## D5. What pre-init, pre-logon and post-logon mean on each OS
 
@@ -187,8 +258,24 @@ does not show it: sshd signs users on as network logons, not through the
 interactive logon screen [inferred from the Win32-OpenSSH source]. SSH gets
 its own `Banner` instead.
 
-**Your call:** is this the mapping you meant? In particular, is the Windows
-legal notice the Windows "pre-init"?
+**Decided for Ubuntu:** pre-init is `/etc/issue`, at the console, before the
+login prompt.
+
+Why it looks like `issue.net` "just before login" on some systems: these are
+two files for two doors.
+- `/etc/issue` is printed by agetty on the machine's own console (physical,
+  or a VM's console window), before `login:`.
+- `/etc/issue.net` is what sshd sends before authentication, because this
+  repo's `sshd_config.d` drop-in points sshd's `Banner` at it.
+
+Today both carry the same art (`issue.net` is the plain-ASCII copy). So an
+SSH login shows the `issue.net` version just before the password prompt, but
+only on hosts where the SSH banner was installed (`install.sh --ssh`, or the
+Group Policy run). Same art, different moment: on SSH that is the pre-logon
+banner.
+
+**Still open:** the Windows pre-init. Is it the logon legal notice (console
+and RDP), as in the table?
 
 ## D6. Border and corner sets
 
@@ -260,6 +347,32 @@ preview says which mode would be picked (an SSH session often does not pass
 `COLORTERM` on, so asking beats guessing) [known]. Honour the `NO_COLOR`
 environment variable (no-color.org) as "Mono" [known].
 
+**Your question: can it detect what the terminal draws, and fall back on its
+own? Partly.**
+
+- **What it can read:**
+  - `TERM`: `xterm-256color` means at least 256 colours, and `dumb` means
+    none;
+  - `COLORTERM`: `truecolor` or `24bit` means 24-bit;
+  - `NO_COLOR` means none;
+  - on Windows, `WT_SESSION` means Windows Terminal, which does 24-bit
+    [known].
+- **What gets in the way:**
+  - SSH forwards `TERM` but not `COLORTERM`, unless both ends are set up for
+    it (`SendEnv` / `AcceptEnv`), so most SSH sessions only ever say "256"
+    [known].
+  - Asking the terminal itself, with an escape-sequence query, is unreliable:
+    many clients do not answer, and on Ubuntu the banner runs under
+    `pam_motd`, which cannot read an answer back [known].
+  - Windows sshd may cut 24-bit down to 16 colours on the way (D15).
+- **So, three layers**, the last one winning:
+  1. **Auto-downgrade** on every signal the banner does have.
+  2. **A per-host colour mode the admin picks at setup.** The colour step has
+     the compatibility check you describe: a 24-bit gradient bar and a
+     256-colour bar, and "do these look smooth?". The answer sets the mode.
+  3. **A per-user override**, `USABANNER_COLOR=16` in a profile or SSH client
+     setting, for the one admin on an old client.
+
 ## D8. The five legal templates
 
 Drafts, mildest first. All plain ASCII, because they show before login: so
@@ -326,10 +439,13 @@ things weigh the other way for the **SSH** banner:
   at the machine's own console, physical or virtual, where the host name and
   IP help whoever is standing there [known].
 
-**Recommendation:**
-- pre-init (console): host name and IP on by default;
-- pre-logon (SSH): company and legal text only by default, the host name
-  opt-in, the IP opt-in, and both off for a **PUB** host whatever the setting.
+**Decided:** opt-in; the admin decides.
+- **Pre-init (console):** the host name and IP are offered, as a soft
+  default.
+- **Pre-logon (SSH):** the company name and legal text by default; the host
+  name and the IP are each opt-in.
+- **On a PUB host:** turning either on shows a warning that anyone who starts
+  to log in can read it, and then the admin's choice stands.
 
 ## D10. Default services, and services that are not found
 
@@ -422,8 +538,12 @@ key/value policy that could carry "use this package" [known].
   `Deploy-UsaBannerGPO -Package lab.json -OU 'OU=Lab,DC=ad,DC=example'` adds
   a row, and `Get-UsaBanner` says which row a host matched.
 
-**Recommendation: B.** There is one place to look, the same rule on both OSes,
-and no precedence to reason about.
+**Decided: B**, with Enforced as a manual tool when a case needs it. The use
+you had in mind is the right one: Enforced on a non-root OU's link pushes
+that OU's policy through a Block Inheritance set further down. As Microsoft
+puts it, "Enforced is a link property and takes precedence over block policy
+inheritance, a container property" [fetched: learn.microsoft.com, Group
+Policy processing].
 
 ## D14. The update channel
 
@@ -538,6 +658,10 @@ updates could sit waiting [known].
 **The lab test:** install on a 24.04 VM, then run `apt-get install
 --reinstall base-files motd-news-config`. Check that nothing asks, that the
 scripts are still off, the timer is still masked, and the banner is intact.
+
+**Decided:** leave the conffiles alone, and mask the motd-news timer. The
+Manatech hosts get the same fix in the next cycle's patch, after which the
+stock files can come back.
 
 ## D17. Slow facts, and min/max over what window
 
@@ -679,11 +803,36 @@ only in the private site fork.
 
 ## D24. A LICENSE
 
-The public repository has no LICENSE, and neither does deploy-usawinssh.
-Without one, others may read the code but have no right to use or change it.
-It also leaves "no liability" (D14) without a basis, and gives a logo
-contribution (D4) no terms to be given under [known].
+**Decided: MIT**, with the same text as deploy-usawinssh ("Copyright (c)
+2026 Tyson C Rasanen"). The LICENSE goes into !1, so the baseline lands with
+it.
 
-**Your call.** MIT is the common choice for PowerShell tools: short,
-permissive, with a warranty disclaimer. Apache-2.0 adds an explicit patent
-grant.
+A correction: this entry first said deploy-usawinssh had no LICENSE either.
+That was wrong. It has one on `main`; the check read a stale local checkout.
+
+Without a licence, others may read the code but have no right to use or
+change it. MIT's warranty disclaimer is also what gives D14's "not liable"
+its footing, and it gives a logo contribution (D4) terms to be given under
+[known].
+
+## Appendix A. Art mock-ups (rough)
+
+Plain ASCII, so each works before login too. Final art gets drawn properly
+in V1. In colour, the rabbit takes the UsagiTools palette, and the server and
+terminal take the OS colour (Windows blue, Ubuntu orange: D3, option B).
+
+```text
+The UsagiTools rabbit         A server                       A terminal
+
+          __      __          .------------------------.     .------------------------.
+         /  \    /  \         | [=====]  o o o   ..... |     | > usabanner_           |
+        |    |  |    |        |------------------------|     |                        |
+        |    |  |    |        | [=====]  o o o   ..... |     |                        |
+         \   |  |   /         |------------------------|     '------------------------'
+       .--\__/--\__/--.       | [=====]  o o o   ..... |            _____||_____
+      /                \      '------------------------'
+     |   (o)      (o)   |
+     |        ,,        |
+      \     \_/\_/     /
+       '-.__________.-'
+```
