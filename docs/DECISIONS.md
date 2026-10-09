@@ -17,6 +17,15 @@
 | D13 | One GPO plus an OU -> package table. Enforced stays a manual tool, for pushing an OU's policy through Block Inheritance below it |
 | D16 | Leave conffiles alone, and mask the motd-news timer |
 | D24 | MIT, as in deploy-usawinssh |
+| D3 | B: our own OS-coloured art by default. Art lives in `art/base` (ours and generics) and `art/apps` (third-party logos, opt-in) |
+| D5 | Windows pre-init is the logon legal notice. The legal text shows both before login and before SSH authentication |
+| D6, D7 | as recommended |
+| D8 | all five templates as drafted; L3 is the default |
+| D10 | an unknown service starts unchecked. `-Force` keeps it, and it is then an error line at every login |
+| D11 | built in. A runnable example of the picker follows in its own MR |
+| D12 | one JSON file |
+| D14 | B, plus an "update available" line, and installed files writable only by root/SYSTEM |
+| D15 | Windows Server 2022 and later |
 
 ## Contents
 
@@ -24,19 +33,19 @@
 |---|---|---|
 | D1 | Where the code lives, and its name | decided |
 | D2 | What runs at login: PowerShell everywhere, or native renderers | decided |
-| D3 | Default logos, and what may ship in a public repo | yes: A or B |
+| D3 | Default logos, and what may ship in a public repo | decided: B |
 | D4 | AGENTS.md | decided |
-| D5 | What pre-init, pre-logon and post-logon mean on each OS | Ubuntu decided; Windows open |
-| D6 | Border and corner sets | recommendation |
-| D7 | Colour presets and the preview | recommendation |
-| D8 | The five legal templates | yes |
+| D5 | What pre-init, pre-logon and post-logon mean on each OS | decided |
+| D6 | Border and corner sets | decided |
+| D7 | Colour presets and the preview | decided |
+| D8 | The five legal templates | decided: L3 default |
 | D9 | Host name and IP before login | decided |
-| D10 | Default services, and services that are not found | recommendation |
-| D11 | The interactive UI: built in, or a module | recommendation |
-| D12 | The Export-UsaBanner package format | recommendation |
+| D10 | Default services, and services that are not found | decided |
+| D11 | The interactive UI: built in, or a module | decided: built in |
+| D12 | The Export-UsaBanner package format | decided: JSON |
 | D13 | GPO layering: one base, OU overrides | decided |
-| D14 | The update channel | yes |
-| D15 | Windows Server 2019 | needs a test VM |
+| D14 | The update channel | decided: B |
+| D15 | Windows Server 2019 | decided: 2022 and later |
 | D16 | Ubuntu: stop the apt prompts | decided |
 | D17 | Slow facts, and min/max over what window | yes |
 | D18 | Installing PowerShell 7 before the module can run | recommendation |
@@ -149,31 +158,38 @@ any endorsement.
 - **B. Our own OS-coloured art**: a server pictogram in the OS colour, with
   the OS name in text; the OS logos one setting away.
 
-**Recommendation: B as the shipped default, with A one switch away**
-(`-BannerImage OS`). Then a public install never shows a third party's logo
-unless an admin turned it on. The default can flip to A later. Either way:
+**Decided: B.** Our own OS-coloured art is the shipped default. A third
+party's logo shows only where an admin turned it on: `-BannerImage OS`, or an
+app logo by name.
 
-- **The OS logos are our own drawings**, not copies of fastfetch's. They live
-  in their own set (`art/os/`), so if an owner ever objects, the set can go
-  without touching anything else.
-- **A trademark notice** goes in NOTICE and the README: "Windows and Windows
-  Server are trademarks of the Microsoft group of companies. Ubuntu is a
-  registered trademark of Canonical Ltd. Their logos are shown only to
-  identify the operating system a host runs; this project is not affiliated
-  with or endorsed by either." A one-line version on the banner itself is an
-  option, off by default, because a line on every login is noise.
-- **The built-ins that are ours**: the UsagiTools rabbit ("usagi" is Japanese
-  for rabbit), a few pictograms (server, terminal, shield, cloud, globe), Tux
-  with its credit, and the company name in block letters from a font of our
-  own.
-- **Logos that do not identify the host's OS** (SQL Server, Minecraft blocks)
-  stay out of the built-ins, since there is no identification to lean on.
-  "Use my own" and `New-UsaBannerArt` take anything the admin has; that is
-  their call.
-- **Community logos** arrive by merge request with an ownership statement, and
-  a human reviews each one (D4).
+**The art folder, as you laid it out:**
 
-Rough mock-ups of the rabbit, the server and the terminal: Appendix A.
+- **`art/base/`** holds ours: the UsagiTools rabbit, the pictograms, and the
+  company name in block letters from a font of our own.
+- **`art/apps/`** holds third-party logos, drawn by us and never copied:
+  - the OS logos: Windows, Ubuntu, and Tux with its credit;
+  - application logos, such as SQL Server.
+
+  Each one names its owner in its metadata and has a line in NOTICE. They are
+  there to identify what a host runs, its OS or its role: the use that
+  fastfetch's precedent covers. Keeping them in one folder means that, if an
+  owner ever objects, the folder can go without touching anything else.
+- **A trademark notice** for everything in `art/apps/` goes in NOTICE and the
+  README, for example: "Windows and Windows Server are trademarks of the
+  Microsoft group of companies. Ubuntu is a registered trademark of Canonical
+  Ltd. These logos are shown only to identify what a host runs; this project
+  is not affiliated with or endorsed by their owners." A one-line version on
+  the banner itself is an option, off by default, because a line on every
+  login is noise.
+- **"Use my own" and `New-UsaBannerArt`** take anything the admin has; that
+  is their call.
+- **Community logos** arrive by merge request and a human reviews each one
+  (D4).
+
+**The pictograms are mock-ups only so far.** Appendix A has rough ones for the
+rabbit, a server and a terminal. Shield, cloud and globe are names on a list,
+not drawings yet. The final art gets drawn in V1, under the same plain-ASCII
+rule.
 
 ## D4. AGENTS.md
 
@@ -228,8 +244,9 @@ every one. If they ask you to file one:
      artist, licence, source);
   2. a sentence saying that your human owns the logo, or holds a licence
      that lets it be distributed under this repository's licence. Another
-     company's trademark is declined unless that company's own terms allow
-     it;
+     company's logo goes in `art/apps/` only to identify what a host runs,
+     drawn by the contributor rather than copied, with its owner named in the
+     metadata. The maintainers decide;
   3. the output of `Show-UsaBannerArt -Name <name>`.
 
 A human maintainer reviews every merge request by hand, and asks for more
@@ -274,8 +291,10 @@ only on hosts where the SSH banner was installed (`install.sh --ssh`, or the
 Group Policy run). Same art, different moment: on SSH that is the pre-logon
 banner.
 
-**Still open:** the Windows pre-init. Is it the logon legal notice (console
-and RDP), as in the table?
+**Decided for Windows:** pre-init is the logon legal notice (console and
+RDP). On both OSes the legal text shows in two places: before login, and
+before SSH authentication (the SSH `Banner`). That is where you saw the
+original one pop up on the VMs it reached.
 
 ## D6. Border and corner sets
 
@@ -327,8 +346,9 @@ block `█` (U+2588) joins up. Both, like the box-drawing characters, have
 with CJK locales) misaligns them [known]. That is one more reason the ASCII
 set is the fallback.
 
-**Recommendation:** ship all of the above. The non-interactive default is
-**Classic**; the interactive default is **Rounded**, falling back to Classic.
+**Decided, as recommended:** ship all of the above. The non-interactive
+default is **Classic**; the interactive default is **Rounded**, falling back to
+Classic.
 
 ## D7. Colour presets and the preview
 
@@ -372,6 +392,9 @@ own? Partly.**
      256-colour bar, and "do these look smooth?". The answer sets the mode.
   3. **A per-user override**, `USABANNER_COLOR=16` in a profile or SSH client
      setting, for the one admin on an old client.
+
+**Decided:** the presets, the console preview and the three layers, as
+recommended.
 
 ## D8. The five legal templates
 
@@ -418,8 +441,7 @@ WILL BE REPORTED TO LAW ENFORCEMENT.
 - "Write your own" takes text, checks it is ASCII, and wraps it to the
   64-column box.
 
-**Your call:** the wording, and which one is the non-interactive default.
-Proposed default: **L3**, the middle of the group.
+**Decided:** all five as drafted, and **L3** is the default.
 
 ## D9. Host name and IP before login
 
@@ -457,13 +479,15 @@ things weigh the other way for the **SSH** banner:
 | Ubuntu | `sssd`, `adsysd` | the host is AD-joined |
 
 - **Not found**: the frame-by-frame picker keeps an unknown name checked until
-  the user unchecks it. Proposed: keep it listed, but **unchecked**, and
-  `-Force` to keep it anyway. A missing service is then reported at every
-  login, which is noise unless it is meant.
+  the user unchecks it. **Decided:** keep it listed, but **unchecked**, with
+  `-Force` to keep it anyway. A kept one is then an error line at every
+  login ("ERROR: service ABC not found"). That is the point when a
+  post-install script expects the service: if it is missing, the banner says
+  so.
 - **"A service that cannot be monitored will slow down logon"**: not what
   today's code shows. A lookup for a missing service fails at once on both
   OSes [known]; the slow parts are broad queries (all services through
-  WMI/CIM). Proposed: measure it in the lab before the UI warns about it.
+  WMI/CIM). **Decided:** measure it in the lab before the UI warns about it.
 - The Ubuntu picker lists systemd service units, the same UI.
 - §5.4 item 17 (a non-standard automatic service not running) is what today's
   Windows module does: auto-start services that are stopped, minus
@@ -490,9 +514,12 @@ Esc, in a console that may be a remote SSH session.
     internet access cannot fetch.
   - It looks like its own UI, not the one in the spec.
 
-**Recommendation: A.** Every interactive cmdlet also checks that it really has
-a console to talk to (not redirected input, VT available). If it does not, it
-stops and prints the flags to use instead.
+**Decided: A, built in.** A frozen dependency that needs its own install is
+not worth it, short of forking it into the project. Every interactive cmdlet
+also checks that it really has a console to talk to (not redirected input, VT
+available). If it does not, it stops and prints the flags to use instead. A
+runnable example of the frame-by-frame picker comes in its own MR, with
+tests that drive it by scripted keys.
 
 ## D12. The Export-UsaBanner package format
 
@@ -501,9 +528,16 @@ stops and prints the flags to use instead.
   MR, a few KB, and easy to pin with a hash.
 - **B. A ZIP** of the same pieces as separate files.
 
-**Recommendation: A.** Nothing in it is binary: `New-UsaBannerArt` turns an
-image into text when the art is made, so the package never needs the image.
-A ZIP would only add a step to read it, and hide the content from a diff.
+**Decided: A, one JSON file.** Nothing in it is binary: `New-UsaBannerArt`
+turns an image into text when the art is made, so the package never needs
+the image. A ZIP would only add a step to read it, and hide the content from a
+diff.
+
+Custom art is no obstacle. Each line of art is a JSON string, and
+`ConvertTo-Json` escapes backslashes and quotes, so `\_/` is stored as
+`\\_/` and reads back exactly. Colour markers stay plain text. Two details:
+`-Depth 10` (the default depth of 2 would flatten nested settings), and a
+test that round-trips every built-in piece of art byte for byte.
 
 ## D13. GPO layering: one base, OU overrides
 
@@ -545,6 +579,18 @@ puts it, "Enforced is a link property and takes precedence over block policy
 inheritance, a container property" [fetched: learn.microsoft.com, Group
 Policy processing].
 
+**Block Inheritance matters to B in its own way.** With one GPO linked at the
+root, an OU that blocks inheritance never receives that GPO at all, so its
+hosts get no banner. There are two ways through:
+
+- **Link the same GPO directly at the blocked OU.** A direct link is not
+  inherited, so the block does not stop it [known].
+- **Set Enforced on the root link**, which goes through every block below it.
+
+`Deploy-UsaBannerGPO` can list the OUs under its links that block
+inheritance, and add the direct links with `-LinkTarget`. Enforced stays a
+manual choice, as decided.
+
 ## D14. The update channel
 
 What the job does is run code from a public repository as root/SYSTEM at
@@ -557,8 +603,26 @@ can run code on all of them.
 - **C. Follow the module**: once UsagiTools is on the PowerShell Gallery,
   `Update-Module` on a schedule, with the module signed.
 
-**Recommendation: B now, C later.** A is fine for the maintainer's own lab, as
-an explicit `-Channel main`. The warning text proposed for the opt-in:
+**Decided: B now, C later.** A is fine for the maintainer's own lab, as an
+explicit `-Channel main`. Two additions:
+
+- **An "update available" line.** When the job sees a newer release than the
+  one installed, and is not set to install it, the banner adds one line:
+  "This banner has an update available. See <releases page> for more info!"
+  Until the GitHub home exists, that is this project's GitLab releases page.
+- **Only root / SYSTEM and Administrators may change the installed files.**
+  Everyone may read them, because the banner runs as whoever logs in. On
+  Ubuntu that already holds: root owns the files, mode 644/755. On Windows,
+  today's install leaves `C:\ProgramData\Manatech` with the ACL it inherits
+  from `C:\ProgramData`, which lets ordinary users create new files in
+  subfolders [known]. A user could then plant a file the banner reads when
+  it is missing, such as `ad-description.txt` on a host outside the domain,
+  and show other admins whatever text they like. The install sets the folder's
+  ACL explicitly: Administrators and SYSTEM full control, Users read and
+  execute only, inheritance off. The update job and its staging area get the
+  same.
+
+The warning text proposed for the opt-in:
 
 ```text
 This keeps the banner updated from a public repository. The update runs as
@@ -572,8 +636,13 @@ The "not liable" part needs a LICENSE behind it to mean anything (D24).
 
 ## D15. Windows Server 2019
 
-Today's Windows code says Server 2022 and later, and the lab has only Server
-2025. What 2019 (build 17763) needs:
+**Decided: Windows Server 2022 and later.** For the record, 2019 is not
+end-of-life yet. It left mainstream support on 2024-01-10, and extended
+support runs to 2029-01-10 [fetched: Microsoft Lifecycle]. But 2022 and later
+is the line, and it matches today's Windows code. The notes below are kept for
+the colour question, which applies to every version.
+
+What 2019 (build 17763) would have needed:
 
 - **Colour in the console:** VT escape sequences, and 24-bit colour since
   build 14931, which shipped as Windows 10 1703 [search-snippet: Microsoft's
@@ -595,9 +664,7 @@ colours, which the README already lists as unverified.
   `"$([char]27)[38;2;255;100;0mORANGE$([char]27)[0m"`.
   If that comes out orange rather than the nearest of 16 colours, 24-bit
   works over SSH. The lab's 2025 nodes can answer it today.
-- A Server 2019 VM for one pass of the test plan; an evaluation image is
-  enough. Until then, the README says "2019: expected to work, not yet
-  tested".
+- No Server 2019 VM is needed now.
 
 ## D16. Ubuntu: stop the apt prompts
 

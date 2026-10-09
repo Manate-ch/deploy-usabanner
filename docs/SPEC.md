@@ -20,8 +20,8 @@ logon.
 
 - **Ubuntu 24.04**: tested, and written so it should keep working on later
   releases.
-- **Windows Server 2019 and later**: tested on 2025; 2019 and 2022 presumed
-  (D15).
+- **Windows Server 2022 and later**: tested on 2025, 2022 presumed (D15:
+  2019 is out of scope).
 
 ## 3. Cmdlets
 
