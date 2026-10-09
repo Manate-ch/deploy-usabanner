@@ -26,6 +26,7 @@
 | D12 | one JSON file |
 | D14 | B, plus an "update available" line, and installed files writable only by root/SYSTEM |
 | D15 | Windows Server 2022 and later |
+| D17 | min/max over the last 24 hours, sampled every 15 minutes. A scheduled reboot is read live at every login |
 
 ## Contents
 
@@ -47,7 +48,7 @@
 | D14 | The update channel | decided: B |
 | D15 | Windows Server 2019 | decided: 2022 and later |
 | D16 | Ubuntu: stop the apt prompts | decided |
-| D17 | Slow facts, and min/max over what window | yes |
+| D17 | Slow facts, and min/max over what window | decided: 24 h |
 | D18 | Installing PowerShell 7 before the module can run | recommendation |
 | D19 | New-UsaBannerArt: which image formats | recommendation |
 | D20 | The naming standard as the shipped default | recommendation |
@@ -749,12 +750,18 @@ and disks.
 | Disk type | `lsblk -d -o NAME,ROTA,TRAN` (rotational, NVMe, USB) | `Get-PhysicalDisk` (MediaType, BusType) |
 | Pending updates | apt's update-notifier stamp (as `90-updates-available` reads it) | Windows Update agent COM API (slow: cache only) |
 | Reboot pending, and why | `/run/reboot-required(.pkgs)` | the usual registry keys (CBS, Windows Update, pending file renames) |
-| Reboot scheduled | `shutdown --show` | scheduled tasks and Windows Update's restart schedule |
+| Reboot scheduled | **live at every login**: `/run/systemd/shutdown/scheduled`, the file `shutdown --show` reads (when and why) | **live at every login**: the last restart-initiated event (System log, event 1074) since boot. Administrators can read the System log over SSH; for other users, the job's cached value. Windows Update's own restart schedule comes from the cache [known; to measure] |
 
 **Your call: min/max over what window?** Since boot, over the last 24 hours,
 or something else? Anything but "now" needs the job to sample between logins
 and keep the samples. Proposed: the last 24 hours, sampled every 15 minutes
 (96 samples, a few KB).
+
+**Decided:** the last 24 hours, sampled every 15 minutes. A scheduled reboot
+is not sampled at all: it is read live at every login (table above), so a
+reboot set for five minutes from now shows the moment it is scheduled. That
+is the point of the one-minute idea, without a job running every minute. On
+Windows, a PowerShell task every minute would be a lot of churn for one fact.
 
 ## D18. Installing PowerShell 7 before the module can run
 
