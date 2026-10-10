@@ -992,26 +992,39 @@ left are the rabbit's own, so its right eye is the one on your left:
 | right eye (on your left), and the `oo` on that side of centre | `#FF9900` | 208 (`#FF8700`) | yellow |
 | centre eye | `#99FFFF` | 123 (`#87FFFF`) | bright cyan |
 | left eye (on your right), and the `oo` on that side of centre | `#0099FF` | 33 (`#0087FF`) | bright blue |
-| fur: every other character but the side text | blonde, a gradient by row from `#FFF3C4` at the ear tips to `#E1B95C` at the chin | 230 (`#FFFFD7`) to 179 (`#D7AF5F`) | bright yellow |
+| nose | `#FF99FF` | 213 (`#FF87FF`) | bright magenta |
+| mouth | `#FFFFFF` | 231 (`#FFFFFF`) | bright white |
+| fur: the outline, and the fill inside the head and ears | blonde, a gradient by row from `#FFF3C4` at the ear tips to `#E1B95C` at the chin | 230 (`#FFFFD7`) to 179 (`#D7AF5F`) | bright yellow |
 
 The colours sit beside the art, not inside it. A mask of the same shape marks
-each character: `f` for fur; `R`, `C` and `L` for the right, centre and left
-eyes; `t` for the side text. So a colour scheme is data, as D12 stores it,
-and the art stays plain ASCII for the pre-login banners:
+each character:
+- `f` for the fur outline, and `#` for the fur fill;
+- `R`, `C` and `L` for the right, centre and left eyes;
+- `n` for the nose, and `m` for the mouth;
+- `t` for the side text.
+
+So a colour scheme is data, as D12 stores it, and the art stays plain ASCII
+for the pre-login banners.
+
+In colour, a fill cell is the full block `█` in its row's fur colour, so the
+head is solid blonde and the eyes, nose and mouth sit in dark cells. Without
+colour, and before login, it is a space, so the art is unchanged:
 
 ```text
    ff       ff    t
-  f  f     f  f   t
- f    f   f    f  t
- f    f   f    f  t
-  f   f   f   f   t
+  f##f     f##f   t
+ f####f   f####f  t
+ f####f   f####f  t
+  f###f   f###f   t
  fffffffffffffff  t
-f   RR CCC LL   f t
-f RRR       LLL f t
-f      fff      f t
-f    fff fff    f t
+f###RR#CCC#LL###f t
+f#RRR#######LLL#f t
+f######nnn######f t
+f####mmm#mmm####f t
  ffffffffffffffff t
 ```
+
+![The UsagiTools rabbit as a 24-bit terminal draws it](rabbit.svg)
 
 **A server and a terminal** take the OS colour (Windows blue, Ubuntu orange:
 D3, option B):
