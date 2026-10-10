@@ -997,6 +997,18 @@ left are the rabbit's own, so its right eye is the one on your left:
 | fur outline | blonde, a gradient by row from `#FFF3C4` at the ear tips to `#E1B95C` at the chin | 230 (`#FFFFD7`) to 179 (`#D7AF5F`) | bright yellow |
 | fur fill: a `:` in every cell inside the head and ears | a darker blonde, by row from `#C8A050` to `#8C6428` | 179 (`#D7AF5F`) to 94 (`#875F00`) | dark grey, so it stays apart from the yellow eye |
 
+**Sheen** (the author's pick, 2026-10-10): each fur colour, outline and fill,
+is multiplied by a factor that is 1.15 down the middle of each ear and of the
+head, and 0.85 at their edges, so the hare looks rounded and lit.
+- For a cell, the factor is 1.15 − 0.3 × d. Here d is the cell's distance
+  from that middle, divided by 3.5 for an ear or by 8.5 for the head, and
+  capped at 1.
+- The ears are the top five rows, with their middles at columns 3.5 and 12.5
+  (counting from 0). The head's middle is column 8.
+- A channel the factor pushes past 255 stays at 255.
+- In 256 colours each cell takes the nearest of the 256; the 16-colour
+  fallback has no sheen.
+
 The colours sit beside the art, not inside it. A mask of the same shape marks
 each character:
 - `f` for the fur outline, and `#` for the fur fill;
