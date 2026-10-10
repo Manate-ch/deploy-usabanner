@@ -978,14 +978,14 @@ because it is a hare (nousagi), three eyes, and USAGITOOLS 2 down the side.
  '-.__________.-' 2
 ```
 
-In colour (post-login, D7), the eyes take the UsagiTools palette. Left and
-right are as the viewer sees them:
+In colour (post-login, D7), the eyes take the UsagiTools palette. Right and
+left are the rabbit's own, so its right eye is the one on your left:
 
 | Part | Colour | 256-colour fallback | 16-colour fallback |
 |---|---|---|---|
-| left eye, and the `oo` left of centre | `#0099FF` | 33 (`#0087FF`) | bright blue |
+| right eye (on your left), and the `oo` on that side of centre | `#FF9900` | 208 (`#FF8700`) | yellow |
 | centre eye | `#99FFFF` | 123 (`#87FFFF`) | bright cyan |
-| right eye, and the `oo` right of centre | `#FF9900` | 208 (`#FF8700`) | yellow |
+| left eye (on your right), and the `oo` on that side of centre | `#0099FF` | 33 (`#0087FF`) | bright blue |
 
 **A server and a terminal** take the OS colour (Windows blue, Ubuntu orange:
 D3, option B):
