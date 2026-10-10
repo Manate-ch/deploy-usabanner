@@ -391,7 +391,8 @@ own? Partly.**
   - Asking the terminal itself, with an escape-sequence query, is unreliable:
     many clients do not answer, and on Ubuntu the banner runs under
     `pam_motd`, which cannot read an answer back [known].
-  - Windows sshd may cut 24-bit down to 16 colours on the way (D15).
+  - Windows sshd passes 24-bit colour through on 2022 and 2025 [measured
+    2026-10-10, D15].
 - **So, three layers**, the last one winning:
   1. **Auto-downgrade** on every signal the banner does have.
   2. **A per-host colour mode the admin picks at setup.** The colour step has
@@ -659,19 +660,23 @@ What 2019 (build 17763) would have needed:
 - **OpenSSH Server:** "added to Windows Server ... starting with Windows
   Server 2019" [fetched].
 
-**One real open question, for every Windows version, not just 2019: does
-24-bit colour survive an SSH session?** The Win32-OpenSSH wiki says sshd uses
-ConPTY. But the terminal-emulation code in its current source writes only the
-16 console colours [fetched: `shell-host.c`; the wiki and the source
-disagree]. Today's banner may therefore arrive over SSH rounded to 16
-colours, which the README already lists as unverified.
+**The open question was: does 24-bit colour survive an SSH session?** The
+Win32-OpenSSH wiki says sshd uses ConPTY, but the terminal-emulation code in
+its source writes only the 16 console colours [fetched: `shell-host.c`].
 
-**What it takes:**
-- One line in an SSH session on each Windows version:
-  `"$([char]27)[38;2;255;100;0mORANGE$([char]27)[0m"`.
-  If that comes out orange rather than the nearest of 16 colours, 24-bit
-  works over SSH. The lab's 2025 nodes can answer it today.
-- No Server 2019 VM is needed now.
+**Answered: it does [measured 2026-10-10, lab].** In a forced terminal
+(`ssh -tt`), pwsh 7.6 wrote three codes: 24-bit orange `ESC[38;2;255;100;0m`,
+256-colour `ESC[38;5;208m`, and 16-colour `ESC[33m`. All three arrived
+unchanged from Windows Server 2022 (build 20348) and 2025 (build 26100).
+Windows' pseudo-console (ConPTY) redraws the output and drops redundant
+resets, but passes the colours through as written. So the 16-colour path in
+`shell-host.c` is not the one in use there.
+
+One trap for anyone testing this: on 2025, the pseudo-console shuts down when
+the client's input closes, and the output is lost with it. A script that runs
+`ssh -tt` with its input already at end of file sees nothing come back. With
+the input held open, everything arrives. 2022 delivered either way. No Server
+2019 VM is needed.
 
 ## D16. Ubuntu: stop the apt prompts
 
@@ -856,9 +861,10 @@ operating systems" [fetched: .NET breaking changes]. PowerShell 7.4 runs on
 The art is stored as text either way (D12).
 
 **Decided (2026-10-09): A and B, with option C's decoder on Windows.** Windows
-needs nothing extra: PowerShell 7 on Windows ships `System.Drawing`, so there
-the cmdlet reads PNG, JPEG, GIF, BMP and TIFF [known; one line to confirm on a
-lab host]. On Linux, PNG works out of the box, and any other format needs
+needs nothing extra. PowerShell 7 on Windows ships `System.Drawing`: it loads
+and makes a bitmap in pwsh 7.6 on Server 2022 and 2025 with nothing installed
+[measured 2026-10-10, lab]. Through it the cmdlet reads PNG, JPEG, GIF, BMP
+and TIFF [known]. On Linux, PNG works out of the box, and any other format needs
 ImageMagick. When it is missing, the cmdlet says so with the install line
 (`sudo apt install imagemagick`) instead of a bare "unsupported format".
 
@@ -978,7 +984,7 @@ because it is a hare (nousagi), three eyes, and USAGITOOLS 2 down the side.
  '-.__________.-' 2
 ```
 
-In colour (post-login, D7), the eyes take the UsagiTools palette. Right and
+In colour (post-login, D7), the rabbit takes the UsagiTools palette. Right and
 left are the rabbit's own, so its right eye is the one on your left:
 
 | Part | Colour | 256-colour fallback | 16-colour fallback |
@@ -986,6 +992,26 @@ left are the rabbit's own, so its right eye is the one on your left:
 | right eye (on your left), and the `oo` on that side of centre | `#FF9900` | 208 (`#FF8700`) | yellow |
 | centre eye | `#99FFFF` | 123 (`#87FFFF`) | bright cyan |
 | left eye (on your right), and the `oo` on that side of centre | `#0099FF` | 33 (`#0087FF`) | bright blue |
+| fur: every other character but the side text | blonde, a gradient by row from `#FFF3C4` at the ear tips to `#E1B95C` at the chin | 230 (`#FFFFD7`) to 179 (`#D7AF5F`) | bright yellow |
+
+The colours sit beside the art, not inside it. A mask of the same shape marks
+each character: `f` for fur; `R`, `C` and `L` for the right, centre and left
+eyes; `t` for the side text. So a colour scheme is data, as D12 stores it,
+and the art stays plain ASCII for the pre-login banners:
+
+```text
+   ff       ff    t
+  f  f     f  f   t
+ f    f   f    f  t
+ f    f   f    f  t
+  f   f   f   f   t
+ fffffffffffffff  t
+f   RR CCC LL   f t
+f RRR       LLL f t
+f      fff      f t
+f    fff fff    f t
+ ffffffffffffffff t
+```
 
 **A server and a terminal** take the OS colour (Windows blue, Ubuntu orange:
 D3, option B):
