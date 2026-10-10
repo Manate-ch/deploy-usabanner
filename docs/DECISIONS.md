@@ -994,7 +994,8 @@ left are the rabbit's own, so its right eye is the one on your left:
 | left eye (on your right), and the `oo` on that side of centre | `#0099FF` | 33 (`#0087FF`) | bright blue |
 | nose | `#FF99FF` | 213 (`#FF87FF`) | bright magenta |
 | mouth | `#FFFFFF` | 231 (`#FFFFFF`) | bright white |
-| fur: the outline, and the fill inside the head and ears | blonde, a gradient by row from `#FFF3C4` at the ear tips to `#E1B95C` at the chin | 230 (`#FFFFD7`) to 179 (`#D7AF5F`) | bright yellow |
+| fur outline | blonde, a gradient by row from `#FFF3C4` at the ear tips to `#E1B95C` at the chin | 230 (`#FFFFD7`) to 179 (`#D7AF5F`) | bright yellow |
+| fur fill: a `:` in every cell inside the head and ears | a darker blonde, by row from `#C8A050` to `#8C6428` | 179 (`#D7AF5F`) to 94 (`#875F00`) | dark grey, so it stays apart from the yellow eye |
 
 The colours sit beside the art, not inside it. A mask of the same shape marks
 each character:
@@ -1006,9 +1007,11 @@ each character:
 So a colour scheme is data, as D12 stores it, and the art stays plain ASCII
 for the pre-login banners.
 
-In colour, a fill cell is the full block `█` in its row's fur colour, so the
-head is solid blonde and the eyes, nose and mouth sit in dark cells. Without
-colour, and before login, it is a space, so the art is unchanged:
+In colour, a fill cell is a `:` in its row's darker blonde, so the fill reads
+as background, and the eyes, nose and mouth stay the stars. Without colour,
+and before login, it is a space, so the art is unchanged. The author chose
+`:` on 2026-10-10 over `*`, the light shade `░` and a background colour,
+which all made the fill heavier than the face:
 
 ```text
    ff       ff    t
