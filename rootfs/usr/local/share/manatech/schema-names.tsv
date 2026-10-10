@@ -37,11 +37,11 @@ subtype	2	Printer (2D)	White
 subtype	3	Printer (3D)	White
 os	a	Android	L.Green
 os	c	Containers (NonKube)	Teal
-os	f	Firewall OS	Red
+os	f	FortiOS	Red
 os	i	iOS	White
 os	k	Kubernetes	Blue
 os	l	Linux	Yellow
 os	m	Mac	Grey
-os	u	Network OS	Blue
+os	u	Unifi	Blue
 os	w	Windows	Blue
 os	x	Unknown/Misc	Grey
