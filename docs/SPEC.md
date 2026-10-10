@@ -1,8 +1,9 @@
-# UsaBanner: specification (draft)
+# UsaBanner: specification
 
-> Draft of 2026-10-09, written up from the author's spec. Open questions are in
-> [DECISIONS.md](DECISIONS.md) and are referred to here as **D*n***. The
-> examples use a made-up company (Contoso) and made-up services.
+> Written up from the author's spec on 2026-10-09. The questions it raised are
+> decided in [DECISIONS.md](DECISIONS.md), referred to here as **D*n***; where
+> a decision says more than the text here, the decision wins. The examples use
+> a made-up company (Contoso) and made-up services.
 
 ## 1. What this is
 
@@ -20,8 +21,8 @@ logon.
 
 - **Ubuntu 24.04**: tested, and written so it should keep working on later
   releases.
-- **Windows Server 2022 and later**: tested on 2025, 2022 presumed (D15:
-  2019 is out of scope).
+- **Windows Server 2022 and later** (D15). The lab has checked both 2022 and
+  2025 for SSH colour and `System.Drawing` (D15, D19). 2019 is out of scope.
 
 ## 3. Cmdlets
 
@@ -123,7 +124,7 @@ Shows:
 ### 3.4 Export-UsaBanner
 
 Takes `Get-UsaBanner`'s output and builds a package for
-`Deploy-UsaBannerGPO`. The format is open: a ZIP? (D12)
+`Deploy-UsaBannerGPO`: one JSON file (D12).
 
 ### 3.5 Get-UsaBannerService
 
@@ -145,8 +146,9 @@ Lists the monitored services. Given a service name, returns `$true` or
 - The one real difference: it REQUIRES an `Export-UsaBanner` package as its
   seed.
 - The package overwrites the existing config, so one base config can run
-  company-wide. If an OU should differ, a second policy is created, with
-  Enforced on, when a root policy is active (D13).
+  company-wide. An OU that should differ gets its own package, matched
+  through the one GPO's table of OUs. Enforced stays a manual tool, and an OU
+  that blocks inheritance gets a direct link (D13).
 - Does NOT enable SSH on its own, and DOES require `deploy-usawinssh` to be
   active in the domain (D21).
 
@@ -255,16 +257,15 @@ until this MOTDs basically anything it can. The stats differ per device: on a
 Cisco core switch, vPC state, ports up versus down, flaps in the last hour.
 Later, unless it turns out INCREDIBLY easy (D22).
 
-## 8. Gaps in this draft
+## 8. Gaps in the original text
 
 - §3.1 step 2.3: a sentence breaks off: "...what you made with a warning it
   doesn't work in all consoles if we can't figure out a fall". Read here as:
   `New-UsaBannerArt` returns the art it made, with a warning when it will not
   render in every console and no fallback was found.
 - §3.1, non-interactive: the list ends in an empty bullet.
-- §5.4 items 9 and 10: min/max over what window (since boot, the last day)?
-  That decides whether something has to sample between logons (D17).
-- §3.7: whether Enforced is needed for an OU to differ from the root (D13).
+- The two open questions it left are decided: the min/max window (D17) and
+  whether Enforced is needed for an OU to differ (D13).
 
 ## Appendix A. Set-UsaBannerService, frame by frame
 

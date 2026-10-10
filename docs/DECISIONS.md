@@ -1,12 +1,12 @@
 # UsaBanner: decisions
 
-> Companion to [SPEC.md](SPEC.md), 2026-10-09. Each decision has an ID, the
-> question, the options, a recommendation and why. Answer per ID ("D3: B,
-> but...") in chat or in an MR thread on the line. Facts are tagged
-> **[measured]** (on a test host), **[fetched]** (read at the cited source on
-> 2026-10-09) or **[known]** (from experience, not re-checked).
+> Companion to [SPEC.md](SPEC.md). Each decision has an ID, the question, the
+> options, the recommendation and why, and what was decided. All 24 are
+> decided; the table below sums them up. Facts are tagged **[measured]** (on a
+> test host), **[fetched]** (read at the cited source on 2026-10-09, unless a
+> date says otherwise) or **[known]** (from experience, not re-checked).
 
-## Decided so far (2026-10-09)
+## Decided (2026-10-09 and 10-10)
 
 | ID | Decision |
 |---|---|
@@ -36,7 +36,7 @@
 
 ## Contents
 
-| ID | Decision | Needs your call? |
+| ID | Decision | Status |
 |---|---|---|
 | D1 | Where the code lives, and its name | decided |
 | D2 | What runs at login: PowerShell everywhere, or native renderers | decided |
