@@ -576,6 +576,10 @@ and the motd-news timer masked), sets the pre-login banners (the console's in
 `/etc/issue.d`; the plain SSH one with `sshd -t` first, then a reload, which
 leaves open sessions alone), and enables
 `manatech-motd-update.timer` (every 4 hours, up to 20 min random delay).
+The timer runs `install.sh --update`, which pulls and reinstalls the MOTD
+scripts only. A change to the pre-login banners, the retired scripts or the
+timer's own unit reaches the host when `install.sh --all` runs again. (Group
+Policy hosts run the full set every time.)
 Add `--ad` on a domain-joined host to take ENV and role from its AD Description. The token lives
 in `/opt/manatech-motd/.git/config`, which `install.sh` makes root-only. It is
 also visible in the process list for the few seconds the clone runs.
