@@ -1,0 +1,126 @@
+{
+  "name": "rabbit",
+  "title": "The UsagiTools rabbit",
+  "artist": "Tyson C Rasanen",
+  "licence": "MIT",
+  "source": "docs/DECISIONS.md, Appendix A",
+  "art": [
+    "   ^^       ^^    U",
+    "  /  \\     /  \\   S",
+    " |    |   |    |  A",
+    " |    |   |    |  G",
+    "  \\   |   |   /   I",
+    " .-\\__/---\\__/-.  T",
+    "/   oo (o) oo   \\ O",
+    "| (o)       (o) | O",
+    "|      ,',      | L",
+    "|    \\_/ \\_/    | S",
+    " '-.__________.-' 2"
+  ],
+  "mask": [
+    "   ff       ff    t",
+    "  f##f     f##f   t",
+    " f####f   f####f  t",
+    " f####f   f####f  t",
+    "  f###f   f###f   t",
+    " fffffffffffffff  t",
+    "f###RR#CCC#LL###f t",
+    "f#RRR#######LLL#f t",
+    "f######nnn######f t",
+    "f####mmm#mmm####f t",
+    " ffffffffffffffff t"
+  ],
+  "fill": {
+    "class": "#",
+    "char": ":"
+  },
+  "palette": {
+    "f": {
+      "label": "fur outline: pale blonde at the ear tips to golden at the chin",
+      "from": "#FFF3C4",
+      "to": "#E1B95C",
+      "sheen": true,
+      "basic": "bright-yellow"
+    },
+    "#": {
+      "label": "fur fill: a darker blonde, drawn as the fill character",
+      "from": "#C8A050",
+      "to": "#8C6428",
+      "sheen": true,
+      "basic": "bright-black"
+    },
+    "R": {
+      "label": "the rabbit's right eye, on the viewer's left",
+      "rgb": "#FF9900",
+      "basic": "yellow"
+    },
+    "C": {
+      "label": "the centre eye",
+      "rgb": "#99FFFF",
+      "basic": "bright-cyan"
+    },
+    "L": {
+      "label": "the rabbit's left eye, on the viewer's right",
+      "rgb": "#0099FF",
+      "basic": "bright-blue"
+    },
+    "n": {
+      "label": "nose",
+      "rgb": "#FF99FF",
+      "basic": "bright-magenta"
+    },
+    "m": {
+      "label": "mouth",
+      "rgb": "#FFFFFF",
+      "basic": "bright-white"
+    },
+    "t": {
+      "label": "USAGITOOLS 2 down the side, in the terminal's own colour"
+    }
+  },
+  "sheen": {
+    "peak": 1.15,
+    "drop": 0.3,
+    "regions": [
+      {
+        "label": "the rabbit's right ear",
+        "rows": [
+          0,
+          4
+        ],
+        "cols": [
+          0,
+          7
+        ],
+        "middle": 3.5,
+        "half": 3.5
+      },
+      {
+        "label": "the rabbit's left ear",
+        "rows": [
+          0,
+          4
+        ],
+        "cols": [
+          8,
+          18
+        ],
+        "middle": 12.5,
+        "half": 3.5
+      },
+      {
+        "label": "the head",
+        "rows": [
+          5,
+          10
+        ],
+        "cols": [
+          0,
+          18
+        ],
+        "middle": 8,
+        "half": 8.5
+      }
+    ]
+  }
+}
