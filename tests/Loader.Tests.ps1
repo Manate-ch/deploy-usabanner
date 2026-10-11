@@ -156,4 +156,26 @@ Describe 'the hand-off to pwsh' {
             }
         } | Should -Throw '*Show-UsaBannerArt failed in PowerShell 7*exit code 1*'
     }
+
+    It 'gets pwsh''s errors as text a person can read, not CLIXML' -Skip:$IsWindows {
+        # A PowerShell 7 parent decodes '#< CLIXML' on a child's stderr by itself, and Windows
+        # PowerShell 5.1 prints it raw, so this reads the raw stderr: the wrapper keeps it in a file.
+        $stderr = Join-Path $TestDrive 'stderr.txt'
+        $wrapper = Join-Path $TestDrive 'pwsh-wrapper.sh'
+        Set-Content -LiteralPath $wrapper -Value @(
+            '#!/bin/sh'
+            "exec 2> '$stderr'"
+            "exec '$((Get-Process -Id $PID).Path)' `"`$@`""
+        )
+        & chmod +x $wrapper
+        {
+            InModuleScope UsaBanner -Parameters @{ Wrapper = $wrapper } {
+                param($Wrapper)
+                Invoke-UsaBannerHandoff -Command 'Show-UsaBannerArt' -Parameters @{ Name = 'no-such-art' } -Pwsh $Wrapper
+            }
+        } | Should -Throw '*exit code 1*'
+        $raw = Get-Content -LiteralPath $stderr -Raw
+        $raw | Should -Not -BeLike '*CLIXML*'
+        $raw | Should -BeLike "*there is no art called 'no-such-art'*"
+    }
 }

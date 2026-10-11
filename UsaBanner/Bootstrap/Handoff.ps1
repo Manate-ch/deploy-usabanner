@@ -112,7 +112,9 @@ function Invoke-UsaBannerHandoff {
     }
     $script = ConvertTo-UsaBannerHandoffScript -Command $Command -Parameters $Parameters -Manifest $Manifest -Pwsh $Pwsh
     $encoded = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($script))   # -EncodedCommand takes UTF-16LE
-    & $Pwsh -NoProfile -NonInteractive -EncodedCommand $encoded
+    # -OutputFormat Text: started with -EncodedCommand, pwsh writes its errors to stderr as CLIXML
+    # ('#< CLIXML <Objs ...'), which Windows PowerShell 5.1 prints raw.
+    & $Pwsh -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand $encoded
     if ($LASTEXITCODE -ne 0) {
         throw "UsaBanner: $Command failed in PowerShell 7 ($Pwsh), exit code $LASTEXITCODE."
     }
