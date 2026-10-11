@@ -205,8 +205,11 @@ tells AI coding agents how to work on the project. It is now stewarded by the
 Agentic AI Foundation under the Linux Foundation, and its site lists 23 tools
 that read it, among them Codex, Cursor, GitHub Copilot's coding agent, Gemini
 CLI, Jules, Aider and Zed [fetched: github.com/openai/agents.md]. Claude Code
-reads `CLAUDE.md` instead; a one-line `CLAUDE.md` containing `@AGENTS.md`
-bridges the two [search-snippet: Claude Code docs].
+reads `AGENTS.md` itself since v2.1.277, but only when the repository has no
+`CLAUDE.md`; older versions, and sessions where that support is off, read
+`CLAUDE.md` only. A one-line `CLAUDE.md` containing `@AGENTS.md` covers both,
+and the import never makes Claude read `AGENTS.md` twice [fetched 2026-10-11:
+code.claude.com/docs/en/memory, section "AGENTS.md"].
 
 **Yes, add one. But word the logo invitation as something an agent passes on
 to its human, not as a permission given to the agent.** A file in a repository
@@ -267,6 +270,12 @@ encouraging them, not by pushing anyone's agent. A one-line `CLAUDE.md` with
 `@AGENTS.md` comes with it. Still open: whether the logo how-to lives here or
 in a CONTRIBUTING.md that AGENTS.md points to. "This repository's licence" is
 MIT (D24).
+
+**Done 2026-10-11:** `AGENTS.md` and the one-line `CLAUDE.md` at the root,
+as drafted above except for logos. `art/` and `Show-UsaBannerArt` do not exist
+yet, so for now a logo comes as an issue carrying the art, its metadata and
+the ownership sentence. The merge-request how-to arrives with the art library
+(V1), and the open question above is settled then.
 
 ## D5. What pre-init, pre-logon and post-logon mean on each OS
 
