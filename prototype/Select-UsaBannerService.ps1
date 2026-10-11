@@ -50,10 +50,15 @@ $render = {
     $last.Frame = $Frame
     # Over the last frame in place: home, each line erased to its end, then
     # the rest of the screen erased. Clearing the whole screen would flicker.
+    # The screen text has no '=' markers: the row or button under the cursor
+    # is the highlighted span, drawn in reverse video.
     $text = [System.Text.StringBuilder]::new("`e[H")
-    for ($i = 0; $i -lt $Frame.Lines.Count; $i++) {
-        $line = $Frame.Lines[$i]
-        if ($i -eq $Frame.CursorLine) { $line = "`e[7m$line`e[27m" }
+    $h = $Frame.Highlight
+    for ($i = 0; $i -lt $Frame.Screen.Count; $i++) {
+        $line = $Frame.Screen[$i]
+        if ($i -eq $h.Line) {
+            $line = $line.Substring(0, $h.Start) + "`e[7m" + $line.Substring($h.Start, $h.Length) + "`e[27m" + $line.Substring($h.Start + $h.Length)
+        }
         [void]$text.Append($line).Append("`e[K").Append([Environment]::NewLine)
     }
     [void]$text.Append("`e[J")
@@ -75,7 +80,7 @@ try {
 }
 
 # The last frame, saved or cancelled, stays on the normal screen.
-foreach ($line in $last.Frame.Lines) { [Console]::WriteLine($line) }
+foreach ($line in $last.Frame.Screen) { [Console]::WriteLine($line) }
 if ($result.Saved) {
     [Console]::WriteLine("(Prototype: nothing was written. Set-UsaBannerService would save this list to the banner's config.)")
     $result.Services

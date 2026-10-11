@@ -129,6 +129,31 @@ Describe 'the walk-through in docs/SPEC.md, Appendix A' {
         $run.Result.Services | Should -Be 'w32time', 'RmmAgent', '11AmazonThings', 'AMD External Events Utility'
     }
 
+    It 'shows no = on screen: the row or button the walk-through marks is highlighted instead' {
+        foreach ($frame in $run.Frames) {
+            $frame.Screen | Should -HaveCount $frame.Lines.Count
+            $marked = -1
+            for ($i = 0; $i -lt $frame.Lines.Count; $i++) {
+                $notation = $frame.Lines[$i]
+                # <=x=> and <= => keep their column width as <x> and < >; <=Done=> becomes <Done>.
+                $expected = ($notation -replace '^<=(.)=>', '<$1>  ') -replace '<=([^=<>]+)=>', '<$1>'
+                $frame.Screen[$i] | Should -BeExactly $expected
+                $frame.Screen[$i] | Should -Not -Match '<=|=>'
+                if ($notation.Contains('<=')) { $marked = $i }
+            }
+            $frame.Highlight.Line | Should -Be $marked
+            if ($marked -ge 0) {
+                $lit = $frame.Screen[$marked].Substring($frame.Highlight.Start, $frame.Highlight.Length)
+                if ($frame.Lines[$marked] -match '^<=.=>') {
+                    $lit | Should -BeExactly $frame.Screen[$marked] -Because 'a row is highlighted whole'
+                } else {
+                    $lit | Should -Match '^<[^<>]+>$' -Because 'a button is highlighted on its own'
+                    $frame.Lines[$marked] | Should -Match ([regex]::Escape('<=' + $lit.Trim('<', '>') + '=>'))
+                }
+            }
+        }
+    }
+
     It 'highlights, in every frame, the line marked as under the cursor' {
         foreach ($frame in $run.Frames) {
             $marked = @(for ($i = 0; $i -lt $frame.Lines.Count; $i++) { if ($frame.Lines[$i].Contains('<=')) { $i } })

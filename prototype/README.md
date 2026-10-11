@@ -66,12 +66,16 @@ Added beyond the walk-through:
 
 ## How it is built
 
-- `UsaBannerPicker.psm1`, about 560 lines with comments, is a small state
+- `UsaBannerPicker.psm1`, about 600 lines with comments, is a small state
   machine. Keys come in through one scriptblock and frames go out through
-  another, as plain text in the walk-through's notation plus the index of the
-  line under the cursor. Nothing in it touches the console.
+  another. Nothing in it touches the console. Each frame is plain text, twice:
+  - in the walk-through's notation, where `<=x=>` marks the row under the
+    cursor and `<=Done=>` a selected button. The tests compare this;
+  - as the screen shows it: the `=` are notation only, so on screen there are
+    none. The row under the cursor is highlighted whole, and a button on its
+    own.
 - `Select-UsaBannerService.ps1` draws the frames: on the alternate screen,
-  the cursor's line in reverse video, each frame over the last one in place.
+  the highlight in reverse video, each frame over the last one in place.
   While it runs it reads Ctrl+C as a key, because PowerShell cannot stop a
   script that is waiting in `ReadKey`, and it restores the screen and the
   terminal on the way out.

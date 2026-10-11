@@ -5,10 +5,12 @@
 # The picker is a small state machine. Keys come in through one scriptblock
 # and every frame goes out through another, so the same code runs in a
 # terminal (Select-UsaBannerService.ps1) and in a test that drives it with
-# scripted keys and reads each frame back. A frame is plain text in the
-# notation of the spec's walk-through (docs/SPEC.md, Appendix A): <=x=> is
-# the row under the cursor, <x> a checked row and < > an unchecked one. The
-# terminal wrapper also draws the cursor's line in reverse video.
+# scripted keys and reads each frame back. A frame is plain text, twice:
+# - in the notation of the spec's walk-through (docs/SPEC.md, Appendix A),
+#   where <=x=> marks the row under the cursor, <x> a checked row, < > an
+#   unchecked one and <=Done=> a selected button; the tests compare this;
+# - as a terminal shows it: no '=' markers, and the row or button under the
+#   cursor drawn in reverse video instead.
 
 Set-StrictMode -Version 3.0
 
@@ -26,12 +28,14 @@ function Format-PickerCell {
     $Text.PadRight($Width)
 }
 
-# Format-PickerRow SERVICE CURSOR
+# Format-PickerRow SERVICE CURSOR [-Screen]
 # In:  a service (Name, Display, Status, Checked) and whether the cursor is on it.
-# Out: its line: the check mark, then the three columns.
+# Out: its line: the check mark, then the three columns. The walk-through marks
+#      the cursor's row <=x=>; with -Screen the line is as a terminal shows it,
+#      without the '=', since there the highlight marks the cursor instead.
 function Format-PickerRow {
-    param([object]$Service, [bool]$Cursor)
-    $mark = if ($Cursor) {
+    param([object]$Service, [bool]$Cursor, [switch]$Screen)
+    $mark = if ($Cursor -and -not $Screen) {
         if ($Service.Checked) { '<=x=>' } else { '<= =>' }
     } elseif ($Service.Checked) { '<x>' } else { '< >' }
     '{0} {1} {2} {3}' -f $mark.PadRight(5), (Format-PickerCell $Service.Name $script:NameWidth),
@@ -96,75 +100,101 @@ function New-PickerState {
 function Format-PickerFrame {
     <#
     .SYNOPSIS
-    The screen for the picker's current state.
+    The screen for the picker's current state, in two forms.
     .OUTPUTS
-    Lines (the text) and CursorLine (the index of the line under the cursor,
-    or -1).
+    Lines: the text in the walk-through's notation, where <=x=> marks the row
+    under the cursor and <=Name=> a selected button. The tests compare these
+    with the spec.
+    Screen: the same text as a terminal shows it, without those '=' markers.
+    Highlight: what the terminal draws in reverse video. Line, Start and
+    Length index into Screen. A row is highlighted whole, a button on its own;
+    Line is -1 when nothing is.
+    CursorLine: Highlight.Line, kept for callers that read only Lines.
     #>
     param([Parameter(Mandatory)][object]$State)
     $lines = [System.Collections.Generic.List[string]]::new()
-    $cursorLine = -1
-    $lines.Add('--------------')
-    $lines.Add('|UsagiTools Banner Setup')
+    # Not $screen: names ignore case, and $add's own $Screen would hide it.
+    $screenLines = [System.Collections.Generic.List[string]]::new()
+    $highlight = @{ Line = -1; Start = 0; Length = 0 }
+    # One line of the frame. SCREEN defaults to the notation's text. -Row
+    # highlights the whole screen line; -Button highlights that text in it.
+    $add = {
+        param([string]$Notation, [string]$Screen = $Notation, [switch]$Row, [string]$Button = '')
+        if ($Row) {
+            $highlight.Line = $lines.Count; $highlight.Start = 0; $highlight.Length = $Screen.Length
+        } elseif ($Button) {
+            $highlight.Line = $lines.Count
+            $highlight.Start = $Screen.IndexOf($Button, [System.StringComparison]::Ordinal)
+            $highlight.Length = $Button.Length
+        }
+        $lines.Add($Notation)
+        $screenLines.Add($Screen)
+    }
+    # One service row, under the cursor or not.
+    $addRow = {
+        param([object]$Service, [bool]$Cursor)
+        if ($Cursor) { & $add (Format-PickerRow $Service $true) (Format-PickerRow $Service $true -Screen) -Row }
+        else { & $add (Format-PickerRow $Service $false) }
+    }
+    & $add '--------------'
+    & $add '|UsagiTools Banner Setup'
     switch ($State.Mode) {
         'Main' {
-            $lines.Add('|> Please select services for the banner to monitor.')
-            foreach ($line in Get-PickerColumnHeader) { $lines.Add($line) }
-            for ($i = 0; $i -lt $State.Items.Count; $i++) {
-                if ($State.Cursor -eq $i) { $cursorLine = $lines.Count }
-                $lines.Add((Format-PickerRow $State.Items[$i] ($State.Cursor -eq $i)))
-            }
+            & $add '|> Please select services for the banner to monitor.'
+            foreach ($line in Get-PickerColumnHeader) { & $add $line }
+            for ($i = 0; $i -lt $State.Items.Count; $i++) { & $addRow $State.Items[$i] ($State.Cursor -eq $i) }
             $n = $State.Items.Count
-            if ($State.Cursor -eq $n) { $cursorLine = $lines.Count; $lines.Add("<= => Add your own: $($State.Input)_") }
-            else { $lines.Add("< >   Add your own: $($State.Input)_") }
-            if ($State.Cursor -eq $n + 1) { $cursorLine = $lines.Count; $lines.Add('<=Search for Services=>') }
-            else { $lines.Add('<Search for Services>') }
-            if ($State.Cursor -eq $n + 2) { $cursorLine = $lines.Count; $lines.Add('<=Done=>') }
-            else { $lines.Add('<Done>') }
-            $lines.Add((Get-PickerHint $State))
+            if ($State.Cursor -eq $n) { & $add "<= => Add your own: $($State.Input)_" "< >   Add your own: $($State.Input)_" -Row }
+            else { & $add "< >   Add your own: $($State.Input)_" }
+            if ($State.Cursor -eq $n + 1) { & $add '<=Search for Services=>' '<Search for Services>' -Button '<Search for Services>' }
+            else { & $add '<Search for Services>' }
+            if ($State.Cursor -eq $n + 2) { & $add '<=Done=>' '<Done>' -Button '<Done>' }
+            else { & $add '<Done>' }
+            & $add (Get-PickerHint $State)
         }
         'Search' {
-            $lines.Add('|> Please select services for the banner to monitor.')
-            $lines.Add('|> SERVICE SELECTION MENU')
-            if ($State.Filter) { $lines.Add("|> Filter: $($State.Filter)_") }
-            foreach ($line in Get-PickerColumnHeader) { $lines.Add($line) }
+            & $add '|> Please select services for the banner to monitor.'
+            & $add '|> SERVICE SELECTION MENU'
+            if ($State.Filter) { & $add "|> Filter: $($State.Filter)_" }
+            foreach ($line in Get-PickerColumnHeader) { & $add $line }
             $view = $State.View
             $top = $State.SearchOffset
             $end = [Math]::Min($view.Count, $top + $script:WindowRows)
-            if ($top -gt 0) { $lines.Add('^Scroll^') }
-            for ($i = $top; $i -lt $end; $i++) {
-                if ($State.SearchCursor -eq $i) { $cursorLine = $lines.Count }
-                $lines.Add((Format-PickerRow $view[$i] ($State.SearchCursor -eq $i)))
-            }
-            if ($end -lt $view.Count) { $lines.Add('vScrollv') }
+            if ($top -gt 0) { & $add '^Scroll^' }
+            for ($i = $top; $i -lt $end; $i++) { & $addRow $view[$i] ($State.SearchCursor -eq $i) }
+            if ($end -lt $view.Count) { & $add 'vScrollv' }
             if (-not $view.Count) {
-                $lines.Add($(if ($State.Filter) { '      (no service matches the filter)' } else { '      (no services found)' }))
+                & $add $(if ($State.Filter) { '      (no service matches the filter)' } else { '      (no services found)' })
             }
-            $lines.Add('[Spacebar=Select Item, Esc=Back and add, Up/Down arrows to scroll]')
+            & $add '[Spacebar=Select Item, Esc=Back and add, Up/Down arrows to scroll]'
         }
         'Confirm' {
-            $lines.Add('|> Please select services for the banner to monitor.')
-            foreach ($line in Get-PickerColumnHeader) { $lines.Add($line) }
-            foreach ($service in $State.Items) { if ($service.Checked) { $lines.Add((Format-PickerRow $service $false)) } }
-            $lines.Add('|>DO YOU WISH TO SAVE THE FOLLOWING SERVICES TO BANNER MONITOR')
-            $cursorLine = $lines.Count
+            & $add '|> Please select services for the banner to monitor.'
+            foreach ($line in Get-PickerColumnHeader) { & $add $line }
+            foreach ($service in $State.Items) { if ($service.Checked) { & $addRow $service $false } }
+            & $add '|>DO YOU WISH TO SAVE THE FOLLOWING SERVICES TO BANNER MONITOR'
             if ($State.OnDone) {
-                $lines.Add('<Back> <=Done=>')
-                $lines.Add('[Enter=Commit Changes and Save, Left/Right arrows to scroll]')
+                & $add '<Back> <=Done=>' '<Back> <Done>' -Button '<Done>'
+                & $add '[Enter=Commit Changes and Save, Left/Right arrows to scroll]'
             } else {
-                $lines.Add('<=Back=> <Done>')
-                $lines.Add('[Enter=Back, Left/Right arrows to scroll]')
+                & $add '<=Back=> <Done>' '<Back> <Done>' -Button '<Back>'
+                & $add '[Enter=Back, Left/Right arrows to scroll]'
             }
         }
         'Saved' {
-            $lines.Add('|> THE BELOW WILL BE CHECKED ON LOGON')
-            foreach ($line in Get-PickerColumnHeader) { $lines.Add($line) }
-            foreach ($service in $State.Items) { if ($service.Checked) { $lines.Add((Format-PickerRow $service $false)) } }
-            $lines.Add('|>THE ABOVE WILL BE CHECKED ON LOGON')
+            & $add '|> THE BELOW WILL BE CHECKED ON LOGON'
+            foreach ($line in Get-PickerColumnHeader) { & $add $line }
+            foreach ($service in $State.Items) { if ($service.Checked) { & $addRow $service $false } }
+            & $add '|>THE ABOVE WILL BE CHECKED ON LOGON'
         }
-        'Cancelled' { $lines.Add('|> Cancelled. Nothing was saved.') }
+        'Cancelled' { & $add '|> Cancelled. Nothing was saved.' }
     }
-    [pscustomobject]@{ Lines = [string[]]$lines; CursorLine = $cursorLine }
+    [pscustomobject]@{
+        Lines      = [string[]]$lines
+        Screen     = [string[]]$screenLines
+        Highlight  = [pscustomobject]@{ Line = $highlight.Line; Start = $highlight.Start; Length = $highlight.Length }
+        CursorLine = $highlight.Line
+    }
 }
 
 # Add-PickerService STATE RENDER
