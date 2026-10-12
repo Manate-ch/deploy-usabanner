@@ -10,6 +10,14 @@ each file goes to the same path under `/`.
 The data files hold **example** values (a naming schema, VLANs, colours).
 Replace them with your own before the first host: see "Your own data".
 
+**V1 is being built beside this code**, as the PowerShell 7 module in
+`UsaBanner/`: what it will do is in `docs/SPEC.md`, the order of the work in
+`docs/V1-PLAN.md`. Until it is done, everything below is how to install. To
+see how far it has got, from a clone:
+
+    Import-Module ./UsaBanner/UsaBanner.psd1
+    Show-UsaBannerArt                  # or -ColorMode truecolor, 256, 16 or none
+
 ## Quickstart
 
 For a host that Group Policy does not reach: off the domain, at another

@@ -3,7 +3,8 @@
 > Written up from the author's spec on 2026-10-09. The questions it raised are
 > decided in [DECISIONS.md](DECISIONS.md), referred to here as **D*n***; where
 > a decision says more than the text here, the decision wins. The examples use
-> a made-up company (Contoso) and made-up services.
+> a made-up company (Contoso) and made-up services. The order of the work is
+> in [V1-PLAN.md](V1-PLAN.md).
 
 ## 1. What this is
 

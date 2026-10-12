@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "company": "",
+  "environment": "UNSET",
+  "art": {
+    "name": "os"
+  },
+  "color": {
+    "mode": "auto",
+    "preset": "UsagiTools"
+  },
+  "border": {
+    "set": "Classic"
+  },
+  "legal": {
+    "template": "L3",
+    "text": []
+  },
+  "preInit": {
+    "hostName": true,
+    "ip": true
+  },
+  "preLogon": {
+    "hostName": false,
+    "ip": false
+  },
+  "vlans": [],
+  "services": "default"
+}

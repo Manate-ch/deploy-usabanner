@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UsaBanner configuration",
+  "description": "Every setting of a host's banners, in one file. A key left out takes its value from defaults.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "properties": {
+    "version": {
+      "description": "The shape of this file. It goes up only when a file written for the old shape would be read wrongly.",
+      "const": 1
+    },
+    "company": {
+      "description": "The company name, for 'Welcome to <company>'. It shows before login, so printable ASCII only, and short enough for the 64-column box.",
+      "$ref": "#/$defs/ascii",
+      "maxLength": 48
+    },
+    "environment": {
+      "description": "The tier the host belongs to; UNSET draws a grey badge until it is set.",
+      "enum": [
+        "UNSET",
+        "DEV-TEST",
+        "LAB",
+        "PROD",
+        "PUB"
+      ]
+    },
+    "art": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "A built-in piece of art, by name. 'os' is our pictogram in the host's OS colour.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        }
+      }
+    },
+    "color": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "description": "This host's colour mode. auto reads the terminal's signals; anything else is what the admin found works here. USABANNER_COLOR in a user's environment overrides it.",
+          "enum": [
+            "auto",
+            "truecolor",
+            "256",
+            "16",
+            "none"
+          ]
+        },
+        "preset": {
+          "description": "The colour scheme.",
+          "enum": [
+            "UsagiTools",
+            "Classic16",
+            "HighContrast",
+            "Mono",
+            "Custom"
+          ]
+        }
+      }
+    },
+    "border": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "set": {
+          "description": "The box's lines and corners. Rounded, Single, Double, Heavy and Block are Unicode: after login only, with Classic before login and wherever the client is not UTF-8.",
+          "enum": [
+            "Classic",
+            "Hash",
+            "Star",
+            "Equals",
+            "Round",
+            "Bevel",
+            "PipeUnderscore",
+            "Wavy",
+            "OneChar",
+            "Rounded",
+            "Single",
+            "Double",
+            "Heavy",
+            "Block"
+          ]
+        },
+        "char": {
+          "description": "The character OneChar draws with.",
+          "type": "string",
+          "pattern": "^[!-~]$"
+        },
+        "cap": {
+          "description": "A label in the top line, such as an ASCII emoticon.",
+          "$ref": "#/$defs/ascii",
+          "maxLength": 16
+        }
+      }
+    },
+    "legal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "template": {
+          "description": "L1 (friendly) to L5 (maximum), or custom for the lines in text.",
+          "enum": [
+            "L1",
+            "L2",
+            "L3",
+            "L4",
+            "L5",
+            "custom"
+          ]
+        },
+        "text": {
+          "description": "The custom legal text, one string per line. It shows before login: printable ASCII only.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ascii"
+          }
+        }
+      }
+    },
+    "preInit": {
+      "description": "What the console shows before login, besides the company name and the legal text.",
+      "$ref": "#/$defs/shown"
+    },
+    "preLogon": {
+      "description": "What the SSH banner shows before authentication, besides the company name and the legal text. Anyone who starts to log in can read it.",
+      "$ref": "#/$defs/shown"
+    },
+    "vlans": {
+      "description": "The VLAN table: the post-login banner names the VLAN the host's address is in.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "tag",
+          "cidr"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/ascii",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "tag": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4094
+          },
+          "cidr": {
+            "description": "An IPv4 network, as 10.20.30.0/24.",
+            "type": "string",
+            "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+          }
+        }
+      }
+    },
+    "services": {
+      "description": "The services the post-login banner watches: 'default' for the OS's own list, or the names.",
+      "oneOf": [
+        {
+          "const": "default"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.@-]+$"
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "ascii": {
+      "description": "Printable ASCII, space to tilde.",
+      "type": "string",
+      "pattern": "^[ -~]*$"
+    },
+    "shown": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hostName": {
+          "type": "boolean"
+        },
+        "ip": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
