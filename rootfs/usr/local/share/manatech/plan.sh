@@ -70,6 +70,19 @@ plan_retire() {
 	fi
 }
 
+# plan_conffile PATH STOCK ARG OURS
+# Out: what --ssh does with base-files' conffile PATH, as install.sh calls
+#      restore_conffile: "would put back" when it replaces an older version's
+#      banner with the stock text; a "note" saying why when it leaves PATH.
+plan_conffile() {
+	case $(conffile_state base-files "$PLAN_ROOT$1" "$2" "$3" "$4") in
+	restore) echo "would put back the stock $1" ;;
+	theirs) echo "note: $1 holds someone else's text; it stays as it is, and dpkg will ask about it at the next base-files upgrade" ;;
+	missing) echo "note: $1 is missing; it stays missing, and agetty shows /etc/issue.d only while /etc/issue exists" ;;
+	changed) echo "note: $1 holds a banner this installer wrote, but this release's stock text is not known; it stays as it is" ;;
+	esac
+}
+
 # plan_ssh SRC
 # Out: what --ssh would change: our console banner in /etc/issue.d, our SSH
 #      banner text in /etc/manatech, the stock /etc/issue and /etc/issue.net an
@@ -80,12 +93,8 @@ plan_ssh() {
 	plan_file "$1/etc/issue.net" /etc/manatech/issue.net 'the SSH banner'
 	_pretty=$(. "$PLAN_ROOT/etc/os-release" 2>/dev/null && printf '%s' "${PRETTY_NAME-}") || _pretty=
 	if [ -n "$_pretty" ]; then
-		for _c in issue:stock_issue issue.net:stock_issue_net; do
-			case $(conffile_state base-files "$PLAN_ROOT/etc/${_c%%:*}" "${_c#*:}" "$_pretty") in
-			restore) echo "would put back the stock /etc/${_c%%:*}" ;;
-			changed) echo "note: /etc/${_c%%:*} was changed, not as this installer changes it; it stays as it is, and dpkg will ask about it at the next base-files upgrade" ;;
-			esac
-		done
+		plan_conffile /etc/issue stock_issue "$_pretty" "$OURS_ISSUE"
+		plan_conffile /etc/issue.net stock_issue_net "$_pretty" "$OURS_ISSUE_NET"
 	fi
 	plan_file "$1/etc/ssh/sshd_config.d/00-manatech-banner.conf" /etc/ssh/sshd_config.d/00-manatech-banner.conf 'the sshd drop-in; then sshd -t and a reload'
 	if [ -e "$PLAN_ROOT/etc/ssh/sshd_config.d/10-manatech-banner.conf" ]; then

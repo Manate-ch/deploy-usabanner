@@ -85,20 +85,38 @@ restore_conffile() {
 	return 1
 }
 
-# conffile_state PACKAGE PATH STOCK [ARG]
-# Out: one word, what restore_conffile would find, without changing anything:
+# conffile_state PACKAGE PATH STOCK [ARG [OURS]]
+# Out: one word, what restore_conffile (given the same arguments) would find,
+#      without changing anything:
 #      stock    PATH has the md5 dpkg recorded;
-#      restore  PATH differs or is missing, and STOCK's text has that md5:
-#               restore_conffile would put it back;
-#      changed  PATH differs, and STOCK's text does not have it: restore_conffile
-#               would leave it.
+#      restore  it would put the stock text back;
+#      missing  PATH is missing and OURS is given: it would stay missing;
+#      theirs   PATH holds a text not in OURS: it would stay;
+#      changed  STOCK's text does not have the recorded md5 (for OURS: a release
+#               whose stock text is not known): it would stay.
 #      Nothing when PACKAGE does not list PATH.
 conffile_state() {
 	_want=$(conffile_md5 "$1" "$2")
 	[ -n "$_want" ] || return 0
-	if [ "$(file_md5 "$2")" = "$_want" ]; then
+	_have=$(file_md5 "$2")
+	if [ "$_have" = "$_want" ]; then
 		echo stock
-	elif [ "$("$3" "${4-}" | md5sum | awk '{ print $1 }')" = "$_want" ]; then
+		return 0
+	fi
+	if [ -n "${5-}" ]; then
+		if [ -z "$_have" ]; then
+			echo missing
+			return 0
+		fi
+		case " $5 " in
+		*" $_have "*) ;;
+		*)
+			echo theirs
+			return 0
+			;;
+		esac
+	fi
+	if [ "$("$3" "${4-}" | md5sum | awk '{ print $1 }')" = "$_want" ]; then
 		echo restore
 	else
 		echo changed

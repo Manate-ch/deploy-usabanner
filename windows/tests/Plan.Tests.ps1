@@ -86,8 +86,10 @@ exit 1
         $issue = Join-Path $fs 'etc/issue'
         $issueNet = Join-Path $fs 'etc/issue.net'
         if ($State -eq 'old') {
-            Write-File $issue "\S{PRETTY_NAME} \n \l`nWelcome to the banner.`n"
-            Write-File $issueNet "the old SSH banner`n"
+            # What install.sh --ssh wrote before the fix: rootfs/etc/issue (issue.d's banner below
+            # its old first line) and rootfs/etc/issue.net. Both are in conffiles.sh's lists.
+            Write-File $issue ("\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $Src 'etc/issue.d/50-manatech.issue')))
+            Write-File $issueNet ([System.IO.File]::ReadAllText((Join-Path $Src 'etc/issue.net')))
         }
         else {
             Write-File $issue "$Pretty \n \l`n`n"
@@ -189,21 +191,31 @@ Describe 'plan.sh' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinue)) {
         )
     }
 
-    It 'notes a conffile it cannot put back, and does not count it as a change' {
+    It 'notes our banner on a release whose stock text it does not know, and does not count it' {
         $h = New-FakeHost old
         # dpkg's record is 24.04.5's while the host says 24.04.4: the rebuilt stock text cannot match it.
         $issue = Join-Path $h.Fs 'etc/issue'
         Write-File (Join-Path $h.Root 'conffiles.base-files') " $issue 1fd8b22ff287a77717f4ed62774e4576`n"
         $r = Invoke-Plan $h "plan_ssh '$Src'"
-        $r.Output | Should -Contain 'note: /etc/issue was changed, not as this installer changes it; it stays as it is, and dpkg will ask about it at the next base-files upgrade'
+        $r.Output | Should -Contain "note: /etc/issue holds a banner this installer wrote, but this release's stock text is not known; it stays as it is"
         $r.Output | Should -Not -Contain 'would put back the stock /etc/issue'
     }
 
-    It 'would put back a stock /etc/issue over anything in it: our old banner and anyone else''s look alike' {
+    It 'leaves someone else''s /etc/issue alone, and notes it' {
         $h = New-FakeHost old
-        Write-File (Join-Path $h.Fs 'etc/issue') "someone else's console banner`n"
+        Write-File (Join-Path $h.Fs 'etc/issue') "Contoso: authorised users only.`n"
         $r = Invoke-Plan $h "plan_ssh '$Src'"
-        $r.Output | Should -Contain 'would put back the stock /etc/issue'
+        $r.Output | Should -Contain "note: /etc/issue holds someone else's text; it stays as it is, and dpkg will ask about it at the next base-files upgrade"
+        $r.Output | Should -Not -Contain 'would put back the stock /etc/issue'
+        $r.Output | Should -Contain 'would put back the stock /etc/issue.net'
+    }
+
+    It 'leaves a missing /etc/issue missing, and notes what that costs' {
+        $h = New-FakeHost old
+        Remove-Item -LiteralPath (Join-Path $h.Fs 'etc/issue')
+        $r = Invoke-Plan $h "plan_ssh '$Src'"
+        $r.Output | Should -Contain 'note: /etc/issue is missing; it stays missing, and agetty shows /etc/issue.d only while /etc/issue exists'
+        $r.Output | Should -Not -Contain 'would put back the stock /etc/issue'
     }
 
     It 'reads the parts from the host: <Case>' -ForEach @(

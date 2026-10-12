@@ -213,6 +213,29 @@ Describe 'conffile_state' -Skip:(-not (Get-Command sh -ErrorAction SilentlyConti
         $r = Invoke-Lib $root "conffile_state base-files '$other' stock_issue 'Ubuntu 24.04.4 LTS'; echo end"
         $r.Output | Should -Be @('end')
     }
+
+    It 'says <Expected> with the list of our texts, and restore_conffile then does just that' -ForEach @(
+        @{ Expected = 'restore'; Text = 'ours'; Recorded = '5d0d240fb6f305303afbe168d941cd19'; Rc = 'rc=0'; After = 'stock' }
+        @{ Expected = 'theirs'; Text = "Contoso: authorised users only.`n"; Recorded = '5d0d240fb6f305303afbe168d941cd19'; Rc = 'rc=1'; After = 'as it was' }
+        @{ Expected = 'missing'; Text = ''; Recorded = '5d0d240fb6f305303afbe168d941cd19'; Rc = 'rc=1'; After = 'missing' }
+        # 24.04.5's md5 on a host that says 24.04.4: the rebuilt text cannot match.
+        @{ Expected = 'changed'; Text = 'ours'; Recorded = '1fd8b22ff287a77717f4ed62774e4576'; Rc = 'rc=1'; After = 'as it was' }
+    ) {
+        # 'ours' is what install.sh --ssh wrote before the fix: issue.d's banner below its old first line.
+        $ours = "\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../../rootfs/etc/issue.d/50-manatech.issue'))
+        $content = if ($Text -eq 'ours') { $ours } else { $Text }
+        $root = New-Sandbox
+        $issue = Join-Path $root 'issue'
+        if ($content) { [System.IO.File]::WriteAllText($issue, $content) }
+        Set-Conffile $root 'base-files' $issue $Recorded
+        $r = Invoke-Lib $root "conffile_state base-files '$issue' stock_issue 'Ubuntu 24.04.4 LTS' `"`$OURS_ISSUE`"; restore_conffile base-files '$issue' stock_issue 'Ubuntu 24.04.4 LTS' `"`$OURS_ISSUE`" >/dev/null; echo rc=`$?"
+        $r.Output | Should -Be @($Expected, $Rc)
+        switch ($After) {
+            'stock' { [System.IO.File]::ReadAllText($issue) | Should -BeExactly "Ubuntu 24.04.4 LTS \n \l`n`n" }
+            'as it was' { [System.IO.File]::ReadAllText($issue) | Should -BeExactly $content }
+            'missing' { Test-Path -LiteralPath $issue | Should -BeFalse }
+        }
+    }
 }
 
 Describe 'the texts restore_conffile may replace' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinue)) {
