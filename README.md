@@ -164,6 +164,7 @@ byte, writing each only when its md5 is the one dpkg recorded.
 | `rootfs/etc/issue.net` + `rootfs/etc/ssh/sshd_config.d/00-manatech-banner.conf` | `/etc/manatech/issue.net` and the drop-in, 644 | plain pre-login SSH banner (`00-`: sshd uses the first Banner it reads; `install.sh --ssh` checks the effective one with `sshd -T`) |
 | `rootfs/etc/issue.d/50-manatech.issue` | same, 644 | console banner, printed after Ubuntu's `/etc/issue` (the OS line comes from that stock file) |
 | `rootfs/usr/local/share/manatech/conffiles.sh` | same, 644 | keeps Ubuntu's banner conffiles stock: puts back what older versions changed, and keeps landscape-sysinfo off across upgrades (`windows/tests/Conffiles.Tests.ps1`) |
+| `rootfs/usr/local/share/manatech/plan.sh` | same, 644 | what `install.sh` would change, without changing it: `--whatif`, and the note of waiting setup changes that `15-manatech-health` shows at login (`windows/tests/Plan.Tests.ps1`, `Health.Tests.ps1`) |
 | `demo.sh`, `demo/motd.conf` | not installed | render from the repo without touching `/etc` |
 
 The template ships `ENV_NAME=UNSET`, which shows a grey badge. Seeing that
@@ -587,7 +588,17 @@ leaves open sessions alone), and enables
 The timer runs `install.sh --update`, which pulls and reinstalls the MOTD
 scripts only. A change to the pre-login banners, the retired scripts or the
 timer's own unit reaches the host when `install.sh --all` runs again. (Group
-Policy hosts run the full set every time.)
+Policy hosts run the full set every time.) So after each of its runs,
+`install.sh` notes what `--all` would still change here, and the login banner
+shows it (with a triangle in a UTF-8 terminal):
+
+      [!!] 3 setup changes wait: sh /opt/manatech-motd/install.sh --all --whatif
+        shows them; sudo sh /opt/manatech-motd/install.sh --all makes them
+
+`--whatif` takes any options, lists what that run would change, one line each,
+and changes nothing; it needs no sudo. The note covers only the parts this host
+has (stock scripts retired, our sshd drop-in, the timer), and carries `--ad`
+when the timer uses it.
 Add `--ad` on a domain-joined host to take ENV and role from its AD Description. The token lives
 in `/opt/manatech-motd/.git/config`, which `install.sh` makes root-only. It is
 also visible in the process list for the few seconds the clone runs.

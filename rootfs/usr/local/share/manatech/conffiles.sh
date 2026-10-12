@@ -55,6 +55,26 @@ restore_conffile() {
 	return 1
 }
 
+# conffile_state PACKAGE PATH STOCK [ARG]
+# Out: one word, what restore_conffile would find, without changing anything:
+#      stock    PATH has the md5 dpkg recorded;
+#      restore  PATH differs or is missing, and STOCK's text has that md5:
+#               restore_conffile would put it back;
+#      changed  PATH differs, and STOCK's text does not have it: restore_conffile
+#               would leave it.
+#      Nothing when PACKAGE does not list PATH.
+conffile_state() {
+	_want=$(conffile_md5 "$1" "$2")
+	[ -n "$_want" ] || return 0
+	if [ "$(file_md5 "$2")" = "$_want" ]; then
+		echo stock
+	elif [ "$("$3" "${4-}" | md5sum | awk '{ print $1 }')" = "$_want" ]; then
+		echo restore
+	else
+		echo changed
+	fi
+}
+
 # retire_landscape [LINK]
 # In:  the landscape-sysinfo MOTD script, by default
 #      /etc/update-motd.d/50-landscape-sysinfo.

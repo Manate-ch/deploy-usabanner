@@ -153,6 +153,31 @@ Describe 'restore_conffile' -Skip:(-not (Get-Command sh -ErrorAction SilentlyCon
     }
 }
 
+Describe 'conffile_state' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinue)) {
+    It 'says <Expected>, and restore_conffile then does just that' -ForEach @(
+        @{ Expected = 'stock'; Text = "Ubuntu 24.04.4 LTS \n \l`n`n"; Recorded = '5d0d240fb6f305303afbe168d941cd19'; Rc = 'rc=0'; After = "Ubuntu 24.04.4 LTS \n \l`n`n" }
+        @{ Expected = 'restore'; Text = "Welcome to the banner.`n"; Recorded = '5d0d240fb6f305303afbe168d941cd19'; Rc = 'rc=0'; After = "Ubuntu 24.04.4 LTS \n \l`n`n" }
+        # 24.04.5's md5 on a host that says 24.04.4: the rebuilt text cannot match.
+        @{ Expected = 'changed'; Text = "Welcome to the banner.`n"; Recorded = '1fd8b22ff287a77717f4ed62774e4576'; Rc = 'rc=1'; After = "Welcome to the banner.`n" }
+    ) {
+        $root = New-Sandbox
+        $issue = Join-Path $root 'issue'
+        [System.IO.File]::WriteAllText($issue, $Text)
+        Set-Conffile $root 'base-files' $issue $Recorded
+        $r = Invoke-Lib $root "conffile_state base-files '$issue' stock_issue 'Ubuntu 24.04.4 LTS'; restore_conffile base-files '$issue' stock_issue 'Ubuntu 24.04.4 LTS' >/dev/null; echo rc=`$?"
+        $r.Output | Should -Be @($Expected, $Rc)
+        [System.IO.File]::ReadAllText($issue) | Should -BeExactly $After
+    }
+
+    It 'says nothing for a file the package does not list' {
+        $root = New-Sandbox
+        $other = Join-Path $root 'other'
+        [System.IO.File]::WriteAllText($other, "mine`n")
+        $r = Invoke-Lib $root "conffile_state base-files '$other' stock_issue 'Ubuntu 24.04.4 LTS'; echo end"
+        $r.Output | Should -Be @('end')
+    }
+}
+
 Describe 'retire_landscape' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinue)) {
     BeforeAll {
         # New-Landscape ROOT OWNED: a 755 wrapper and a symlink to it, as landscape-common's
