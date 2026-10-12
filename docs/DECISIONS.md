@@ -747,7 +747,12 @@ updates could sit waiting [known].
   `ENABLED=1`), and writes it only when its md5 is the one dpkg recorded
   [measured: equal to the md5s base-files 13ubuntu10.4 and 13ubuntu10.5
   record]. A file it cannot rebuild is left as it is, and the log says so;
-  dpkg asks about that one at its next upgrade, as before.
+  dpkg asks about that one at its next upgrade, as before. And for
+  `/etc/issue` and `/etc/issue.net` it writes only over a banner an older
+  version wrote: `conffiles.sh` lists the md5 of each such version, and of
+  the original banner they replaced, installed by hand. Anyone else's text
+  stays, because the stock text would fit over it just as well and would
+  erase it.
 
 **The lab test (2026-10-11) [measured]:** a 24.04.4 VM that the old
 installer had set up, where `dpkg --verify` flagged `/etc/issue`,
