@@ -113,8 +113,8 @@ and take the environment from its AD Description instead, written
 
 | When | Where it comes from | Colour? |
 |---|---|---|
-| Console, before login | `/etc/issue`, which agetty expands (`\e{cyan}`, `\4`, `\S{PRETTY_NAME}`) | yes: agetty adds it |
-| SSH, before login | `/etc/issue.net` via sshd `Banner` | **no.** sshd sends it raw, and OpenSSH, PuTTY and MobaXterm strip or expose escape codes in it on purpose, because the server has not authenticated yet |
+| Console, before login | Ubuntu's own `/etc/issue` (the OS line), then `/etc/issue.d/50-manatech.issue`, which agetty expands (`\e{cyan}`, `\4`) | yes: agetty adds it |
+| SSH, before login | `/etc/manatech/issue.net` via sshd `Banner` | **no.** sshd sends it raw, and OpenSSH, PuTTY and MobaXterm strip or expose escape codes in it on purpose, because the server has not authenticated yet |
 | SSH or console, after login | `pam_motd` runs `/etc/update-motd.d/*` as root and prints the output | yes: raw ANSI works in every modern client |
 
 So the styling lives after login. The pre-login banner is the same art in
@@ -123,6 +123,12 @@ labelled "Login for more information", so logging in reads as the art lighting
 up. It says nothing useful to a scanner: no OS, version or addresses. A Pester
 check keeps it ASCII-only, the box 64 wide, and the art identical to
 `manatech.art`.
+
+Ubuntu's `/etc/issue` and `/etc/issue.net` stay stock: they are conffiles
+that base-files replaces at every point release, and apt asks before it
+replaces a changed one. Older versions overwrote them, so every point
+release asked. `install.sh --ssh` now puts the stock versions back, byte for
+byte, writing each only when its md5 is the one dpkg recorded.
 
 ## Files
 
@@ -147,8 +153,9 @@ check keeps it ASCII-only, the box 64 wide, and the art identical to
 | `windows/` | see "Windows Server" | the same banner for Windows: module, config, installer, demo, Pester tests |
 | `rootfs/usr/local/share/manatech/manatech.art` | same, 644 | the art. `@y` switches to the emblem colour, `@c` back to the moon colour |
 | `rootfs/etc/manatech/motd.conf` | same, 644 | **per host**: `ENV_NAME`, `ROLE`, `WATCH`, colour mode, thresholds |
-| `rootfs/etc/issue.net` + `rootfs/etc/ssh/sshd_config.d/00-manatech-banner.conf` | same, 644 | plain pre-login SSH banner (`00-`: sshd uses the first Banner it reads; `install.sh --ssh` checks the effective one with `sshd -T`) |
-| `rootfs/etc/issue` | same, 644 | console banner (OS read from os-release) |
+| `rootfs/etc/issue.net` + `rootfs/etc/ssh/sshd_config.d/00-manatech-banner.conf` | `/etc/manatech/issue.net` and the drop-in, 644 | plain pre-login SSH banner (`00-`: sshd uses the first Banner it reads; `install.sh --ssh` checks the effective one with `sshd -T`) |
+| `rootfs/etc/issue.d/50-manatech.issue` | same, 644 | console banner, printed after Ubuntu's `/etc/issue` (the OS line comes from that stock file) |
+| `rootfs/usr/local/share/manatech/conffiles.sh` | same, 644 | keeps Ubuntu's banner conffiles stock: puts back what older versions changed, and keeps landscape-sysinfo off across upgrades (`windows/tests/Conffiles.Tests.ps1`) |
 | `demo.sh`, `demo/motd.conf` | not installed | render from the repo without touching `/etc` |
 
 The template ships `ENV_NAME=UNSET`, which shows a grey badge. Seeing that
@@ -565,9 +572,14 @@ one, as in "Quickstart".
     sudoedit /etc/manatech/motd.conf                     # ENV_NAME, ROLE, WATCH
 
 `--all` installs the banner, retires the stock scripts it replaces (`chmod -x`,
-and motd-news off), sets the plain pre-login SSH banner (`sshd -t` first,
-then a reload, which leaves open sessions alone), and enables
+and the motd-news timer masked), sets the pre-login banners (the console's in
+`/etc/issue.d`; the plain SSH one with `sshd -t` first, then a reload, which
+leaves open sessions alone), and enables
 `manatech-motd-update.timer` (every 4 hours, up to 20 min random delay).
+The timer runs `install.sh --update`, which pulls and reinstalls the MOTD
+scripts only. A change to the pre-login banners, the retired scripts or the
+timer's own unit reaches the host when `install.sh --all` runs again. (Group
+Policy hosts run the full set every time.)
 Add `--ad` on a domain-joined host to take ENV and role from its AD Description. The token lives
 in `/opt/manatech-motd/.git/config`, which `install.sh` makes root-only. It is
 also visible in the process list for the few seconds the clone runs.
@@ -575,8 +587,12 @@ also visible in the process list for the few seconds the clone runs.
 Check: `sudo run-parts --lsbsysinit /etc/update-motd.d` shows the banner
 without logging in; `sudo systemctl start manatech-motd-update` runs an
 update now; `journalctl -u manatech-motd-update` shows what it did.
-(Not verified: whether a package upgrade resets the `-x` on a stock script.
-`install.sh --retire` puts it back.)
+A package upgrade keeps the stock scripts off, and apt never asks about them.
+They are conffiles, and dpkg judges a conffile by its content, not its mode,
+and copies its mode onto the new version. The one exception is
+`50-landscape-sysinfo`: a symlink dpkg does not own, to a file it does, whose
+mode an upgrade would reset. `--retire` gives that file a `dpkg-statoverride`
+(mode 644) instead.
 
 ### Windows Server (elevated; needs Git for Windows for the update task)
 

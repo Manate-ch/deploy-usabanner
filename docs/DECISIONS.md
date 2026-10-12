@@ -15,7 +15,7 @@
 | D4 | AGENTS.md as an invitation that encourages feedback of every kind, never a "permission" |
 | D9 | Host name and IP before login: opt-in, the admin's choice |
 | D13 | One GPO plus an OU -> package table. Enforced stays a manual tool, for pushing an OU's policy through Block Inheritance below it |
-| D16 | Leave conffiles alone, and mask the motd-news timer |
+| D16 | Leave conffiles alone, and mask the motd-news timer. Done and lab-tested 2026-10-11 |
 | D24 | MIT, as in deploy-usawinssh |
 | D3 | B: our own OS-coloured art by default. Art lives in `art/base` (ours and generics) and `art/apps` (third-party logos, opt-in) |
 | D5 | Windows pre-init is the logon legal notice. The legal text shows both before login and before SSH authentication |
@@ -53,7 +53,7 @@
 | D13 | GPO layering: one base, OU overrides | decided |
 | D14 | The update channel | decided: B |
 | D15 | Windows Server 2019 | decided: 2022 and later |
-| D16 | Ubuntu: stop the apt prompts | decided |
+| D16 | Ubuntu: stop the apt prompts | decided; done 2026-10-11 |
 | D17 | Slow facts, and min/max over what window | decided: 24 h |
 | D18 | Installing PowerShell 7 before the module can run | decided: one entry point |
 | D19 | New-UsaBannerArt: which image formats | decided: A and B |
@@ -714,33 +714,56 @@ updates could sit waiting [known].
 - **Stock MOTD scripts:** `chmod -x` can stay. dpkg detects a changed conffile
   by its content, not its mode, and on upgrade it copies the installed file's
   mode onto the new version [fetched: dpkg 1.22.6 source,
-  `deferred_configure_conffile`]. So the scripts stay off and nothing asks.
-  For the one that is not a conffile (`50-landscape-sysinfo`),
-  `dpkg-statoverride --update --add root root 0644 <path>` makes dpkg install
-  it that way [fetched: dpkg-statoverride(1)].
+  `deferred_configure_conffile`; measured: the lab test below]. So the scripts
+  stay off and nothing asks. The exception is `50-landscape-sysinfo`, which is
+  not a conffile. It is a symlink that no package owns, to
+  `/usr/share/landscape/landscape-sysinfo.wrapper`, which landscape-common
+  owns [measured]. `chmod -x` on the link changes that file, and a
+  landscape-common reinstall resets its mode to 755 [measured]; an upgrade
+  unpacks it the same way. So the
+  statoverride goes on the wrapper, not on the link (a link has no mode of its
+  own): `dpkg-statoverride --update --add root root 0644
+  /usr/share/landscape/landscape-sysinfo.wrapper` makes dpkg install it that
+  way [fetched: dpkg-statoverride(1); measured]. (The first draft of this
+  decision put it on the link.)
 - **motd-news:** the documented switch is `ENABLED=0` in
   `/etc/default/motd-news`, which is the conffile edit that can ask. Instead:
   leave the file alone, run `systemctl mask motd-news.timer`, and `chmod -x
   50-motd-news`. Masking is not a documented switch. A Launchpad bug says the
   service is still scheduled when only the script is turned off, and one
   forum report has a base-files upgrade erroring after the units were deleted
-  (not masked) [search-snippet]. So this one gets a lab test before it ships.
+  (not masked) [search-snippet]. The lab test covered it: with the timer
+  masked, a point-release upgrade of base-files raised no error [measured].
 - **Diverting the conffiles (`dpkg-divert`) is not the answer.** It works
   mechanically, but Debian Policy says not to divert a conffile [search-snippet:
   Debian Policy, diversions appendix; mechanism fetched from dpkg 1.22.6
   source].
-- **Hosts already installed:** the installer puts the stock files back once:
-  delete them, then `apt-get install --reinstall -o
-  Dpkg::Options::=--force-confmiss base-files`, which reinstalls missing
-  conffiles [known]. After that it never touches them again.
+- **Hosts already installed:** the installer puts the stock files back. The
+  first plan was to delete them and reinstall base-files with
+  `--force-confmiss`, which needs apt and the network. What shipped needs
+  neither: `conffiles.sh` rebuilds each stock text (`/etc/issue` is
+  `<PRETTY_NAME> \n \l` and a blank line, `/etc/issue.net` is the
+  `PRETTY_NAME` alone, and `/etc/default/motd-news` is the current file with
+  `ENABLED=1`), and writes it only when its md5 is the one dpkg recorded
+  [measured: equal to the md5s base-files 13ubuntu10.4 and 13ubuntu10.5
+  record]. A file it cannot rebuild is left as it is, and the log says so;
+  dpkg asks about that one at its next upgrade, as before.
 
-**The lab test:** install on a 24.04 VM, then run `apt-get install
---reinstall base-files motd-news-config`. Check that nothing asks, that the
-scripts are still off, the timer is still masked, and the banner is intact.
+**The lab test (2026-10-11) [measured]:** a 24.04.4 VM that the old
+installer had set up, where `dpkg --verify` flagged `/etc/issue`,
+`/etc/issue.net` and `/etc/default/motd-news` as changed.
 
-**Decided:** leave the conffiles alone, and mask the motd-news timer. The
-Manatech hosts get the same fix in the next cycle's patch, after which the
-stock files can come back.
+| Step | Result |
+|---|---|
+| `install.sh --retire --ssh` with the fix | all three back to stock, md5 equal to dpkg's records. The console shows the OS line once, then the banner; sshd's effective Banner is `/etc/manatech/issue.net`; the timer is masked; the wrapper has a 644 statoverride |
+| `apt-get install --reinstall base-files motd-news-config`, stdin closed | became a real point-release upgrade, 24.04.4 to 24.04.5 (base-files 13ubuntu10.4 to 10.5): exit 0, no prompt, no `.dpkg-dist`. The scripts stayed off, and the masked timer caused no error |
+| the same again, now the same version | exit 0, no prompt |
+| `landscape-common` reinstalled | with the statoverride, the wrapper stays 644. Without it (the control), the reinstall resets it to 755: the old `chmod -x` came undone at every landscape-common upgrade |
+
+**Decided:** leave the conffiles alone, and mask the motd-news timer.
+**Done 2026-10-11** in this repo's `install.sh`, under today's names
+(`/etc/issue.d/50-manatech.issue`, `/etc/manatech/issue.net`); V1 renames them
+per D23.
 
 ## D17. Slow facts, and min/max over what window
 

@@ -7,7 +7,8 @@
 #   sudo sh install.sh --all       first setup from a git clone: --retire --ssh --timer
 #   sudo sh install.sh             banner files only
 #   sudo sh install.sh --retire    disable the stock MOTD scripts it replaces, and motd-news
-#   sudo sh install.sh --ssh       plain pre-login SSH banner (checked with sshd -t)
+#   sudo sh install.sh --ssh       pre-login banners: console (/etc/issue.d) and a
+#                                  plain SSH one (checked with sshd -t)
 #   sudo sh install.sh --ad        cache this computer's AD Description (ENV prefix + role)
 #   sudo sh install.sh --timer     4-hourly timer: install.sh --update in a git clone
 #                                  (plus --ad when given)
@@ -53,6 +54,8 @@ done
 
 # The unit definitions, and where ADSys keeps its copy of SYSVOL.
 . "$src/usr/local/share/manatech/units.sh"
+# Keeping Ubuntu's banner conffiles stock.
+. "$src/usr/local/share/manatech/conffiles.sh"
 
 # Group Policy delivery: this copy is the ADSys one (or --template prepares
 # an image for it). Its units are then always kept current.
@@ -109,19 +112,36 @@ if [ -n "$fqdn" ]; then
 fi
 
 if [ -n "$retire" ]; then
-	# chmod -x, not rm: run-parts skips them, and chmod +x undoes it.
-	for s in 00-header 10-help-text 50-landscape-sysinfo 50-motd-news 98-reboot-required; do
+	# chmod -x, not rm: run-parts skips them, and chmod +x undoes it. These are
+	# conffiles: dpkg notices a change by content, not mode, and keeps the
+	# mode on an upgrade, so they stay off and apt never asks about them.
+	for s in 00-header 10-help-text 50-motd-news 98-reboot-required; do
 		[ -e "/etc/update-motd.d/$s" ] && chmod -x "/etc/update-motd.d/$s"
 	done
-	[ -f /etc/default/motd-news ] && sed -i 's/^ENABLED=1/ENABLED=0/' /etc/default/motd-news
-	systemctl disable --now motd-news.timer >/dev/null 2>&1 || true
+	retire_landscape || log "50-landscape-sysinfo: could not add its statoverride"
+	# motd-news: the timer masked, rather than ENABLED=0 written into
+	# /etc/default/motd-news, a conffile. Older versions did write it: undo that.
+	restore_conffile motd-news-config /etc/default/motd-news stock_motd_news /etc/default/motd-news || true
+	systemctl mask --now motd-news.timer >/dev/null 2>&1 || true
 	log "stock header, help text, sysinfo, motd-news and reboot-required retired"
 fi
 
 rc=0
 
 if [ -n "$ssh" ]; then
-	install -m 644 "$src/etc/issue" "$src/etc/issue.net" /etc/
+	# Our own pre-login files. Ubuntu's /etc/issue and /etc/issue.net are
+	# conffiles that base-files replaces at every point release, so they stay
+	# stock and apt never asks. agetty prints /etc/issue.d/*.issue after
+	# /etc/issue (only while /etc/issue exists); sshd sends the drop-in's Banner.
+	install -d -m 755 /etc/issue.d /etc/manatech
+	install -m 644 "$src/etc/issue.d/50-manatech.issue" /etc/issue.d/
+	install -m 644 "$src/etc/issue.net" /etc/manatech/issue.net
+	# Older versions wrote over the stock ones: put those back.
+	pretty=$(. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME-}") || pretty=
+	if [ -n "$pretty" ]; then
+		restore_conffile base-files /etc/issue stock_issue "$pretty" || true
+		restore_conffile base-files /etc/issue.net stock_issue_net "$pretty" || true
+	fi
 	# sshd uses the FIRST Banner it reads, and Ubuntu's sshd_config includes
 	# sshd_config.d/*.conf at its top, in name order: 00- sorts ahead of
 	# other drop-ins. The earlier name (10-) is removed.
@@ -141,10 +161,10 @@ if [ -n "$ssh" ]; then
 		# ahead of ours (a drop-in sorting before 00-, or lines placed above
 		# the Include). Those are someone else's; report them, do not edit.
 		effective=$(sshd -T 2>/dev/null | awk '$1 == "banner" { print $2 }')
-		if [ "$effective" = /etc/issue.net ]; then
+		if [ "$effective" = /etc/manatech/issue.net ]; then
 			log "pre-login SSH banner on (open sessions are unaffected)"
 		else
-			log "sshd uses Banner ${effective:-none}, not /etc/issue.net; set by:"
+			log "sshd uses Banner ${effective:-none}, not /etc/manatech/issue.net; set by:"
 			grep -il '^[[:space:]]*banner[[:space:]]' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null |
 				grep -v "^$dropin$" | sed 's/^/    /'
 			rc=1
