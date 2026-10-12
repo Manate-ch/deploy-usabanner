@@ -6,7 +6,8 @@
 # Older versions of install.sh overwrote both, and set ENABLED=0 in
 # /etc/default/motd-news, so every point release asked. This one leaves them
 # stock; the functions here put back the stock versions those older versions
-# changed, byte for byte, without apt or the network.
+# changed, byte for byte, without apt or the network, and only where the text
+# is theirs.
 
 # conffile_md5 PACKAGE PATH
 # Out: the md5 dpkg recorded for PATH as one of PACKAGE's conffiles; nothing
@@ -29,19 +30,44 @@ stock_issue_net() { printf '%s\n' "$1"; }
 # Older versions changed one line of /etc/default/motd-news: undo just that.
 stock_motd_news() { sed 's/^ENABLED=0/ENABLED=1/' "$1"; }
 
-# restore_conffile PACKAGE PATH STOCK [ARG]
-# In:  PATH, one of PACKAGE's conffiles, and STOCK, a function that prints its
-#      stock text (given ARG).
-# Out: PATH stock again: when it differs from the md5 dpkg recorded, and
-#      STOCK's text has exactly that md5, the text replaces it (644, by rename).
-#      Returns 1 when PATH is still changed: the stock text does not match,
-#      because someone else edited it or this release is one STOCK does not
-#      know. Then PATH is left as it is.
+# The texts an older install.sh wrote over /etc/issue and /etc/issue.net: the
+# md5 of each version of rootfs/etc/issue and rootfs/etc/issue.net it
+# installed there, and of the banner first installed by hand, before this
+# repository, which went into both files. Only these are replaced: any other
+# text is someone else's, and stays. windows/tests/Conffiles.Tests.ps1 checks
+# that every such version in git history is listed.
+OURS_ISSUE='2eef014072882e7672ad0a4ce97b56a5 c6c09f6569a81ce49bd13a19570301cf'
+OURS_ISSUE_NET='408ebb54d69c9fbb5ce72705543b003a 0254edc7c2738b19ab0e294bbdfbb130 c6c09f6569a81ce49bd13a19570301cf'
+
+# restore_conffile PACKAGE PATH STOCK [ARG [OURS]]
+# In:  PATH, one of PACKAGE's conffiles; STOCK, a function that prints its
+#      stock text (given ARG); OURS, when given, the md5s of the texts this
+#      installer may replace there.
+# Out: PATH stock again: when it differs from the md5 dpkg recorded, its own
+#      md5 is one of OURS (when OURS is given), and STOCK's text has exactly
+#      the recorded md5, that text replaces it (644, by rename).
+#      Returns 1 when PATH is left as it is: missing, someone else's text (not
+#      in OURS), or a release STOCK does not know (the stock text does not
+#      match the record).
 # Why: a stock conffile is one dpkg never asks about.
 restore_conffile() {
 	_want=$(conffile_md5 "$1" "$2")
 	[ -n "$_want" ] || return 0
-	[ "$(file_md5 "$2")" = "$_want" ] && return 0
+	_have=$(file_md5 "$2")
+	[ "$_have" = "$_want" ] && return 0
+	if [ -n "${5-}" ]; then
+		if [ -z "$_have" ]; then
+			log "$2: missing; left as it is"
+			return 1
+		fi
+		case " $5 " in
+		*" $_have "*) ;;
+		*)
+			log "$2: someone else's text, not one this installer wrote; left as it is (dpkg will ask about it at the next $1 upgrade)"
+			return 1
+			;;
+		esac
+	fi
 	_tmp=$2.manatech-tmp
 	"$3" "${4-}" >"$_tmp"
 	if [ "$(file_md5 "$_tmp")" = "$_want" ]; then
@@ -51,24 +77,46 @@ restore_conffile() {
 		return 0
 	fi
 	rm -f "$_tmp"
-	log "$2: changed, but not as this installer changes it; left as it is (dpkg will ask about it at the next $1 upgrade)"
+	if [ -n "${5-}" ]; then
+		log "$2: a text this installer wrote, but this release's stock text is not known; left as it is (dpkg will ask about it at the next $1 upgrade)"
+	else
+		log "$2: changed, but not as this installer changes it; left as it is (dpkg will ask about it at the next $1 upgrade)"
+	fi
 	return 1
 }
 
-# conffile_state PACKAGE PATH STOCK [ARG]
-# Out: one word, what restore_conffile would find, without changing anything:
+# conffile_state PACKAGE PATH STOCK [ARG [OURS]]
+# Out: one word, what restore_conffile (given the same arguments) would find,
+#      without changing anything:
 #      stock    PATH has the md5 dpkg recorded;
-#      restore  PATH differs or is missing, and STOCK's text has that md5:
-#               restore_conffile would put it back;
-#      changed  PATH differs, and STOCK's text does not have it: restore_conffile
-#               would leave it.
+#      restore  it would put the stock text back;
+#      missing  PATH is missing and OURS is given: it would stay missing;
+#      theirs   PATH holds a text not in OURS: it would stay;
+#      changed  STOCK's text does not have the recorded md5 (for OURS: a release
+#               whose stock text is not known): it would stay.
 #      Nothing when PACKAGE does not list PATH.
 conffile_state() {
 	_want=$(conffile_md5 "$1" "$2")
 	[ -n "$_want" ] || return 0
-	if [ "$(file_md5 "$2")" = "$_want" ]; then
+	_have=$(file_md5 "$2")
+	if [ "$_have" = "$_want" ]; then
 		echo stock
-	elif [ "$("$3" "${4-}" | md5sum | awk '{ print $1 }')" = "$_want" ]; then
+		return 0
+	fi
+	if [ -n "${5-}" ]; then
+		if [ -z "$_have" ]; then
+			echo missing
+			return 0
+		fi
+		case " $5 " in
+		*" $_have "*) ;;
+		*)
+			echo theirs
+			return 0
+			;;
+		esac
+	fi
+	if [ "$("$3" "${4-}" | md5sum | awk '{ print $1 }')" = "$_want" ]; then
 		echo restore
 	else
 		echo changed
