@@ -98,17 +98,54 @@ Describe 'conffiles.sh' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinu
 }
 
 Describe 'restore_conffile' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinue)) {
+    BeforeAll {
+        # What install.sh --ssh last wrote over /etc/issue before the fix: rootfs/etc/issue, which
+        # the fix moved to issue.d without its first line. One of the md5s in OURS_ISSUE.
+        $script:OldIssue = "\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../../rootfs/etc/issue.d/50-manatech.issue'))
+    }
+
     It 'puts back a stock /etc/issue that an older version overwrote, mode 644, and says so' {
         $root = New-Sandbox
         $issue = Join-Path $root 'issue'
-        [System.IO.File]::WriteAllText($issue, "Welcome to Manatech.`nart`n")
+        [System.IO.File]::WriteAllText($issue, $OldIssue)
         Set-Conffile $root 'base-files' $issue $Recorded['Ubuntu 24.04.4 LTS'].Issue
-        $r = Invoke-Lib $root "restore_conffile base-files '$issue' stock_issue 'Ubuntu 24.04.4 LTS'; echo rc=`$?; stat -c %a '$issue'"
+        $r = Invoke-Lib $root "restore_conffile base-files '$issue' stock_issue 'Ubuntu 24.04.4 LTS' `"`$OURS_ISSUE`"; echo rc=`$?; stat -c %a '$issue'"
         [System.IO.File]::ReadAllText($issue) | Should -BeExactly "Ubuntu 24.04.4 LTS \n \l`n`n"
         $r.Output | Should -Contain "manatech-motd: ${issue}: the stock base-files version is back"
         $r.Output | Should -Contain 'rc=0'
         $r.Output[-1] | Should -Be '644'
         Test-Path -LiteralPath "$issue.manatech-tmp" | Should -BeFalse
+    }
+
+    It 'leaves someone else''s /etc/issue as it is, says whose it is, and returns 1' {
+        $root = New-Sandbox
+        $issue = Join-Path $root 'issue'
+        [System.IO.File]::WriteAllText($issue, "Contoso: authorised users only.`n")
+        Set-Conffile $root 'base-files' $issue $Recorded['Ubuntu 24.04.4 LTS'].Issue
+        $r = Invoke-Lib $root "restore_conffile base-files '$issue' stock_issue 'Ubuntu 24.04.4 LTS' `"`$OURS_ISSUE`"; echo rc=`$?"
+        [System.IO.File]::ReadAllText($issue) | Should -BeExactly "Contoso: authorised users only.`n"
+        $r.Output | Should -Contain "manatech-motd: ${issue}: someone else's text, not one this installer wrote; left as it is (dpkg will ask about it at the next base-files upgrade)"
+        $r.Output | Should -Contain 'rc=1'
+    }
+
+    It 'leaves its own banner as it is when this release''s stock text is not known, and says so' {
+        $root = New-Sandbox
+        $issue = Join-Path $root 'issue'
+        [System.IO.File]::WriteAllText($issue, $OldIssue)
+        # 24.04.5's md5 on a host that says 24.04.4: the rebuilt text cannot match.
+        Set-Conffile $root 'base-files' $issue $Recorded['Ubuntu 24.04.5 LTS'].Issue
+        $r = Invoke-Lib $root "restore_conffile base-files '$issue' stock_issue 'Ubuntu 24.04.4 LTS' `"`$OURS_ISSUE`"; echo rc=`$?"
+        [System.IO.File]::ReadAllText($issue) | Should -BeExactly $OldIssue
+        $r.Output | Should -Be @("manatech-motd: ${issue}: a text this installer wrote, but this release's stock text is not known; left as it is (dpkg will ask about it at the next base-files upgrade)", 'rc=1')
+    }
+
+    It 'leaves a missing /etc/issue missing' {
+        $root = New-Sandbox
+        $issue = Join-Path $root 'issue'
+        Set-Conffile $root 'base-files' $issue $Recorded['Ubuntu 24.04.4 LTS'].Issue
+        $r = Invoke-Lib $root "restore_conffile base-files '$issue' stock_issue 'Ubuntu 24.04.4 LTS' `"`$OURS_ISSUE`"; echo rc=`$?"
+        Test-Path -LiteralPath $issue | Should -BeFalse
+        $r.Output | Should -Be @("manatech-motd: ${issue}: missing; left as it is", 'rc=1')
     }
 
     It 'leaves a file it cannot rebuild as it is, says why, and returns 1' {
@@ -150,6 +187,60 @@ Describe 'restore_conffile' -Skip:(-not (Get-Command sh -ErrorAction SilentlyCon
         [System.IO.File]::ReadAllText($edited) | Should -Match 'ENABLED=0'
         $r.Output | Should -Contain 'rc=0'
         $r.Output | Should -Contain 'rc=1'
+    }
+}
+
+Describe 'the texts restore_conffile may replace' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinue)) {
+    BeforeAll {
+        $script:RepoRoot = Join-Path $PSScriptRoot '../..'
+
+        # Get-BlobMd5 BLOB
+        # Out: the md5 of a git blob's bytes, read raw: a PowerShell pipeline would split lines.
+        function Get-BlobMd5 {
+            param([string]$Blob)
+            $psi = [System.Diagnostics.ProcessStartInfo]::new('git')
+            foreach ($a in '-C', $RepoRoot, 'cat-file', 'blob', $Blob) { $psi.ArgumentList.Add($a) }
+            $psi.RedirectStandardOutput = $true
+            $psi.UseShellExecute = $false
+            $p = [System.Diagnostics.Process]::Start($psi)
+            $bytes = [System.IO.MemoryStream]::new()
+            $p.StandardOutput.BaseStream.CopyTo($bytes)
+            $p.WaitForExit()
+            -join ([System.Security.Cryptography.MD5]::Create().ComputeHash($bytes.ToArray()) | ForEach-Object { $_.ToString('x2') })
+        }
+
+        $lists = Invoke-Lib (New-Sandbox) 'echo "$OURS_ISSUE"; echo "$OURS_ISSUE_NET"'
+        $script:OursIssue = $lists.Output[0] -split ' '
+        $script:OursIssueNet = $lists.Output[1] -split ' '
+    }
+
+    It 'include the pre-fix rootfs/etc/issue, rebuilt from its successor in issue.d' {
+        $old = "\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $RepoRoot 'rootfs/etc/issue.d/50-manatech.issue'))
+        $OursIssue | Should -Contain (Get-Md5 $old)
+    }
+
+    # Skipped without the history to check: no git (a downloaded copy) or a shallow clone.
+    It 'include every version an older install.sh installed, from this repository''s history' -Skip:(-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot '../../.git')) -or (& git -C (Join-Path $PSScriptRoot '../..') rev-parse --is-shallow-repository) -ne 'false') {
+        # An older install.sh wrote rootfs/etc/issue and rootfs/etc/issue.net over /etc; the fix
+        # removed rootfs/etc/issue in the same commit, so an issue.net version counts only from a
+        # commit that still had rootfs/etc/issue. A fork with its own banner adds its md5s here.
+        $seen = [System.Collections.Generic.HashSet[string]]::new()
+        $missing = foreach ($c in @(& git -C $RepoRoot log --all --format=%H -- rootfs/etc/issue rootfs/etc/issue.net)) {
+            $issue = & git -C $RepoRoot rev-parse --verify --quiet "${c}:rootfs/etc/issue"
+            if (-not $issue) { continue }
+            $sum = Get-BlobMd5 $issue
+            [void]$seen.Add("issue $sum")
+            if ($OursIssue -notcontains $sum) { "rootfs/etc/issue at $c ($sum): add it to OURS_ISSUE" }
+            $net = & git -C $RepoRoot rev-parse --verify --quiet "${c}:rootfs/etc/issue.net"
+            if (-not $net) { continue }
+            $sum = Get-BlobMd5 $net
+            [void]$seen.Add("issue.net $sum")
+            if ($OursIssueNet -notcontains $sum) { "rootfs/etc/issue.net at $c ($sum): add it to OURS_ISSUE_NET" }
+        }
+        # Else an empty history (a shallow clone, the wrong folder) would pass by finding nothing.
+        @($seen | Where-Object { $_ -like 'issue *' }).Count | Should -BeGreaterThan 0 -Because 'an older install.sh installed rootfs/etc/issue'
+        @($seen | Where-Object { $_ -like 'issue.net *' }).Count | Should -BeGreaterThan 0 -Because 'an older install.sh installed rootfs/etc/issue.net'
+        @($missing | Sort-Object -Unique) | Should -BeNullOrEmpty
     }
 }
 

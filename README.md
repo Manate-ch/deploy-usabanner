@@ -128,7 +128,10 @@ Ubuntu's `/etc/issue` and `/etc/issue.net` stay stock: they are conffiles
 that base-files replaces at every point release, and apt asks before it
 replaces a changed one. Older versions overwrote them, so every point
 release asked. `install.sh --ssh` now puts the stock versions back, byte for
-byte, writing each only when its md5 is the one dpkg recorded.
+byte, writing each only when its md5 is the one dpkg recorded. It does so only
+over a banner an older version wrote (or the original it replaced, installed
+by hand): it knows each by its md5. Anything else in those files is someone
+else's, stays as it is, and the log says so.
 
 ## Files
 

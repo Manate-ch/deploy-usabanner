@@ -136,11 +136,12 @@ if [ -n "$ssh" ]; then
 	install -d -m 755 /etc/issue.d /etc/manatech
 	install -m 644 "$src/etc/issue.d/50-manatech.issue" /etc/issue.d/
 	install -m 644 "$src/etc/issue.net" /etc/manatech/issue.net
-	# Older versions wrote over the stock ones: put those back.
+	# Older versions wrote over the stock ones: put those back, but only over
+	# a text one of them wrote (conffiles.sh lists them).
 	pretty=$(. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME-}") || pretty=
 	if [ -n "$pretty" ]; then
-		restore_conffile base-files /etc/issue stock_issue "$pretty" || true
-		restore_conffile base-files /etc/issue.net stock_issue_net "$pretty" || true
+		restore_conffile base-files /etc/issue stock_issue "$pretty" "$OURS_ISSUE" || true
+		restore_conffile base-files /etc/issue.net stock_issue_net "$pretty" "$OURS_ISSUE_NET" || true
 	fi
 	# sshd uses the FIRST Banner it reads, and Ubuntu's sshd_config includes
 	# sshd_config.d/*.conf at its top, in name order: 00- sorts ahead of
