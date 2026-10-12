@@ -4,9 +4,10 @@
 # stopped running shows up as missing from that line).
 #
 # Checks: failed systemd units, local filesystems at DISK_WARN, memory at
-# MEM_WARN, each WATCH service, NTP sync, and a pending reboot (which is why
-# Ubuntu's 98-reboot-required can be disabled). Every probe is local and
-# time-boxed: a hung network mount or D-Bus must not block a login.
+# MEM_WARN, each WATCH service, NTP sync, a pending reboot (which is why
+# Ubuntu's 98-reboot-required can be disabled), and setup changes install.sh
+# noted as waiting. Every probe is local and time-boxed: a hung network mount
+# or D-Bus must not block a login.
 
 lib=${MANATECH_ROOT:-}/usr/local/share/manatech/motd-lib.sh
 [ -r "$lib" ] || exit 0
@@ -72,6 +73,37 @@ if [ -f /run/reboot-required ]; then
 	note warn "reboot required${pkgs:+ by: $pkgs}"
 fi
 ran reboot
+
+# Setup changes waiting: install.sh writes this note for a copy whose update
+# timer runs it (that timer installs new banner code, never --retire, --ssh or
+# --timer). Each field is checked before it is shown: a count, options from
+# install.sh's own set, and a plain absolute path.
+p_opts= p_repo= p_count=
+if [ -r "$MT_ROOT/var/lib/manatech/pending" ]; then
+	while IFS='=' read -r key value; do
+		case $key in
+		options) p_opts=$value ;;
+		repo) p_repo=$value ;;
+		changes) p_count=$value ;;
+		esac
+	done <"$MT_ROOT/var/lib/manatech/pending"
+fi
+[ -n "$p_opts" ] || p_count=
+for w in $p_opts; do
+	case $w in
+	--all | --retire | --ssh | --timer | --ad) ;;
+	*) p_count= ;;
+	esac
+done
+case $p_repo in
+/*[!A-Za-z0-9/._-]* | '' | [!/]*) p_count= ;;
+esac
+case $p_count in
+'' | *[!0-9]*) ;;
+1) note warn "1 setup change waits: sh $p_repo/install.sh $p_opts --whatif$nl    shows it; sudo sh $p_repo/install.sh $p_opts makes it" ;;
+*) note warn "$p_count setup changes wait: sh $p_repo/install.sh $p_opts --whatif$nl    shows them; sudo sh $p_repo/install.sh $p_opts makes them" ;;
+esac
+ran setup
 
 # demo.sh faults: sample problems so every style can be seen. Never set by pam_motd.
 if [ "${MANATECH_DEMO_FAULTS:-}" = 1 ]; then

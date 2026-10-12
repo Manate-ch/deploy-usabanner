@@ -18,6 +18,15 @@
 #                                  Policy delivery: only the units below, pointing
 #                                  at the ADSys copy of SYSVOL it will have once
 #                                  joined; nothing is installed until then
+#   sh install.sh --all --whatif   with any options: list what that run would
+#                                  change, one line each, and change nothing
+#                                  (no sudo needed)
+#
+# A git clone's timer runs only --update: it installs new banner code, never
+# --retire, --ssh or --timer. So at the end of every run, a copy whose timer
+# runs it notes in /var/lib/manatech/pending what those would still change
+# here (rootfs/usr/local/share/manatech/plan.sh), and 15-manatech-health shows
+# that at login with the commands to run.
 #
 # Run from the ADSys copy of SYSVOL (Group Policy delivery), it always
 # (re)writes its units: the 4-hourly timer running adsys-startup.sh, and a
@@ -36,9 +45,7 @@ repo=$(cd "$(dirname "$0")" && pwd)
 src=$repo/rootfs
 log() { printf 'manatech-motd: %s\n' "$*"; }
 
-[ "$(id -u)" -eq 0 ] || { log "run as root (sudo)"; exit 1; }
-
-files=1 retire= ssh= timer= update= ad= template=
+files=1 retire= ssh= timer= update= ad= template= whatif=
 for a in "$@"; do
 	case $a in
 	--all) retire=1 ssh=1 timer=1 ;;
@@ -48,14 +55,21 @@ for a in "$@"; do
 	--update) update=1 ;;
 	--ad) ad=1 ;;
 	--template) template=1 timer=1 files= ;;
+	--whatif) whatif=1 ;;
 	*) log "unknown option: $a" && exit 2 ;;
 	esac
 done
+
+[ -n "$whatif" ] || [ "$(id -u)" -eq 0 ] || { log "run as root (sudo)"; exit 1; }
 
 # The unit definitions, and where ADSys keeps its copy of SYSVOL.
 . "$src/usr/local/share/manatech/units.sh"
 # Keeping Ubuntu's banner conffiles stock.
 . "$src/usr/local/share/manatech/conffiles.sh"
+# What a run would change, for --whatif and the note at the end.
+. "$src/usr/local/share/manatech/plan.sh"
+# PLAN_ROOT points --whatif at a copy of a host (the tests); never a real run.
+[ -n "$whatif" ] || PLAN_ROOT=
 
 # Group Policy delivery: this copy is the ADSys one (or --template prepares
 # an image for it). Its units are then always kept current.
@@ -63,6 +77,35 @@ adsys=
 if [ "$repo" = "$ADSYS_MOTD" ] || [ -n "$template" ]; then
 	adsys=1
 	timer=1
+fi
+
+# The options a clone's timer runs install.sh with: --update for a git clone
+# (any other copy is only reinstalled from), plus --ad where the AD
+# Description is in use (it was asked for now).
+run=
+[ ! -d "$repo/.git" ] || run=--update
+[ -z "$ad" ] || run="${run:+$run }--ad"
+
+if [ -n "$whatif" ]; then
+	# Read only from here: say what this run would change, then stop.
+	[ -z "$update" ] || log "--update: no pull under --whatif; below is what this copy would change"
+	[ -z "$ad" ] || log "--ad: a real run refreshes /var/lib/manatech/ad-description"
+	plan=$(
+		[ -z "$files" ] || plan_files "$src"
+		[ -z "$retire" ] || plan_retire
+		[ -z "$ssh" ] || plan_ssh "$src"
+		if [ -n "$timer" ]; then
+			if [ -n "$adsys" ]; then plan_units units_adsys; else plan_units units_clone "$repo" "$run"; fi
+		fi
+	)
+	[ -z "$plan" ] || printf '%s\n' "$plan" | sed 's/^/manatech-motd: /'
+	n=$(printf '%s\n' "$plan" | grep -c '^would ') || n=0
+	if [ "$n" -eq 0 ]; then
+		log "--whatif: nothing to change"
+	else
+		log "--whatif: $n change(s); run it again without --whatif, as root, to make them"
+	fi
+	exit 0
 fi
 
 # The clone URL can carry a deploy token; keep .git readable by root only.
@@ -115,7 +158,7 @@ if [ -n "$retire" ]; then
 	# chmod -x, not rm: run-parts skips them, and chmod +x undoes it. These are
 	# conffiles: dpkg notices a change by content, not mode, and keeps the
 	# mode on an upgrade, so they stay off and apt never asks about them.
-	for s in 00-header 10-help-text 50-motd-news 98-reboot-required; do
+	for s in $MANATECH_RETIRED; do
 		[ -e "/etc/update-motd.d/$s" ] && chmod -x "/etc/update-motd.d/$s"
 	done
 	retire_landscape || log "50-landscape-sysinfo: could not add its statoverride"
@@ -208,16 +251,16 @@ if [ -n "$timer" ]; then
 		[ -z "$units_changed" ] ||
 			log "4-hourly timer and publish watcher on: systemctl list-timers manatech-motd-update.timer; systemctl status manatech-motd-publish.path"
 	else
-		# A git clone pulls; any other copy is only reinstalled from. --ad only
-		# where the AD Description is in use (it was asked for now).
-		run=
-		[ ! -d "$repo/.git" ] || run=--update
-		[ -z "$ad" ] || run="${run:+$run }--ad"
 		install_units units_clone "$repo" "$run"
 		systemctl enable --now manatech-motd-update.timer >/dev/null
 		log "4-hourly update timer on (install.sh${run:+ $run}): systemctl list-timers manatech-motd-update.timer"
 	fi
 fi
+
+# A copy whose timer runs it: note what --retire, --ssh and --timer would still
+# change here, for 15-manatech-health to show at login. Group Policy hosts run
+# all three every time, so they never need the note.
+[ -n "$adsys" ] || note_pending "$repo" "$src" "$run" || log "could not note the waiting setup changes"
 
 # A failed step (the SSH banner) no longer skips the steps after it; the exit
 # status still reports it.
