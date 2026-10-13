@@ -59,6 +59,15 @@ Describe 'Publish-ManatechMotd.ps1' {
         [System.IO.File]::ReadAllText((Get-Motd $ubuntu 'adsys-startup.sh')) | Should -BeExactly "#!/bin/sh`necho two`n"
         $out | Should -Match '3 file\(s\) .* have CRLF line endings'
     }
+    It 'publishes the clone it sits in when no -RepoPath is given' {
+        $repo = New-Clone
+        $ubuntu = New-Assets
+        $copy = Join-Path $repo 'windows/Publish-ManatechMotd.ps1'
+        Copy-Item -LiteralPath $Publish -Destination $copy
+        & $copy -UbuntuPath $ubuntu -SkipGpo 6>$null
+        [System.IO.File]::ReadAllText((Get-Motd $ubuntu 'install.sh')) | Should -BeExactly "#!/bin/sh`necho one`n"
+        Get-Motd $ubuntu 'windows/Publish-ManatechMotd.ps1' | Should -Exist
+    }
     It 'leaves tests, demo.ps1 and files outside the payload out' {
         $repo = New-Clone
         $ubuntu = New-Assets

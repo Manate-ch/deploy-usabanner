@@ -42,8 +42,9 @@ Every change honours -WhatIf.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    # The repo root (the folder holding windows\ and rootfs\).
-    [string]$RepoPath = (Split-Path -Parent $PSScriptRoot),
+    # The repo root (the folder holding windows\ and rootfs\); by default the
+    # one this script is in.
+    [string]$RepoPath,
     [string]$Destination = (Join-Path $env:ProgramData 'Manatech'),
     [ValidateSet('keep', 'any', 'powershell', 'pwsh')][string]$DefaultShell = 'keep',
     [switch]$SshBanner,
@@ -53,6 +54,11 @@ param(
 )
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
+# The default is filled in here, not in param(): when Windows PowerShell 5.1
+# starts an advanced script (one with [CmdletBinding()], like this one) with
+# powershell.exe -File, $PSScriptRoot is empty in its param() defaults
+# (measured on a lab DC, 2026-10-12).
+if (-not $RepoPath) { $RepoPath = Split-Path -Parent $PSScriptRoot }
 # A relative -RepoPath/-Destination is resolved against the PowerShell
 # location, which .NET file calls would not do.
 $RepoPath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($RepoPath)

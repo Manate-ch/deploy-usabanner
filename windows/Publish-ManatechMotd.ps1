@@ -83,8 +83,9 @@ PowerShell 7.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    # The clone to publish from (the folder holding install.sh).
-    [string]$RepoPath = (Split-Path -Parent $PSScriptRoot),
+    # The clone to publish from (the folder holding install.sh); by default
+    # the clone this script is in.
+    [string]$RepoPath,
     [string]$Domain = $env:USERDNSDOMAIN,
     [string]$UbuntuPath,
     [string]$NetlogonPath,
@@ -102,6 +103,11 @@ if (-not $SkipGpo -and $PSVersionTable.PSEdition -ne 'Desktop') {
     throw 'Run this in Windows PowerShell 5.1 (powershell.exe): under PowerShell 7 the GroupPolicy module works through a compatibility session. -SkipGpo publishes the files only.'
 }
 
+# The default is filled in here, not in param(): when Windows PowerShell 5.1
+# starts an advanced script (one with [CmdletBinding()], like this one) with
+# powershell.exe -File, $PSScriptRoot is empty in its param() defaults
+# (measured on a lab DC, 2026-10-12).
+if (-not $RepoPath) { $RepoPath = Split-Path -Parent $PSScriptRoot }
 $RepoPath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($RepoPath).TrimEnd('\', '/')
 if (-not (Test-Path -LiteralPath (Join-Path $RepoPath 'install.sh'))) { throw "$RepoPath has no install.sh: point -RepoPath at a clone of this repo" }
 if ($Domain) { $Domain = $Domain.ToLower() }
