@@ -5,10 +5,15 @@
 
 BeforeDiscovery {
     $t = "`t"
+    # The first field of the shipped file's first row, so a copy with its own
+    # row keeps this test; a row the banners cannot read still fails it.
+    $shipped = @(Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../rootfs/usr/local/share/manatech/welcome.tsv') |
+            Where-Object { $_ -notmatch '^\s*(#|$)' } | ForEach-Object { ($_ -split "`t")[0] })[0]
     # Text: what welcome.tsv holds (SHIPPED = the repo's own file, NONE = no
-    # file). Name: what both banners must show.
+    # file). Name: what both banners must show; the rest fall back to the
+    # built-in Manatech row.
     $script:Cases = @(
-        @{ What = 'the shipped file'; Text = 'SHIPPED'; Name = 'Manatech' }
+        @{ What = 'the shipped file'; Text = 'SHIPPED'; Name = $shipped }
         @{ What = 'a row of its own'; Text = "Contoso${t}10${t}20${t}30${t}200${t}210${t}220${t}1;36`n"; Name = 'Contoso' }
         @{ What = 'a name with a space'; Text = "Contoso Ltd${t}10${t}20${t}30${t}200${t}210${t}220${t}36`n"; Name = 'Contoso Ltd' }
         @{ What = 'comment lines before the row'; Text = "# a comment`n`n# name${t}r1`nContoso${t}1${t}2${t}3${t}4${t}5${t}6${t}35`n"; Name = 'Contoso' }

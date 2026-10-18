@@ -230,9 +230,9 @@ Describe 'Format-ManatechBanner' {
         $text | Should -Not -Match $Esc
     }
     It 'draws the art: one line per line of manatech.art' {
-        $art = @(Get-Content -LiteralPath (Join-Path $Data 'manatech.art'))
-        $lines = Format-ManatechBanner -Fact (New-TestFact) -Config (New-TestConfig none ascii) -DataPath $Data
-        (Get-Visible $lines[9]) | Should -Be ($art[9] -replace '@[cy]', '')
+        $art = @(Get-Content -LiteralPath (Join-Path $Data 'manatech.art') | ForEach-Object { $_ -replace '@[cy]', '' })
+        $lines = @(Format-ManatechBanner -Fact (New-TestFact) -Config (New-TestConfig none ascii) -DataPath $Data)
+        @($lines[0..($art.Count - 1)] | ForEach-Object { Get-Visible $_ }) | Should -Be $art
     }
     It 'colours the border with the type colour of a schema name (Virtual = Blue)' {
         $lines = Format-ManatechBanner -Fact (New-TestFact) -Config (New-TestConfig) -DataPath $Data
