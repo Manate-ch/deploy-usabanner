@@ -10,5 +10,11 @@ need that historical text rather than whatever the current files hold:
   `/etc/issue.net`. Both md5s are on the lists in
   `rootfs/usr/local/share/manatech/conffiles.sh`.
 
-Kept here so that a copy of this repository can change its own banners and
-art without touching a test.
+- `schema-names.tsv`, `vlans.tsv`, `colors.tsv` and `envs.tsv`: the
+  example naming schema, VLAN, colour and environment tables as this
+  repository ships them. `ManatechBanner.Tests.ps1` lays them over a copy
+  of the shipped data folder, because its decode, VLAN and badge tests
+  assert those example rows.
+
+Kept here so that a copy of this repository can change its own banners,
+art and tables without touching a test.

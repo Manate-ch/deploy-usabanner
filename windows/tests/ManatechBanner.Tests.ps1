@@ -4,7 +4,15 @@
 
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '..\ManatechBanner.psm1') -Force
-    $script:Data = Join-Path $PSScriptRoot '../../rootfs/usr/local/share/manatech'
+    # The shipped data folder, with the example schema, VLAN, colour and
+    # environment tables from fixtures/ laid over it: the decode, VLAN and
+    # badge tests assert those example rows, so a copy with its own tables
+    # keeps them. The art and the welcome row stay the shipped ones.
+    $script:Data = Join-Path $TestDrive 'data'
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../../rootfs/usr/local/share/manatech') -Destination $Data -Recurse
+    foreach ($table in 'schema-names.tsv', 'vlans.tsv', 'colors.tsv', 'envs.tsv') {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot "fixtures/$table") -Destination $Data -Force
+    }
     $script:Esc = [string][char]27
 
     function New-TestFact {
