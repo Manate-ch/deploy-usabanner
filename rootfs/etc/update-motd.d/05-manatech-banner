@@ -10,10 +10,27 @@ lib=${MANATECH_ROOT:-}/usr/local/share/manatech/motd-lib.sh
 [ -r "$lib" ] || exit 0
 . "$lib"
 
-# Art and welcome line.
+# Art and welcome line. welcome.tsv's first row names the company, the two
+# colours of its gradient and its 16-colour code; the Manatech row stands
+# when the file is missing or that row is not a name, six 0-255 numbers and
+# an SGR code.
 art=$MT_SHARE/manatech.art
 [ -r "$art" ] && awk -v mode="$COLOR" -f "$MT_SHARE/colour.awk" -f "$MT_SHARE/art.awk" "$art" "$art"
-printf '\n  Welcome to %s\n\n' "$(mt_grad Manatech 120 200 255 255 200 80 '1;34')"
+wname=Manatech wfrom='120 200 255' wto='255 200 80' w16='1;34'
+if [ -r "$MT_SHARE/welcome.tsv" ]; then
+	_tab=$(printf '\t')
+	while IFS=$_tab read -r _n _r1 _g1 _b1 _r2 _g2 _b2 _c _x || [ -n "$_n" ]; do
+		case $_n in '' | '#'*) continue ;; esac
+		_ok=1
+		for _v in "$_r1" "$_g1" "$_b1" "$_r2" "$_g2" "$_b2"; do
+			case $_v in '' | *[!0-9]* | ????*) _ok= ;; *) [ "$_v" -le 255 ] || _ok= ;; esac
+		done
+		case $_c in '' | *[!0-9\;]*) _ok= ;; esac
+		[ -n "$_ok" ] && wname=$_n wfrom="$_r1 $_g1 $_b1" wto="$_r2 $_g2 $_b2" w16=$_c
+		break
+	done <"$MT_SHARE/welcome.tsv"
+fi
+printf '\n  Welcome to %s\n\n' "$(mt_grad "$wname" $wfrom $wto "$w16")"
 
 # Facts. Nothing from here on may wait on the network. pam_motd regenerates
 # this at every SSH login into one shared file, /run/motd.dynamic.new, so two
