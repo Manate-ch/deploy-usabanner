@@ -319,8 +319,8 @@ write SYSVOL can change what runs at login.
 **The AD Description drives the environment and the role.** Write it as
 `<ENV>: <role>`, e.g. `PROD: Hyper-V host` or `PUB: Public web front end`.
 The prefix is letters only; a Description without one is the role alone.
-Put no space before the colon: Windows reads `PROD : Hyper-V host` as PROD,
-but Linux shows all of it as the role, with no environment. The names and
+Spaces around the prefix and the colon do not count: Linux and Windows both
+read `PROD : Hyper-V host` as PROD. The names and
 colours are in "Environments". The environment shows as
 a strip above the panel and an `env` row (`ENV_SHOW` / `EnvShow`). A host
 with an empty Description shows an amber "(set this computer's AD
