@@ -182,6 +182,8 @@ Turns an image into banner art; named in the walk-through, §3.1 step 2.3
 - **Returns** the art's lines, as `Show-UsaBannerArt` does. `-OutFile` saves
   the art as a file, which `Show-UsaBannerArt -Path` draws.
 
+How it works, step by step, for anyone reading its code: [IMAGE-ART.md](IMAGE-ART.md).
+
 ## 4. Rules for every banner
 
 - **R1** Every banner displays properly in the native tools, as far as

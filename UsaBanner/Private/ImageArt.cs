@@ -1,23 +1,57 @@
 // ImageArt.cs - an image made into banner art, for New-UsaBannerArt.
 // Private\ImageArt.ps1 compiles this with Add-Type the first time it is
-// needed, not when the module loads: compiling takes a second or two.
+// needed, not when the module loads: compiling takes a second or two. It is
+// C# for speed: a 1500 x 1500 image is 2.25 million pixels, each visited
+// several times. PowerShell makes two calls into it:
+//
+//   $image  = [UsaBanner.PngReader]::Decode($bytes, $maxPixels)
+//   $result = [UsaBanner.ArtMaker]::Convert($image, $settings)
+//
+//   image file --> PngReader.Decode --> ImageRgba --> ArtMaker.Convert --> ArtResult
 //
 // PngReader reads PNG files itself, so a PNG makes the same art on every
-// system (docs/DECISIONS.md, D19). ArtMaker makes the pixels into art:
+// system (docs/DECISIONS.md, D19). ImageArt.ps1 hands other formats to
+// System.Drawing on Windows, or to ImageMagick on Linux, which writes a PNG.
+// docs/IMAGE-ART.md draws the steps below as a diagram.
 //
-//   1. The background: transparent pixels; else, when one colour holds half
-//      the image's edge or more, the pixels of about that colour that the
-//      edge reaches.
-//   2. Crop to the rest, and size the art. Each character cell is sampled as
-//      2 x 4 dots, square, since a cell is about twice as tall as it is wide.
-//   3. Colours: median cut, then k-means, to at most N classes; classes
-//      closer than MergeDistance become one. In shape style, the thin blends
-//      anti-aliasing leaves between two colours join one of them, as do the
-//      halos a JPEG leaves around a part; and the largest class the picture
-//      encloses is drawn as fill: a gap before login, solid in colour.
-//   4. Characters. Shape style, for logos, gives each cell the character
-//      whose ink pattern fits its 8 dots best. Ramp style, for photos, gives
-//      it one by brightness, the brightest densest.
+// ArtMaker.Convert, step by step:
+//
+//   +---+-----------------+---------------------------------------------------+
+//   | 1 | the background  | transparent pixels; else, when one colour holds   |
+//   |   |                 | half the edge or more, the pixels of about that   |
+//   |   |                 | colour the edge reaches (BorderColour, Flood)     |
+//   | 2 | crop and size   | the picture's box; 40 columns by default; each    |
+//   |   |                 | character cell read as 2 x 4 square dots, since   |
+//   |   |                 | a cell is about twice as tall as it is wide       |
+//   | 3 | colours         | median cut, then k-means, to at most N classes;   |
+//   |   |                 | classes closer than MergeDistance become one. In  |
+//   |   |                 | shape style, the blends anti-aliasing leaves and  |
+//   |   |                 | the halos a JPEG leaves join a part (MergeBlends, |
+//   |   |                 | MergeHalos), and the largest part the picture     |
+//   |   |                 | encloses is the fill: a gap before login, solid   |
+//   |   |                 | in colour (Enclosed)                              |
+//   | 4 | dots            | how much of each class covers each dot (Spans)    |
+//   | 5 | characters      | shape style, for logos: the character whose ink   |
+//   |   |                 | pattern fits the cell's 8 dots best (BestFit);    |
+//   |   |                 | ramp style, for photos: one by brightness         |
+//   +---+-----------------+---------------------------------------------------+
+//
+// The C#, read as PowerShell:
+//
+//   +----------------------+--------------------------------------------------+
+//   | static class, method | functions in a module, called as [Type]::Name()  |
+//   | (byte)v, (int)v      | casts that TRUNCATE and WRAP: (byte)300 is 44    |
+//   | 7 / 2, both ints     | 3, not 3.5: integer division drops the fraction  |
+//   | c ? a : b            | if (c) { a } else { b }, as one expression       |
+//   | out double t         | a second result, as [ref]$t                      |
+//   | (a, b) => ...        | a scriptblock handed to a method                 |
+//   | using (x) { }        | try { } finally { x.Dispose() }                  |
+//   +----------------------+--------------------------------------------------+
+//
+// Bits: >> and << are -shr and -shl (r >> 3 is r / 8, rounded down). On
+// numbers a single | or & is -bor or -band; || and && are -or and -and.
+// A pixel is 4 bytes, R G B A, so the pixel at x, y is number
+// i = y * width + x, and its bytes start at 4 * i.
 
 using System;
 using System.Collections.Generic;
@@ -68,7 +102,13 @@ namespace UsaBanner
     // and a 16-bit sample by its high byte.
     public static class PngReader
     {
+        // A PNG file is these 8 bytes (0x89, "PNG", CR LF, 0x1A, LF), then chunks, each
+        // [length: 4 bytes][type: 4 letters][data][CRC: 4 bytes]. IHDR holds the size and the
+        // format, PLTE a palette, tRNS transparency, IDAT the compressed picture (often split over
+        // several IDATs), and IEND ends the file.
         static readonly byte[] Signature = { 137, 80, 78, 71, 13, 10, 26, 10 };
+        // CRC-32, the checksum zip uses too: one entry per byte value, so each byte checked costs
+        // one table lookup. A flipped bit anywhere in a chunk changes its CRC.
         static readonly uint[] CrcTable = MakeCrcTable();
 
         // Adam7: each pass's first column and row, and its steps across and down.
@@ -97,6 +137,7 @@ namespace UsaBanner
             return c ^ 0xFFFFFFFFu;
         }
 
+        // 4 bytes as one number, most significant first, as PNG stores every number.
         static uint ReadUInt32(byte[] data, int at)
         {
             return ((uint)data[at] << 24) | ((uint)data[at + 1] << 16) | ((uint)data[at + 2] << 8) | data[at + 3];
@@ -255,8 +296,20 @@ namespace UsaBanner
             return raw;
         }
 
-        // Undoes one row's filter (PNG section 7.3): each byte was stored as its difference from a
-        // prediction made of the byte to its left, the one above, or both.
+        // Undoes one row's filter (PNG section 7.3). Each byte was stored as its difference from a
+        // guess, because differences compress better: a smooth gradient becomes +3, +3, +3. The
+        // row's first byte names the guess; this adds it back:
+        //
+        //   +---+---------+---------------------------------------------------------+
+        //   | 0 | None    | no guess: the bytes as they are                         |
+        //   | 1 | Sub     | the byte one pixel to the left                          |
+        //   | 2 | Up      | the byte above, in the row before                       |
+        //   | 3 | Average | (left + above) / 2, rounded down                        |
+        //   | 4 | Paeth   | whichever of left, above and above-left is nearest to   |
+        //   |   |         | left + above - above-left                               |
+        //   +---+---------+---------------------------------------------------------+
+        //
+        // The (byte) casts wrap at 256 on purpose: PNG does this arithmetic mod 256.
         static void Unfilter(int filter, byte[] raw, int from, byte[] row, byte[] above, int rowBytes, int step, int y)
         {
             switch (filter)
@@ -297,7 +350,9 @@ namespace UsaBanner
             {
                 if (Depth == 8) return row[index];
                 if (Depth == 16) return row[2 * index] << 8 | row[2 * index + 1];
-                int bit = index * Depth;   // 1, 2 and 4 bits pack from the high end of each byte
+                // 1, 2 and 4 bits pack from the high end of each byte: at 2 bits, the byte
+                // 11 01 00 10 holds the samples 3, 1, 0 and 2; To8 then makes them 255, 85, 0, 170.
+                int bit = index * Depth;
                 return row[bit >> 3] >> (8 - Depth - (bit & 7)) & ((1 << Depth) - 1);
             }
 
@@ -477,6 +532,8 @@ namespace UsaBanner
                     int i = y * w + x;
                     if (ink[i] == 0) continue;
                     int r = px[4 * i], g = px[4 * i + 1], b = px[4 * i + 2];
+                    // 32 levels a channel (r >> 3 is r / 8), packed as one 15-bit number, rrrrrgggggbbbbb:
+                    // near-identical colours share a bin, which keeps their sum and weight.
                     int bin = (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
                     double weight = ink[i] / 255.0;
                     binWeight[bin] += weight;
@@ -668,6 +725,13 @@ namespace UsaBanner
             return Math.Max(1, (int)Math.Round(rows * 2.0 * cw / ch, MidpointRounding.AwayFromZero));
         }
 
+        // The template whose ink pattern is nearest a cell's 8 dot coverages, each 0 to 1: the sum
+        // of |coverage - template| over the 8 dots, smallest wins. A cell on a ring's lower edge:
+        //
+        //   0   0       'o' 00001111: 0 + 0 + 0 + 0.4 + 0.7 + 0 + 0 + 0 = 1.1, the nearest
+        //   0   0.4     'd' 01011111: 2.3
+        //   0.3 1       ',' 00000010: 2.7
+        //   1   1
         static int BestFit(double[] dot)
         {
             int best = 0;
@@ -728,6 +792,8 @@ namespace UsaBanner
         }
 
         // n pixels cut into parts equal spans: for each span, the pixels it overlaps and by how much.
+        // 5 pixels in 2 spans: span 0 is pixels 0 and 1 and half of 2; span 1 is the other half of
+        // 2, then 3 and 4. A dot is a span across times a span down.
         static Overlap[][] Spans(int n, int parts)
         {
             var spans = new Overlap[parts][];
@@ -804,7 +870,10 @@ namespace UsaBanner
         }
 
         // Clears the pixels of about the colour rgb, and transparent ones, that the border reaches
-        // through each other: a scanline flood fill. Returns how many it cleared.
+        // through each other: the paint-bucket tool, started from every edge pixel, so the same
+        // colour inside the picture (Tux's white belly) stays. A scanline fill clears a whole run
+        // from left to right at once, then queues the runs above and below it: far fewer steps
+        // than one pixel at a time. Returns how many it cleared.
         static int Flood(byte[] px, int w, int h, byte[] ink, int rgb, int[] border)
         {
             var done = new bool[w * h];
@@ -1001,7 +1070,10 @@ namespace UsaBanner
         }
 
         // Whether colour p lies on the line from a to b, within the distance given and strictly
-        // between the two; t is how far along it, 0 at a and 1 at b.
+        // between the two; t is how far along it, 0 at a and 1 at b. Colours are points in a cube
+        // of red, green and blue, and a blend of two lies on the straight line between them.
+        // (120,175,250) from blue (30,111,217) to white: t = 0.42, 18 off the line. That is too far
+        // for a blend (BlendDistance, 12), near enough for a halo (HaloDistance, 48).
         static bool Between(double[] p, double[] a, double[] b, double within, out double t)
         {
             double length2 = 0, dot = 0;
@@ -1213,6 +1285,7 @@ namespace UsaBanner
             return dr * dr + dg * dg + db * db;
         }
 
+        // Brightness as the eye weighs it (ITU-R BT.709): green counts most, blue least.
         static double Luma(int r, int g, int b)
         {
             return 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -1229,7 +1302,8 @@ namespace UsaBanner
         }
 
         // A colour darker than LiftLuma, mixed toward white until it is that light, so a dark
-        // terminal shows it. A lighter colour comes back as it is.
+        // terminal shows it: black becomes #505050, #C81E28 becomes #CC2E37. A lighter colour comes
+        // back as it is.
         public static int Lift(int rgb)
         {
             int r = rgb >> 16 & 255, g = rgb >> 8 & 255, b = rgb & 255;
