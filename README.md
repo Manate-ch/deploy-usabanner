@@ -19,6 +19,7 @@ see how far it has got, from a clone:
     Show-UsaBannerArt                  # or -ColorMode truecolor, 256, 16 or none
     Show-UsaBannerArt -List            # every piece of art there is
     Show-UsaBannerArt server -Os ubuntu   # in an OS's colour: windows, ubuntu or linux
+    Show-UsaBannerArt -Text 'Contoso LLC' # a name in block letters
 
 ## Quickstart
 

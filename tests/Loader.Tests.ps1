@@ -149,6 +149,15 @@ Describe 'the hand-off to pwsh' {
         ($handed -join "`n") | Should -BeExactly ($direct -join "`n")
     }
 
+    It 'runs Show-UsaBannerArt -Text in a real pwsh, its apostrophe and spaces intact' {
+        $direct = @(Show-UsaBannerArt -Text "Lab's PC" -ColorMode none)
+        $handed = @(InModuleScope UsaBanner {
+                Invoke-UsaBannerHandoff -Command 'Show-UsaBannerArt' -Parameters @{ Text = "Lab's PC"; ColorMode = 'none' } -Pwsh (Get-Process -Id $PID).Path
+            })
+        $handed.Count | Should -Be 5
+        ($handed -join "`n") | Should -BeExactly ($direct -join "`n")
+    }
+
     It 'runs Show-UsaBannerArt -List in a real pwsh: the switch arrives and picks its parameter set' {
         $direct = @(Show-UsaBannerArt -List)
         $handed = @(InModuleScope UsaBanner {
