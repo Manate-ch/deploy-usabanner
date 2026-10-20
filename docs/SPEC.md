@@ -163,6 +163,25 @@ The proper cmdlet for entering a session with the banner's formatting
 Turns an image into banner art; named in the walk-through, §3.1 step 2.3
 (D19).
 
+- **Reads** PNG with its own decoder on every system, so a PNG makes the same
+  art on Windows and Linux; JPEG, GIF, BMP and TIFF through System.Drawing on
+  Windows; any other format on Linux through ImageMagick, and says how to
+  install that when it is missing.
+- **Draws** the image as art in the module's format: ASCII 32-126 with a
+  colour class for each character, so its plain version is the one shown
+  before login and every colour mode draws it.
+  - The background goes: transparent pixels, or the pixels of a colour that
+    holds half the image's edge, reached from the edge.
+  - Shape style, for logos: each character chosen by its shape, from 2 x 4
+    dots a cell; the largest part the picture encloses is drawn as fill, a
+    gap before login.
+  - Ramp style, for photos: each character by brightness.
+  - At most six colours unless asked otherwise; a colour too dark for a dark
+    terminal is lightened until it shows.
+  - 40 columns wide by default, at most 64 by 30.
+- **Returns** the art's lines, as `Show-UsaBannerArt` does. `-OutFile` saves
+  the art as a file, which `Show-UsaBannerArt -Path` draws.
+
 ## 4. Rules for every banner
 
 - **R1** Every banner displays properly in the native tools, as far as
@@ -263,7 +282,9 @@ Later, unless it turns out INCREDIBLY easy (D22).
 - §3.1 step 2.3: a sentence breaks off: "...what you made with a warning it
   doesn't work in all consoles if we can't figure out a fall". Read here as:
   `New-UsaBannerArt` returns the art it made, with a warning when it will not
-  render in every console and no fallback was found.
+  render in every console and no fallback was found. The art M1 makes is
+  ASCII with its colours beside it, so its plain version is always that
+  fallback; the warning belongs to D19's half-block version, not built yet.
 - §3.1, non-interactive: the list ends in an empty bullet.
 - The two open questions it left are decided: the min/max window (D17) and
   whether Enforced is needed for an OU to differ (D13).

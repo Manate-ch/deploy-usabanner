@@ -11,6 +11,8 @@
 #   | Bootstrap\*.ps1 | every PowerShell       | 5.1                      |
 #   | Public\*.ps1    | every PowerShell       | 5.1; one command a file  |
 #   | Private\*.ps1   | PowerShell 7 and later | any                      |
+#   | Private\*.cs    | Add-Type, when first   | C#                       |
+#   |                 | needed (ImageArt.ps1)  |                          |
 #   +-----------------+------------------------+--------------------------+
 #
 # Under 5.1, each command's begin {} block hands the call to pwsh

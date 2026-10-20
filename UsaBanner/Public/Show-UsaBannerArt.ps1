@@ -1,8 +1,8 @@
 function Show-UsaBannerArt {
     <#
     .SYNOPSIS
-    Draws one of the module's pieces of art, or a name in block letters, in
-    colour where the terminal has it; or lists the art there is.
+    Draws one of the module's pieces of art, an art file, or a name in block
+    letters, in colour where the terminal has it; or lists the art there is.
     .DESCRIPTION
     Returns one string per line of the art, with the colour escapes in it;
     at the console the lines print as the picture.
@@ -27,6 +27,9 @@ function Show-UsaBannerArt {
     to right. Lower case comes out in capitals, and a name may come out at
     most 64 columns wide.
 
+    With -Path, the art in a file instead, such as one New-UsaBannerArt
+    saved; it must keep the same rules as the module's own art.
+
     With -List, one line per piece instead: its name, its folder (base for
     ours, apps for another owner's logo, drawn by us), its size in columns by
     rows, its title, who drew it (and whose logo it is), and its licence.
@@ -44,6 +47,8 @@ function Show-UsaBannerArt {
     A name to set in block letters instead of drawing a piece of art.
     .PARAMETER Font
     The font for -Text; pixel, the default, is the one there is.
+    .PARAMETER Path
+    An art file to draw instead of a piece of the module's art.
     .PARAMETER List
     List every piece of art instead of drawing one.
     .EXAMPLE
@@ -54,6 +59,8 @@ function Show-UsaBannerArt {
     Show-UsaBannerArt -Name server -Os ubuntu
     .EXAMPLE
     Show-UsaBannerArt -Text 'Contoso LLC'
+    .EXAMPLE
+    Show-UsaBannerArt -Path ./logo.json -ColorMode none
     .EXAMPLE
     Show-UsaBannerArt -List
     #>
@@ -66,10 +73,12 @@ function Show-UsaBannerArt {
 
         [Parameter(ParameterSetName = 'Draw')]
         [Parameter(ParameterSetName = 'Text')]
+        [Parameter(ParameterSetName = 'File')]
         [ValidateSet('auto', 'truecolor', '256', '16', 'none')]
         [string]$ColorMode = 'auto',
 
         [Parameter(ParameterSetName = 'Draw')]
+        [Parameter(ParameterSetName = 'File')]
         [ValidateSet('auto', 'windows', 'ubuntu', 'linux')]
         [string]$Os = 'auto',
 
@@ -80,6 +89,10 @@ function Show-UsaBannerArt {
         [Parameter(ParameterSetName = 'Text')]
         [ValidatePattern('^[a-z0-9][a-z0-9-]*$')]
         [string]$Font = 'pixel',
+
+        [Parameter(Mandatory, ParameterSetName = 'File')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Path,
 
         [Parameter(Mandatory, ParameterSetName = 'List')]
         [switch]$List
@@ -106,7 +119,7 @@ function Show-UsaBannerArt {
             $art = ConvertTo-UsaBannerWordArt -Text $Text -Font $fontData
         }
         else {
-            $art = Get-UsaBannerArtData -Name $Name
+            $art = if ($PSCmdlet.ParameterSetName -eq 'File') { Read-UsaBannerArtFile -Path $PSCmdlet.GetUnresolvedProviderPathFromPSPath($Path) } else { Get-UsaBannerArtData -Name $Name }
             $artOs = $Os
             if ($artOs -eq 'auto') { $artOs = Get-UsaBannerHostOs }
             $art = Resolve-UsaBannerArtTint -Art $art -Os $artOs
