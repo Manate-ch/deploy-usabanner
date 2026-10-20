@@ -54,7 +54,9 @@ ENV_NAME=${MANATECH_ENV:-$ENV_NAME}
 
 # This computer's AD Description, cached by ad-description.sh (install.sh
 # --ad): "<ENV>: <role>" gives the environment and the role, a Description
-# without a letters-only prefix is the role alone. motd.conf wins for either:
+# without a letters-only prefix is the role alone. Spaces and tabs around
+# the Description, the prefix and the colon do not count ("PROD : role" is
+# PROD), as in Windows' Get-ManatechConfig. motd.conf wins for either:
 # an ENV_NAME other than UNSET, a non-empty ROLE. MANATECH_AD_DESC is demo.sh's
 # ad=TEXT preview ("-" = an empty Description); pam_motd never sets it.
 AD_DESC=
@@ -63,17 +65,26 @@ if [ -n "${MANATECH_AD_DESC:-}" ]; then
 elif [ -r "$MT_ROOT/var/lib/manatech/ad-description" ]; then
 	IFS= read -r AD_DESC <"$MT_ROOT/var/lib/manatech/ad-description" || true
 fi
-AD_ENV= AD_ROLE=$AD_DESC
-case $AD_DESC in
+# _ws: a space and a tab. ${v#"${v%%[!$_ws]*}"} drops v's leading run of
+# them, ${v%"${v##*[!$_ws]}"} its trailing run.
+_ws=$(printf ' \t')
+_d=${AD_DESC#"${AD_DESC%%[!$_ws]*}"}
+_d=${_d%"${_d##*[!$_ws]}"}
+AD_ENV= AD_ROLE=$_d
+case $_d in
 [A-Za-z]*:*)
-	_p=${AD_DESC%%:*}
+	_p=${_d%%:*}
+	_p=${_p%"${_p##*[!$_ws]}"}
 	case $_p in
 	*[!A-Za-z]*) ;;
-	*) AD_ENV=$(printf '%s' "$_p" | tr a-z A-Z) AD_ROLE=${AD_DESC#*:} ;;
+	*)
+		AD_ENV=$(printf '%s' "$_p" | tr a-z A-Z)
+		AD_ROLE=${_d#*:}
+		AD_ROLE=${AD_ROLE#"${AD_ROLE%%[!$_ws]*}"}
+		;;
 	esac
 	;;
 esac
-while :; do case $AD_ROLE in ' '*) AD_ROLE=${AD_ROLE# } ;; *) break ;; esac; done
 
 ENV_SRC= ROLE_SRC=
 if [ "$ENV_NAME" != UNSET ]; then ENV_SRC=motd.conf
