@@ -212,6 +212,13 @@ to use, five rows high, in the welcome line's colours from left to right.
 `Show-UsaBannerArt -Text` sets one. A name wider than 64 columns, the most
 any art may be, is refused for now; M2 decides what a banner shows instead.
 
+The logos in `art/apps` are Tux (sitting), the Windows logo and the Ubuntu
+Circle of Friends, also picked from the gallery, each naming its owner and
+carrying its line in `UsaBanner/NOTICE` and the README. Tux and the Circle
+of Friends were drawn from our own description of their shapes, at 2 x 4
+dots a character, rather than taken from ASCII art found online: such art's
+"use it how you want" seldom comes from the person who drew it.
+
 ## D4. AGENTS.md
 
 AGENTS.md is a real convention: a Markdown file at the repository root that

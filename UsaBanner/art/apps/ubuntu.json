@@ -1,0 +1,65 @@
+{
+  "name": "ubuntu",
+  "title": "The Ubuntu Circle of Friends",
+  "artist": "Claude, for UsagiTools",
+  "licence": "MIT for this drawing; the mark is its owner's",
+  "source": "drawn for UsaBanner V1 (M1) from our own description of its shape, 2 x 4 dots a character; picked 2026-10-20",
+  "owner": "Canonical Ltd.",
+  "notice": "Ubuntu is a registered trademark of Canonical Ltd.",
+  "art": [
+    "                            _d8888b_   ",
+    "                           |88888888|  ",
+    "               ._oop8888|  |88888888|  ",
+    "            .od888888888|  '9888888P'  ",
+    "          .o8888888YYY\"\"     'YYYY'    ",
+    "         .88888P\"                 .o,  ",
+    "         8888P'                 .d888| ",
+    "   ____   \"YY                    98888,",
+    " o888888o                        '8888b",
+    "|88888888|                        98888",
+    "|88888888|                        d8888",
+    " Y888888Y                        .8888P",
+    "   \"\"\"\"   _oo                    d8888'",
+    "         8888b,                 '9888| ",
+    "         '88888b_                 'Y'  ",
+    "          'Y888888pooo__     .oooo,    ",
+    "            'Y9888888888|  .d888888b,  ",
+    "               '\"YY88888|  |88888888|  ",
+    "                           |88888888|  ",
+    "                            \"98888P\"   "
+  ],
+  "mask": [
+    "                            hhhhhhhh   ",
+    "                           hhhhhhhhhh  ",
+    "               rrrrrrrrrr  hhhhhhhhhh  ",
+    "            rrrrrrrrrrrrr  hhhhhhhhhh  ",
+    "          rrrrrrrrrrrrrr     hhhhhh    ",
+    "         rrrrrrrr                 rrr  ",
+    "         rrrrrr                 rrrrrr ",
+    "   hhhh   rrr                    rrrrrr",
+    " hhhhhhhh                        rrrrrr",
+    "hhhhhhhhhh                        rrrrr",
+    "hhhhhhhhhh                        rrrrr",
+    " hhhhhhhh                        rrrrrr",
+    "   hhhh   rrr                    rrrrrr",
+    "         rrrrrr                 rrrrrr ",
+    "         rrrrrrrr                 rrr  ",
+    "          rrrrrrrrrrrrrr     hhhhhh    ",
+    "            rrrrrrrrrrrrr  hhhhhhhhhh  ",
+    "               rrrrrrrrrr  hhhhhhhhhh  ",
+    "                           hhhhhhhhhh  ",
+    "                            hhhhhhhh   "
+  ],
+  "palette": {
+    "h": {
+      "label": "the three heads: orange",
+      "rgb": "#E95420",
+      "basic": "yellow"
+    },
+    "r": {
+      "label": "the ring's three arms: orange",
+      "rgb": "#E95420",
+      "basic": "yellow"
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "name": "tux",
+  "title": "Tux, the Linux mascot",
+  "artist": "Claude, for UsagiTools",
+  "licence": "MIT for this drawing; the design is free to use crediting Larry Ewing and The GIMP",
+  "source": "drawn for UsaBanner V1 (M1) from our own description of Tux sitting, 2 x 4 dots a character; picked 2026-10-20",
+  "owner": "Larry Ewing",
+  "notice": "Tux was originally drawn by Larry Ewing (lewing@isc.tamu.edu) using The GIMP.",
+  "art": [
+    "          .oopppoo,          ",
+    "        _d888888888b_        ",
+    "       |88\"\"\"98P\"\"\"88|       ",
+    "      .88| oo 8 oo |88,      ",
+    "      |88b YY|8|YY d88|      ",
+    "      _8888p88888p8888_      ",
+    "    .d88888888888888888b,    ",
+    " .o8888888Y\"YYYYY\"Y8888888o, ",
+    " d888888P           9888888b ",
+    "|888888P             9888888|",
+    "|888888               888888|",
+    "|88888|               |88888|",
+    "'88888b               d88888'",
+    " 988888,             .88888P ",
+    "  \"YY98b,           .d8PYY\"  ",
+    "      \"88_         _88\"      ",
+    "  ._oooo888o_____o888oooo_,  ",
+    " d888888888888 888888888888b ",
+    " '\"YY88888YYY' 'YYY88888YY\"' "
+  ],
+  "mask": [
+    "          kkkkkkkkk          ",
+    "        kkkkkkkkkkkkk        ",
+    "       kkkkkkkkkkkkkkk       ",
+    "      kkkkwkkwkwkkwkkkk      ",
+    "      kkkkwkkkkkkkwkkkk      ",
+    "      kkkkkkyyyyykkkkkk      ",
+    "    kkkkkkyyyyyyyyykkkkkk    ",
+    " kkkkkkkkkkyyyyyyykkkkkkkkkk ",
+    " kkkkkkkkwwwwwwwwwwwkkkkkkkk ",
+    "kkkkkkkkwwwwwwwwwwwwwkkkkkkkk",
+    "kkkkkkkwwwwwwwwwwwwwwwkkkkkkk",
+    "kkkkkkkwwwwwwwwwwwwwwwkkkkkkk",
+    "kkkkkkkwwwwwwwwwwwwwwwkkkkkkk",
+    " kkkkkkkwwwwwwwwwwwwwkkkkkkk ",
+    "  kkkkkkkwwwwwwwwwwwkkkkkkk  ",
+    "      kkkkwwwwwwwwwkkkk      ",
+    "  yyyyyyyyyyykkkyyyyyyyyyyy  ",
+    " yyyyyyyyyyyyy yyyyyyyyyyyyy ",
+    " yyyyyyyyyyyyy yyyyyyyyyyyyy "
+  ],
+  "fill": {
+    "class": "w",
+    "char": "8"
+  },
+  "palette": {
+    "k": {
+      "label": "body, flippers and pupils: dark grey, so a dark terminal still shows him",
+      "rgb": "#6A717E",
+      "basic": "bright-black"
+    },
+    "w": {
+      "label": "belly and eyes: white, drawn as the fill character",
+      "rgb": "#F3F6FA",
+      "basic": "bright-white"
+    },
+    "y": {
+      "label": "beak and feet",
+      "rgb": "#F5B300",
+      "basic": "yellow"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "windows",
+  "title": "The Windows logo",
+  "artist": "Claude, for UsagiTools",
+  "licence": "MIT for this drawing; the mark is its owner's",
+  "source": "drawn for UsaBanner V1 (M1) to identify what a host runs; picked 2026-10-20",
+  "owner": "Microsoft",
+  "notice": "Windows is a trademark of the Microsoft group of companies.",
+  "art": [
+    "#######  #######",
+    "#######  #######",
+    "#######  #######",
+    "                ",
+    "#######  #######",
+    "#######  #######",
+    "#######  #######"
+  ],
+  "mask": [
+    "ppppppp  ppppppp",
+    "ppppppp  ppppppp",
+    "ppppppp  ppppppp",
+    "                ",
+    "ppppppp  ppppppp",
+    "ppppppp  ppppppp",
+    "ppppppp  ppppppp"
+  ],
+  "palette": {
+    "p": {
+      "label": "the four panes: blue, lighter at the top",
+      "from": "#5CCBFF",
+      "to": "#0067C0",
+      "basic": "bright-blue"
+    }
+  }
+}
