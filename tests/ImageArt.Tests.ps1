@@ -373,6 +373,41 @@ Describe 'an image made into art' {
         @($palette.Keys | ForEach-Object { $palette[$_]['rgb'] }) | Should -Be @('#1E6FD9', '#FFFFFF')
     }
 
+    It 'folds the halo a JPEG leaves around a part on a background colour into the part, so the part is not drawn as fill' {
+        # A blue square, ringed 2 pixels deep by an off blue: lighter, and off the line to white,
+        # as JPEG's colour blur leaves it. On white, the halo is noise, and the square is solid.
+        $square = {
+            param($x, $y)
+            if ($x -lt 4 -or $x -ge 88 -or $y -lt 4 -or $y -ge 88) { return $margin }
+            if ($x -lt 6 -or $x -ge 86 -or $y -lt 6 -or $y -ge 86) { return 120, 175, 250, 255 }
+            30, 111, 217, 255
+        }
+        $margin = @(255, 255, 255, 255)
+        $png = New-TestImage -Name 'jpeg-halo.png' -Width 92 -Height 92 -Pixel $square
+        $json = Join-Path $TestDrive 'jpeg-halo.json'
+        $rows = @(New-UsaBannerArt -Path $png -ColorMode none -OutFile $json)
+        "$($rows[0].Length) x $($rows.Count)" | Should -Be '40 x 20'
+        ($rows -join '') | Should -Match '^8+$'
+        $art = Get-Content -LiteralPath $json -Raw | ConvertFrom-Json -AsHashtable
+        @($art['palette'].Keys | ForEach-Object { $art['palette'][$_]['rgb'] }) | Should -Be @('#1E6FD9')
+        $art.Contains('fill') | Should -BeFalse
+    }
+
+    It 'keeps a thin ring on a transparent background as a colour of its own: an outline, not a halo' {
+        $square = {
+            param($x, $y)
+            if ($x -lt 4 -or $x -ge 88 -or $y -lt 4 -or $y -ge 88) { return 0, 0, 0, 0 }
+            if ($x -lt 6 -or $x -ge 86 -or $y -lt 6 -or $y -ge 86) { return 120, 175, 250, 255 }
+            30, 111, 217, 255
+        }
+        $png = New-TestImage -Name 'outline.png' -Width 92 -Height 92 -Pixel $square
+        $json = Join-Path $TestDrive 'outline.json'
+        $null = New-UsaBannerArt -Path $png -OutFile $json
+        $art = Get-Content -LiteralPath $json -Raw | ConvertFrom-Json -AsHashtable
+        @($art['palette'].Keys | ForEach-Object { $art['palette'][$_]['rgb'] }) | Should -Be @('#1E6FD9', '#78AFFA')
+        $art['fill']['class'] | Should -BeExactly 'a'
+    }
+
     It 'draws no part as fill with -Fill none, and the part nearest a colour with -Fill #RRGGBB' {
         $json = Join-Path $TestDrive 'ring-none.json'
         $rows = @(New-UsaBannerArt -Path $ringPng -ColorMode none -Fill none -OutFile $json)

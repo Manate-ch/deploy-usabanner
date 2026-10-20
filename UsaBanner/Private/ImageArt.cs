@@ -12,9 +12,9 @@
 //      2 x 4 dots, square, since a cell is about twice as tall as it is wide.
 //   3. Colours: median cut, then k-means, to at most N classes; classes
 //      closer than MergeDistance become one. In shape style, the thin blends
-//      anti-aliasing leaves between two colours join one of them, and the
-//      largest class the picture encloses is drawn as fill: a gap before
-//      login, solid in colour.
+//      anti-aliasing leaves between two colours join one of them, as do the
+//      halos a JPEG leaves around a part; and the largest class the picture
+//      encloses is drawn as fill: a gap before login, solid in colour.
 //   4. Characters. Shape style, for logos, gives each cell the character
 //      whose ink pattern fits its 8 dots best. Ramp style, for photos, gives
 //      it one by brightness, the brightest densest.
@@ -399,6 +399,9 @@ namespace UsaBanner
         const double LiftLuma = 80;           // a class darker than this is mixed toward white until it is not
         const double BlendShare = 0.03;       // shape style: a class this small, between two others, joins one
         const double BlendDistance = 12;      // ... when within this of the line between them
+        const double HaloShare = 0.15;        // shape style: a class this small, ringing a part, joins it
+        const double HaloContact = 0.2;       // ... when this share of its pixels touch the background, and the part
+        const double HaloDistance = 48;       // ... and it lies within this of the line from the part to the background
         const double PhotoError = 18;         // auto style is ramp when pixels miss their class by more
         const double MinBackground = 0.02;    // auto style is shape when at least this share is background
 
@@ -518,6 +521,7 @@ namespace UsaBanner
             string style = settings.Style;
             if (style == "auto") style = clear >= MinBackground * n && colorError <= PhotoError ? "shape" : "ramp";
             if (style == "shape") MergeBlends(cls, classColour, classWeight, bg);
+            if (style == "shape" && flooded > 0) MergeHalos(cls, cw, ch, classColour, classWeight, bg);
             int classes = classColour.Count;
             int fill = -1;
             if (style == "shape" && classes > 1)
@@ -906,9 +910,9 @@ namespace UsaBanner
                 double t;
                 for (int a = 0; a < c && into < 0; a++)
                 {
-                    if (background != null && Between(colour[c], colour[a], background, out t)) into = a;
+                    if (background != null && Between(colour[c], colour[a], background, BlendDistance, out t)) into = a;
                     for (int b = a + 1; b < c && into < 0; b++)
-                        if (Between(colour[c], colour[a], colour[b], out t)) into = t < 0.5 ? a : b;
+                        if (Between(colour[c], colour[a], colour[b], BlendDistance, out t)) into = t < 0.5 ? a : b;
                 }
                 if (into < 0) continue;
                 weight[into] += weight[c];
@@ -923,9 +927,82 @@ namespace UsaBanner
             SortByWeight(cls, colour, weight);
         }
 
-        // Whether colour p lies on the line from a to b, within BlendDistance and strictly between
-        // the two; t is how far along it, 0 at a and 1 at b.
-        static bool Between(double[] p, double[] a, double[] b, out double t)
+        // A JPEG, or another lossy format, leaves a thin halo of off colours where a part meets the
+        // background colour; it can ring a part so the part looks enclosed and is drawn as fill.
+        // In shape style, with a background colour cleared, a class under HaloShare of the picture
+        // joins a heavier class when HaloContact or more of its pixels touch the background, as
+        // many touch that class, and its colour lies within HaloDistance of the line from that
+        // class's colour to the background's.
+        static void MergeHalos(byte[] cls, int cw, int ch, List<double[]> colour, List<double> weight, int bg)
+        {
+            int classes = colour.Count;
+            if (classes < 2) return;
+            double total = 0;
+            foreach (double w in weight) total += w;
+            int n = classes + 1;   // class numbers in cls run 1 to classes; 0 is the background
+            var pixels = new long[n];
+            var touchClear = new long[n];
+            var touch = new long[n * n];
+            var met = new bool[n];
+            for (int y = 0; y < ch; y++)
+                for (int x = 0; x < cw; x++)
+                {
+                    int mine = cls[y * cw + x];
+                    if (mine == 0) continue;
+                    pixels[mine]++;
+                    bool clear = false;
+                    for (int s = 0; s < 4; s++)
+                    {
+                        int nx = x + (s == 0 ? -1 : s == 1 ? 1 : 0), ny = y + (s == 2 ? -1 : s == 3 ? 1 : 0);
+                        int next = nx < 0 || ny < 0 || nx >= cw || ny >= ch ? 0 : cls[ny * cw + nx];
+                        if (next == 0) clear = true;
+                        else if (next != mine && !met[next])
+                        {
+                            met[next] = true;
+                            touch[mine * n + next]++;
+                        }
+                    }
+                    if (clear) touchClear[mine]++;
+                    for (int k = 1; k < n; k++) met[k] = false;
+                }
+            double[] background = { bg >> 16 & 255, bg >> 8 & 255, bg & 255 };
+            var into = new int[n];
+            // Classes are in share order, so a heavier class has a lower number; the heaviest stays.
+            for (int k = n - 1; k > 1; k--)
+            {
+                if (weight[k - 1] >= HaloShare * total || touchClear[k] < HaloContact * pixels[k]) continue;
+                int best = 0;
+                long most = 0;
+                for (int j = 1; j < k; j++)
+                    if (touch[k * n + j] > most)
+                    {
+                        most = touch[k * n + j];
+                        best = j;
+                    }
+                double t;
+                if (best == 0 || most < HaloContact * pixels[k] || !Between(colour[k - 1], colour[best - 1], background, HaloDistance, out t)) continue;
+                into[k] = best;
+            }
+            bool any = false;
+            for (int k = 1; k < n; k++)
+            {
+                if (into[k] == 0) continue;
+                int end = into[k];
+                while (into[end] != 0) end = into[end];
+                into[k] = end;
+                weight[end - 1] += weight[k - 1];
+                weight[k - 1] = 0;
+                any = true;
+            }
+            if (!any) return;
+            for (int i = 0; i < cls.Length; i++)
+                if (cls[i] != 0 && into[cls[i]] != 0) cls[i] = (byte)into[cls[i]];
+            SortByWeight(cls, colour, weight);
+        }
+
+        // Whether colour p lies on the line from a to b, within the distance given and strictly
+        // between the two; t is how far along it, 0 at a and 1 at b.
+        static bool Between(double[] p, double[] a, double[] b, double within, out double t)
         {
             double length2 = 0, dot = 0;
             for (int k = 0; k < 3; k++)
@@ -941,7 +1018,7 @@ namespace UsaBanner
                 double off = a[k] + t * (b[k] - a[k]) - p[k];
                 distance2 += off * off;
             }
-            return distance2 <= BlendDistance * BlendDistance;
+            return distance2 <= within * within;
         }
 
         // Median cut: the box of colours with the most weighted spread along one channel splits at
