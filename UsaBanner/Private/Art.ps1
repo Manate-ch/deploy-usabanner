@@ -1,12 +1,20 @@
 # Art.ps1 - reading a piece of art and its colours, checking it, and
 # drawing it in one colour mode.
 #
-# An art file, art\base\<name>.json, holds:
+# An art file is art\base\<name>.json for ours, or art\apps\<name>.json for
+# another owner's logo, drawn by us (docs/DECISIONS.md, D3). It holds:
 #
 #   +---------+----------------------------------------------------------+
 #   | Key     | What                                                     |
 #   +---------+----------------------------------------------------------+
-#   | art     | the picture, one string per row, printable ASCII         |
+#   | title,  | what the piece is, who drew it, its licence and where it |
+#   | artist, | came from; every piece needs all four                    |
+#   | licence,|                                                          |
+#   | source  |                                                          |
+#   | owner,  | art\apps only: whose trademark the logo is, and the line |
+#   | notice  | NOTICE carries for it                                    |
+#   | art     | the picture, one string per row, printable ASCII, at     |
+#   |         | most 64 columns by 30 rows                               |
 #   | mask    | the same shape: each character names the class of the    |
 #   |         | cell under it; a space for none                          |
 #   | fill    | optional: the class of the cells inside the shape, and   |
@@ -19,30 +27,60 @@
 #   |         | last], with a middle column and a half-width             |
 #   +---------+----------------------------------------------------------+
 #
-# label, title, artist, licence and source are for people; nothing reads them.
+# label is for people; nothing reads it.
+
+function Get-UsaBannerArtIndex {
+    <#
+    .SYNOPSIS
+    Every piece of the module's art, by name.
+    .DESCRIPTION
+    Out: an ordered dictionary, sorted by name, of name -> @{ Folder; Path },
+    where Folder is base or apps. A missing apps folder holds nothing.
+    Throws when two files share a name: -Name could not tell them apart.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param()
+    $found = [System.Collections.Generic.SortedDictionary[string, object]]::new([StringComparer]::Ordinal)
+    foreach ($folder in 'base', 'apps') {
+        $dir = Join-Path -Path $script:UsaBannerRoot -ChildPath 'art' -AdditionalChildPath $folder
+        if (-not (Test-Path -LiteralPath $dir -PathType Container)) { continue }
+        foreach ($file in Get-ChildItem -LiteralPath $dir -Filter '*.json' -File) {
+            if ($found.ContainsKey($file.BaseName)) {
+                throw "UsaBanner: two pieces of art are called '$($file.BaseName)': $($found[$file.BaseName].Path) and $($file.FullName)."
+            }
+            $found[$file.BaseName] = @{ Folder = $folder; Path = $file.FullName }
+        }
+    }
+    $index = [ordered]@{}
+    foreach ($key in $found.Keys) { $index[$key] = $found[$key] }
+    $index
+}
 
 function Get-UsaBannerArtData {
     <#
     .SYNOPSIS
     Reads one piece of the module's art by name, and checks it.
     .DESCRIPTION
-    In:  a name, such as rabbit, for art\base\<name>.json in the module.
-    Out: the file as an ordered hashtable: art, mask, fill, palette, sheen.
+    In:  a name, such as rabbit, for art\base\<name>.json or
+         art\apps\<name>.json in the module.
+    Out: the file as an ordered hashtable: art, mask, fill, palette, sheen,
+    and the metadata.
     Throws when there is no such art (naming the ones there are), when the
-    file is not JSON, and when it breaks a rule of Test-UsaBannerArtData.
+    file is not JSON, and when it breaks a rule of Test-UsaBannerArtData for
+    its folder.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.IDictionary])]
     param([Parameter(Mandatory)][string]$Name)
-    $folder = Join-Path -Path $script:UsaBannerRoot -ChildPath 'art' -AdditionalChildPath 'base'
-    $path = Join-Path $folder "$Name.json"
-    if ($Name -cnotmatch '^[a-z0-9][a-z0-9-]*$' -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        $known = @(Get-ChildItem -LiteralPath $folder -Filter '*.json' -File | ForEach-Object BaseName | Sort-Object)
-        throw "UsaBanner: there is no art called '$Name'. There is: $($known -join ', ')."
+    $index = Get-UsaBannerArtIndex
+    if ($Name -cnotmatch '^[a-z0-9][a-z0-9-]*$' -or -not $index.Contains($Name)) {
+        throw "UsaBanner: there is no art called '$Name'. There is: $(@($index.Keys) -join ', ')."
     }
+    $path = $index[$Name].Path
     try { $art = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable }
     catch { throw "UsaBanner: $path is not JSON: $($_.Exception.Message)" }
-    $problems = @(Test-UsaBannerArtData -Art $art)
+    $problems = @(Test-UsaBannerArtData -Art $art -Folder $index[$Name].Folder)
     if ($problems.Count -gt 0) { throw ("UsaBanner: $path breaks the art rules:`n  " + ($problems -join "`n  ")) }
     $art
 }
@@ -52,8 +90,12 @@ function Test-UsaBannerArtData {
     .SYNOPSIS
     The rules a piece of art keeps; returns each one it breaks.
     .DESCRIPTION
+    In:  the art, and its folder: base (the default) or apps.
     Out: one string per problem; nothing when the art is sound.
-    - art: one row or more, printable ASCII (space to tilde) only;
+    - title, artist, licence and source are there and not blank; in apps,
+      owner and notice too;
+    - art: one row or more, printable ASCII (space to tilde) only, at most 64
+      columns by 30 rows, the width of the panel;
     - mask: as many rows as the art, each as long as its art row;
     - every visible art character has a class in the mask;
     - a fill-class cell is a space in the art; the fill character is one
@@ -66,7 +108,15 @@ function Test-UsaBannerArtData {
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    param([Parameter(Mandatory)][System.Collections.IDictionary]$Art)
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Art,
+        [ValidateSet('base', 'apps')][string]$Folder = 'base'
+    )
+    $required = @('title', 'artist', 'licence', 'source')
+    if ($Folder -eq 'apps') { $required += 'owner', 'notice' }
+    foreach ($key in $required) {
+        if ([string]::IsNullOrWhiteSpace([string]$Art[$key])) { "${key}: missing (a piece in art\$Folder needs $($required -join ', '))" }
+    }
     $checkNumber = {
         # In:  a value read from JSON
         # Out: $true when it is a number
@@ -86,6 +136,9 @@ function Test-UsaBannerArtData {
     $rows = @($Art['art'])
     $mask = @($Art['mask'])
     if ($rows.Count -eq 0) { 'art: there are no rows'; return }
+    if ($rows.Count -gt 30) { "art: $($rows.Count) rows, more than 30" }
+    $widest = ($rows | ForEach-Object { ([string]$_).Length } | Measure-Object -Maximum).Maximum
+    if ($widest -gt 64) { "art: $widest columns, more than 64" }
     if ($mask.Count -ne $rows.Count) { "mask: $($mask.Count) rows for $($rows.Count) rows of art"; return }
     if ($Art['palette'] -isnot [System.Collections.IDictionary]) { 'palette: missing'; return }
     # Class -> palette entry, compared by exact character code: f and F are two classes, and a plain @{} would merge them.

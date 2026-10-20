@@ -1,9 +1,11 @@
-# The rabbit as data, and the renderer: every colour mode, checked against
-# Appendix A of docs/DECISIONS.md and against docs/rabbit.svg.
+# The art library: the rules every piece keeps, the lookup in art\base and
+# art\apps, and Show-UsaBannerArt -List. Then the rabbit as data, and the
+# renderer: every colour mode, checked against Appendix A of
+# docs/DECISIONS.md and against docs/rabbit.svg.
 
 BeforeDiscovery {
     $repoRoot = Split-Path $PSScriptRoot -Parent
-    $artFiles = @(foreach ($f in Get-ChildItem -LiteralPath (Join-Path $repoRoot 'UsaBanner' 'art') -Recurse -Filter '*.json' -File) { @{ Name = $f.BaseName; Path = $f.FullName } })
+    $artFiles = @(foreach ($f in Get-ChildItem -LiteralPath (Join-Path $repoRoot 'UsaBanner' 'art') -Recurse -Filter '*.json' -File) { @{ Name = $f.BaseName; Path = $f.FullName; Folder = $f.Directory.Name } })
 }
 
 BeforeAll {
@@ -88,6 +90,24 @@ Describe 'every piece of built-in art' {
         ($back['art'] -join "`n") | Should -BeExactly ($data['art'] -join "`n")
         ($back['mask'] -join "`n") | Should -BeExactly ($data['mask'] -join "`n")
     }
+
+    It '<Name> keeps every art rule for art\<Folder>' -ForEach $artFiles {
+        $data = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable
+        InModuleScope UsaBanner -Parameters @{ Art = $data; Folder = $Folder } { param($Art, $Folder) Test-UsaBannerArtData -Art $Art -Folder $Folder } | Should -BeNullOrEmpty
+    }
+
+    It 'is in art\base or art\apps, the two folders the module reads' {
+        $artRoot = Join-Path $repoRoot 'UsaBanner' 'art'
+        $astray = foreach ($f in Get-ChildItem -LiteralPath $artRoot -Recurse -Filter '*.json' -File) {
+            if ($f.Directory.Parent.FullName -ne $artRoot -or $f.Directory.Name -cnotin 'base', 'apps') { $f.FullName }
+        }
+        @($astray) | Should -BeNullOrEmpty
+    }
+
+    It 'is listed by Show-UsaBannerArt -List, each piece once' {
+        $names = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'UsaBanner' 'art') -Recurse -Filter '*.json' -File | ForEach-Object BaseName | Sort-Object)
+        @(Show-UsaBannerArt -List | ForEach-Object { ($_ -split ' ')[0] } | Sort-Object) | Should -Be $names
+    }
 }
 
 Describe 'the art rules' {
@@ -100,6 +120,10 @@ Describe 'the art rules' {
         @{ Case = 'half a gradient'; Change = { param($a) $a['palette']['f'].Remove('to') }; Expected = "palette 'f': a gradient needs both from and to" }
         @{ Case = 'a character outside printable ASCII'; Change = { param($a) $a['art'][0] = $a['art'][0].Replace('U', [string][char]0x00DC) }; Expected = 'art row 0: printable ASCII only' }
         @{ Case = 'a sheen region with no width'; Change = { param($a) $a['sheen']['regions'][0]['half'] = 0 }; Expected = 'sheen region 0: middle must be a number, half one above 0' }
+        @{ Case = 'a piece with no title'; Change = { param($a) $a.Remove('title') }; Expected = 'title: missing (a piece in art\base needs title, artist, licence, source)' }
+        @{ Case = 'a blank licence'; Change = { param($a) $a['licence'] = ' ' }; Expected = 'licence: missing (a piece in art\base needs title, artist, licence, source)' }
+        @{ Case = 'art wider than 64 columns'; Change = { param($a) $a['art'][0] = $a['art'][0].PadRight(65); $a['mask'][0] = $a['mask'][0].PadRight(65) }; Expected = 'art: 65 columns, more than 64' }
+        @{ Case = 'art taller than 30 rows'; Change = { param($a) $a['art'] = @($a['art']) + @(' ') * 20; $a['mask'] = @($a['mask']) + @(' ') * 20 }; Expected = 'art: 31 rows, more than 30' }
     ) {
         $problems = @(InModuleScope UsaBanner -Parameters @{ Change = $Change } {
                 param($Change)
@@ -117,6 +141,88 @@ Describe 'the art rules' {
                 Test-UsaBannerArtData -Art $art
             })
         $problems -join "`n" | Should -BeLike "*palette 'm'.basic: one of black, blue, bright-black,*"
+    }
+
+    It 'ask a piece in art\apps for its owner and its line in NOTICE too' {
+        $problems = @(InModuleScope UsaBanner { Test-UsaBannerArtData -Art (Get-UsaBannerArtData -Name 'rabbit') -Folder 'apps' })
+        $problems | Should -Be @(
+            'owner: missing (a piece in art\apps needs title, artist, licence, source, owner, notice)'
+            'notice: missing (a piece in art\apps needs title, artist, licence, source, owner, notice)'
+        )
+    }
+}
+
+Describe 'the art library' {
+    BeforeAll {
+        function New-ArtLibrary {
+            # In:  a folder, and the pieces: 'base/<name>' or 'apps/<name>' -> the piece as a hashtable
+            # Out: the folder, now holding art\base and art\apps with one JSON file per piece
+            # Why: these tests read a library they built, so the art the module ships can change freely
+            param([string]$Path, [hashtable]$Pieces)
+            foreach ($key in $Pieces.Keys) {
+                $folder, $name = $key -split '/'
+                $dir = Join-Path $Path 'art' $folder
+                $null = New-Item -ItemType Directory -Path $dir -Force
+                ConvertTo-Json -InputObject $Pieces[$key] -Depth 10 | Set-Content -LiteralPath (Join-Path $dir "$name.json")
+            }
+            $Path
+        }
+
+        function Use-ArtLibrary {
+            # In:  a folder holding art\base and art\apps
+            # Out: nothing; the module reads its art from there until the next call
+            # Why: the module reads its art under $script:UsaBannerRoot, so a test points that at a library it built
+            param([string]$Path)
+            InModuleScope UsaBanner -Parameters @{ Path = $Path } { param($Path) $script:UsaBannerRoot = $Path }
+        }
+
+        $dot = [ordered]@{
+            title = 'A dot'; artist = 'An Artist'; licence = 'MIT'; source = 'drawn for this test'
+            art = @('o'); mask = @('d'); palette = @{ d = @{ rgb = '#FF0000'; basic = 'red' } }
+        }
+        $box = [ordered]@{
+            title = 'The Contoso box'; artist = 'An Artist'; licence = 'MIT'; source = 'drawn for this test'
+            owner = 'Contoso'; notice = 'The Contoso box is a trademark of Contoso.'
+            art = @('+--+', '|  |', '+--+'); mask = @('bbbb', 'b  b', 'bbbb'); palette = @{ b = @{ rgb = '#0000FF'; basic = 'blue' } }
+        }
+        $moduleRoot = InModuleScope UsaBanner { $script:UsaBannerRoot }
+    }
+
+    AfterEach { Use-ArtLibrary $moduleRoot }
+
+    It 'lists every piece in art\base and art\apps, by name: folder, size, title, who drew it and its licence' {
+        Use-ArtLibrary (New-ArtLibrary (Join-Path $TestDrive 'two') @{ 'base/dot' = $dot; 'apps/box' = $box })
+        @(Show-UsaBannerArt -List) | Should -Be @(
+            'box            apps   4x3  The Contoso box (logo of Contoso, drawn by An Artist, MIT)'
+            'dot            base   1x1  A dot (by An Artist, MIT)'
+        )
+    }
+
+    It 'reads a library with no art\apps as one with no logos' {
+        Use-ArtLibrary (New-ArtLibrary (Join-Path $TestDrive 'base-only') @{ 'base/dot' = $dot })
+        @(Show-UsaBannerArt -List) | Should -Be @('dot            base   1x1  A dot (by An Artist, MIT)')
+    }
+
+    It 'draws a piece from art\apps by its name' {
+        Use-ArtLibrary (New-ArtLibrary (Join-Path $TestDrive 'draw') @{ 'apps/box' = $box })
+        @(Show-UsaBannerArt -Name 'box' -ColorMode none) | Should -Be @('+--+', '|  |', '+--+')
+    }
+
+    It 'names the art there is, in both folders, when asked for art that is not' {
+        Use-ArtLibrary (New-ArtLibrary (Join-Path $TestDrive 'names') @{ 'base/dot' = $dot; 'apps/box' = $box })
+        { Show-UsaBannerArt -Name 'unicorn' } | Should -Throw "*there is no art called 'unicorn'. There is: box, dot."
+    }
+
+    It 'refuses a logo in art\apps that names no owner, saying which file' {
+        $ownerless = [ordered]@{}
+        foreach ($key in $box.Keys) { if ($key -ne 'owner') { $ownerless[$key] = $box[$key] } }
+        Use-ArtLibrary (New-ArtLibrary (Join-Path $TestDrive 'ownerless') @{ 'apps/box' = $ownerless })
+        { Show-UsaBannerArt -Name 'box' -ColorMode none } | Should -Throw '*box.json breaks the art rules:*owner: missing (a piece in art\apps needs *'
+    }
+
+    It 'refuses two pieces with one name, saying which files' {
+        Use-ArtLibrary (New-ArtLibrary (Join-Path $TestDrive 'twice') @{ 'base/dot' = $dot; 'apps/dot' = $box })
+        { Show-UsaBannerArt -List } | Should -Throw "*two pieces of art are called 'dot':*base*dot.json and *apps*dot.json."
     }
 }
 
@@ -227,7 +333,7 @@ Describe 'drawing the rabbit' {
     }
 
     It 'names the art there is when asked for art that is not' {
-        { Show-UsaBannerArt -Name 'unicorn' } | Should -Throw "*there is no art called 'unicorn'. There is: rabbit.*"
+        { Show-UsaBannerArt -Name 'unicorn' } | Should -Throw "*there is no art called 'unicorn'. There is: *rabbit*"
     }
 }
 

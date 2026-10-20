@@ -149,6 +149,15 @@ Describe 'the hand-off to pwsh' {
         ($handed -join "`n") | Should -BeExactly ($direct -join "`n")
     }
 
+    It 'runs Show-UsaBannerArt -List in a real pwsh: the switch arrives and picks its parameter set' {
+        $direct = @(Show-UsaBannerArt -List)
+        $handed = @(InModuleScope UsaBanner {
+                Invoke-UsaBannerHandoff -Command 'Show-UsaBannerArt' -Parameters @{ List = [switch]$true } -Pwsh (Get-Process -Id $PID).Path
+            })
+        $handed.Count | Should -BeGreaterThan 0
+        ($handed -join "`n") | Should -BeExactly ($direct -join "`n")
+    }
+
     It 'fails with the exit code when the command fails in pwsh' {
         {
             InModuleScope UsaBanner {

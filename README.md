@@ -17,6 +17,7 @@ see how far it has got, from a clone:
 
     Import-Module ./UsaBanner/UsaBanner.psd1
     Show-UsaBannerArt                  # or -ColorMode truecolor, 256, 16 or none
+    Show-UsaBannerArt -List            # every piece of art there is
 
 ## Quickstart
 
