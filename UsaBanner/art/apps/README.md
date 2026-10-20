@@ -10,4 +10,14 @@ Each piece is a JSON file like those in `../base/`, with two more keys:
 A host shows one only where an admin turned it on: the default art is ours,
 from `../base/`. `Show-UsaBannerArt -List` shows each one with its owner.
 Keeping them in this folder means that, if an owner objects, it can go
-without touching anything else. None is shipped yet.
+without touching anything else.
+
+What ships, each with its line in `../../NOTICE`:
+
+- `tux.json`: Tux sitting, after Larry Ewing's Tux (drawn with The GIMP);
+- `windows.json`: the Windows logo, four panes;
+- `ubuntu.json`: the Ubuntu Circle of Friends.
+
+Tux and the Circle of Friends were drawn from our own description of their
+shapes, at 2 x 4 dots a character, the density of Braille art, in plain
+ASCII.

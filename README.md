@@ -20,6 +20,14 @@ see how far it has got, from a clone:
     Show-UsaBannerArt -List            # every piece of art there is
     Show-UsaBannerArt server -Os ubuntu   # in an OS's colour: windows, ubuntu or linux
     Show-UsaBannerArt -Text 'Contoso LLC' # a name in block letters
+    Show-UsaBannerArt tux              # a logo: tux, windows or ubuntu
+
+The logos are drawn by this project, to identify what a host runs, and show
+only where an admin turns them on. Windows is a trademark of the Microsoft
+group of companies, and Ubuntu a registered trademark of Canonical Ltd. Tux
+was originally drawn by Larry Ewing using The GIMP. This project is not
+affiliated with or endorsed by their owners; `UsaBanner/NOTICE` has the
+details.
 
 ## Quickstart
 

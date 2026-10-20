@@ -104,6 +104,15 @@ Describe 'every piece of built-in art' {
         @($astray) | Should -BeNullOrEmpty
     }
 
+    It 'has, for every logo in art\apps, its notice as a line of NOTICE' {
+        $notice = @(Get-Content -LiteralPath (Join-Path $repoRoot 'UsaBanner' 'NOTICE'))
+        $missing = foreach ($f in Get-ChildItem -LiteralPath (Join-Path $repoRoot 'UsaBanner' 'art' 'apps') -Filter '*.json' -File) {
+            $line = (Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json -AsHashtable)['notice']
+            if ($notice -cnotcontains $line) { "$($f.Name): '$line'" }
+        }
+        @($missing) | Should -BeNullOrEmpty
+    }
+
     It 'is listed by Show-UsaBannerArt -List, each piece once' {
         $names = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'UsaBanner' 'art') -Recurse -Filter '*.json' -File | ForEach-Object BaseName | Sort-Object)
         @(Show-UsaBannerArt -List | ForEach-Object { ($_ -split ' ')[0] } | Sort-Object) | Should -Be $names
