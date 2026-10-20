@@ -1,0 +1,16 @@
+# vlans.tsv - the VLAN table, one row per VLAN: vlan.awk (Linux) and
+# Find-ManatechVlan (Windows) find the row a host's primary address is in.
+# These rows are EXAMPLES: replace them with your own VLANs.
+# colour = a code in colors.tsv (blank = none: the badge then keeps the
+# environment colour). mini = shown in the badge as <vlan>-<mini>; short =
+# shown in the panel's vlan row. The longest matching prefix wins.
+# vlan	cidr	colour	site	mini	short
+10	10.20.10.0/24	7	HQ	Mgmt	Management
+20	10.20.16.0/22	9	HQ	Users	User devices
+30	10.20.30.0/24	6	HQ	Voice	Voice and video
+40	10.20.40.0/22	C	HQ	Servers	Servers
+45	10.20.48.0/28		HQ	Overlay	Overlay network
+50	172.16.20.0/23	3	HQ	Storage	Storage
+60	10.20.60.0/24	F	HQ	Apps	Application servers
+70	10.20.70.0/24		HQ	Lab	Lab
+90	192.168.90.0/24	0	HQ	Guest	Guest

@@ -4,7 +4,15 @@
 
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '..\ManatechBanner.psm1') -Force
-    $script:Data = Join-Path $PSScriptRoot '../../rootfs/usr/local/share/manatech'
+    # The shipped data folder, with the example schema, VLAN, colour and
+    # environment tables from fixtures/ laid over it: the decode, VLAN and
+    # badge tests assert those example rows, so a copy with its own tables
+    # keeps them. The art and the welcome row stay the shipped ones.
+    $script:Data = Join-Path $TestDrive 'data'
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../../rootfs/usr/local/share/manatech') -Destination $Data -Recurse
+    foreach ($table in 'schema-names.tsv', 'vlans.tsv', 'colors.tsv', 'envs.tsv') {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot "fixtures/$table") -Destination $Data -Force
+    }
     $script:Esc = [string][char]27
 
     function New-TestFact {
@@ -230,9 +238,9 @@ Describe 'Format-ManatechBanner' {
         $text | Should -Not -Match $Esc
     }
     It 'draws the art: one line per line of manatech.art' {
-        $art = @(Get-Content -LiteralPath (Join-Path $Data 'manatech.art'))
-        $lines = Format-ManatechBanner -Fact (New-TestFact) -Config (New-TestConfig none ascii) -DataPath $Data
-        (Get-Visible $lines[9]) | Should -Be ($art[9] -replace '@[cy]', '')
+        $art = @(Get-Content -LiteralPath (Join-Path $Data 'manatech.art') | ForEach-Object { $_ -replace '@[cy]', '' })
+        $lines = @(Format-ManatechBanner -Fact (New-TestFact) -Config (New-TestConfig none ascii) -DataPath $Data)
+        @($lines[0..($art.Count - 1)] | ForEach-Object { Get-Visible $_ }) | Should -Be $art
     }
     It 'colours the border with the type colour of a schema name (Virtual = Blue)' {
         $lines = Format-ManatechBanner -Fact (New-TestFact) -Config (New-TestConfig) -DataPath $Data

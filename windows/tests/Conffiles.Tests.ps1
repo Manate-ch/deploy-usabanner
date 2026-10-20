@@ -100,8 +100,9 @@ Describe 'conffiles.sh' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinu
 Describe 'restore_conffile' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinue)) {
     BeforeAll {
         # What install.sh --ssh last wrote over /etc/issue before the fix: rootfs/etc/issue, which
-        # the fix moved to issue.d without its first line. One of the md5s in OURS_ISSUE.
-        $script:OldIssue = "\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../../rootfs/etc/issue.d/50-manatech.issue'))
+        # the fix moved to issue.d without its first line (frozen in fixtures/, so a copy with its
+        # own banner keeps this test). One of the md5s in OURS_ISSUE.
+        $script:OldIssue = "\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'fixtures/50-manatech.issue'))
     }
 
     It 'puts back a stock /etc/issue that an older version overwrote, mode 644, and says so' {
@@ -221,8 +222,9 @@ Describe 'conffile_state' -Skip:(-not (Get-Command sh -ErrorAction SilentlyConti
         # 24.04.5's md5 on a host that says 24.04.4: the rebuilt text cannot match.
         @{ Expected = 'changed'; Text = 'ours'; Recorded = '1fd8b22ff287a77717f4ed62774e4576'; Rc = 'rc=1'; After = 'as it was' }
     ) {
-        # 'ours' is what install.sh --ssh wrote before the fix: issue.d's banner below its old first line.
-        $ours = "\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../../rootfs/etc/issue.d/50-manatech.issue'))
+        # 'ours' is what install.sh --ssh wrote before the fix: issue.d's banner (as frozen in
+        # fixtures/) below its old first line.
+        $ours = "\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'fixtures/50-manatech.issue'))
         $content = if ($Text -eq 'ours') { $ours } else { $Text }
         $root = New-Sandbox
         $issue = Join-Path $root 'issue'
@@ -262,9 +264,13 @@ Describe 'the texts restore_conffile may replace' -Skip:(-not (Get-Command sh -E
         $script:OursIssueNet = $lists.Output[1] -split ' '
     }
 
-    It 'include the pre-fix rootfs/etc/issue, rebuilt from its successor in issue.d' {
-        $old = "\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $RepoRoot 'rootfs/etc/issue.d/50-manatech.issue'))
+    It 'include the pre-fix rootfs/etc/issue, rebuilt from its successor in issue.d (fixtures/)' {
+        $old = "\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'fixtures/50-manatech.issue'))
         $OursIssue | Should -Contain (Get-Md5 $old)
+    }
+
+    It 'include the issue.net an older install.sh installed, which the plan tests use (fixtures/)' {
+        $OursIssueNet | Should -Contain (Get-Md5 ([System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'fixtures/issue.net'))))
     }
 
     # Skipped without the history to check: no git (a downloaded copy) or a shallow clone.

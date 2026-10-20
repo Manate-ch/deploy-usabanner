@@ -87,9 +87,10 @@ exit 1
         $issueNet = Join-Path $fs 'etc/issue.net'
         if ($State -eq 'old') {
             # What install.sh --ssh wrote before the fix: rootfs/etc/issue (issue.d's banner below
-            # its old first line) and rootfs/etc/issue.net. Both are in conffiles.sh's lists.
-            Write-File $issue ("\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $Src 'etc/issue.d/50-manatech.issue')))
-            Write-File $issueNet ([System.IO.File]::ReadAllText((Join-Path $Src 'etc/issue.net')))
+            # its old first line) and rootfs/etc/issue.net, as frozen in fixtures/ so a copy with
+            # its own banners keeps this test. Both are in conffiles.sh's lists.
+            Write-File $issue ("\S{PRETTY_NAME} \n \l`n" + [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'fixtures/50-manatech.issue')))
+            Write-File $issueNet ([System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'fixtures/issue.net')))
         }
         else {
             Write-File $issue "$Pretty \n \l`n`n"

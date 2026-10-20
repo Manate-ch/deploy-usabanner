@@ -1,0 +1,47 @@
+# schema-names.tsv - the naming schema the banner decodes host names with:
+# <site:2><type><subtype><os>-<name><number>, e.g. h-vsl-web1 is
+# HQ / Virtual / Server / Linux. The site is two characters: a site letter
+# and a sub-site letter, or "-" for none (h- is HQ).
+# These rows are EXAMPLES: replace them with your own codes. Any code not
+# listed decodes as "?".
+# The colour names a row of colors.tsv. It tints that letter in the banner
+# title and, for the field chosen by BORDER_BY, draws the panel border.
+# field	code	name	colour
+site	h-	HQ	Blue
+site	be	Branch East	Purple
+site	cw	Cloud West	Teal
+site	la	Lab A	Pink
+site	lb	Lab B	Gold
+type	p	Physical	Orange
+type	v	Virtual	Blue
+type	a	Azure	Teal
+type	z	Amazon	Gold
+type	c	Cloud Shared VM	Purple
+type	d	Cloud Dedicated Device	Pink
+type	l	Lab Device	L.Green
+subtype	a	Appliance	Grey
+subtype	b	Backups	Brown
+subtype	d	Desktop	Beige
+subtype	f	Firewall	Red
+subtype	h	HandHeld	Pink
+subtype	l	Laptop	Beige
+subtype	n	NAS	Teal
+subtype	p	Proxy	Purple
+subtype	r	Router	Orange
+subtype	s	Server	Blue
+subtype	v	Voice/Video/Phone	Yellow
+subtype	q	Database	Gold
+subtype	x	Networking Switch	Green
+subtype	w	Access Point	L.Green
+subtype	2	Printer (2D)	White
+subtype	3	Printer (3D)	White
+os	a	Android	L.Green
+os	c	Containers (NonKube)	Teal
+os	f	FortiOS	Red
+os	i	iOS	White
+os	k	Kubernetes	Blue
+os	l	Linux	Yellow
+os	m	Mac	Grey
+os	u	Unifi	Blue
+os	w	Windows	Blue
+os	x	Unknown/Misc	Grey

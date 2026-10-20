@@ -111,6 +111,7 @@ $files = @(
     (Join-Path $share 'schema-names.tsv')
     (Join-Path $share 'vlans.tsv')
     (Join-Path $share 'envs.tsv')
+    (Join-Path $share 'welcome.tsv')
 )
 foreach ($f in $files) { Copy-Item -LiteralPath $f -Destination $Destination -Force }
 $conf = Join-Path $Destination 'motd.psd1'

@@ -338,7 +338,19 @@ function Format-ManatechBanner {
     $out = [System.Collections.Generic.List[string]]::new()
     foreach ($line in Format-ManatechArt -Path (Join-Path $DataPath 'manatech.art') -Mode $mode) { $out.Add($line) }
     $out.Add('')
-    $out.Add('  Welcome to ' + (Format-ManatechGradient 'Manatech' @(120, 200, 255) @(255, 200, 80) '1;34' $mode))
+    # The welcome line: welcome.tsv's first row names the company, the two
+    # colours of its gradient and its 16-colour code. The Manatech row stands
+    # when the file is missing or that row is not a name, six 0-255 numbers
+    # and an SGR code, as in 05-manatech-banner.
+    $wName, $wFrom, $wTo, $wBasic = 'Manatech', @(120, 200, 255), @(255, 200, 80), '1;34'
+    foreach ($f in Read-ManatechTable (Join-Path $DataPath 'welcome.tsv')) {
+        $nums = @($f | Select-Object -Skip 1 -First 6 | Where-Object { $_ -match '^\d{1,3}$' -and [int]$_ -le 255 })
+        if ($f.Count -ge 8 -and $f[0] -and $nums.Count -eq 6 -and $f[7] -match '^[0-9;]+$') {
+            $wName = $f[0]; $wFrom = @([int]$f[1], [int]$f[2], [int]$f[3]); $wTo = @([int]$f[4], [int]$f[5], [int]$f[6]); $wBasic = $f[7]
+        }
+        break
+    }
+    $out.Add('  Welcome to ' + (Format-ManatechGradient $wName $wFrom $wTo $wBasic $mode))
     $out.Add('')
 
     # Environment strip (EnvShow contains 'strip'): the full panel width in the

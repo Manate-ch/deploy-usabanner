@@ -79,6 +79,12 @@ values, so the banner draws something sensible out of the box:
 | `envs.tsv` | environment -> colour | PROD, LAB, DEV, TEST, STAGE, PUB |
 | `colors.tsv` | the named colours the other files refer to | a 16-colour palette |
 | `manatech.art` | the art above the panel | the Manatech emblem |
+| `welcome.tsv` | the welcome line under the art: the name and its two gradient colours | Manatech |
+
+The company shows in two more places, outside that folder: the art again,
+uncoloured, in `rootfs/etc/issue.net` (the pre-login SSH banner; a test keeps
+it the same as `manatech.art`), and the name in the console banner
+`rootfs/etc/issue.d/50-manatech.issue`.
 
 A name outside the schema only loses the `schema` row, and an address in no
 VLAN row only loses the `vlan` row (the badge then shows the environment).
@@ -163,6 +169,7 @@ else's, stays as it is, and the log says so.
 | `install.sh` | run from the clone | install, retire stock scripts, SSH banner, daily update timer |
 | `windows/` | see "Windows Server" | the same banner for Windows: module, config, installer, demo, Pester tests |
 | `rootfs/usr/local/share/manatech/manatech.art` | same, 644 | the art. `@y` switches to the emblem colour, `@c` back to the moon colour |
+| `rootfs/usr/local/share/manatech/welcome.tsv` | same, 644 | the welcome line under the art: the company name, the two colours of its gradient and its 16-colour code. Windows reads the same file, so a fork renames the line with data alone |
 | `rootfs/etc/manatech/motd.conf` | same, 644 | **per host**: `ENV_NAME`, `ROLE`, `WATCH`, colour mode, thresholds |
 | `rootfs/etc/issue.net` + `rootfs/etc/ssh/sshd_config.d/00-manatech-banner.conf` | `/etc/manatech/issue.net` and the drop-in, 644 | plain pre-login SSH banner (`00-`: sshd uses the first Banner it reads; `install.sh --ssh` checks the effective one with `sshd -T`) |
 | `rootfs/etc/issue.d/50-manatech.issue` | same, 644 | console banner, printed after Ubuntu's `/etc/issue` (the OS line comes from that stock file) |
