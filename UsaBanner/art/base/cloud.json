@@ -1,0 +1,39 @@
+{
+  "name": "cloud",
+  "title": "A cloud",
+  "artist": "Claude, for UsagiTools",
+  "licence": "MIT",
+  "source": "drawn for UsaBanner V1 (M1), picked from a gallery of candidates on 2026-10-20",
+  "art": [
+    "                 .-''''-.             ",
+    "       .-''-.  .'        '.  .-''-.   ",
+    "     .'      '(            )'      '. ",
+    "    (                                )",
+    "    (                                )",
+    "     '-.__________________________.-' "
+  ],
+  "mask": [
+    "                 ffffffff             ",
+    "       ffffff  ff########ff  ffffff   ",
+    "     ff######ff############ff######ff ",
+    "    f################################f",
+    "    f################################f",
+    "     ffffffffffffffffffffffffffffffff "
+  ],
+  "fill": {
+    "class": "#",
+    "char": ":"
+  },
+  "palette": {
+    "f": {
+      "label": "edge: the OS colour",
+      "tint": "os"
+    },
+    "#": {
+      "label": "body: white at the top to a soft grey, drawn as the fill character",
+      "from": "#F5F8FC",
+      "to": "#B9C6D6",
+      "basic": "white"
+    }
+  }
+}

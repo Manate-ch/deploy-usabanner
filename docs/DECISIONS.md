@@ -198,6 +198,14 @@ rabbit, a server and a terminal. Shield, cloud and globe are names on a list,
 not drawings yet. The final art gets drawn in V1, under the same plain-ASCII
 rule.
 
+**Drawn in M1 (2026-10-20).** The server, terminal, shield, cloud and globe
+are in `art/base`, each picked from a gallery of candidates. Where a part
+should take the OS colour, its palette entry names a tint instead of a
+colour: `os`, or a shade of it, `os-light`, `os-dark` or `os-fill`. Those
+parts take the host's OS colour: Windows blue, Ubuntu orange, and a neutral
+grey on any other system. `Show-UsaBannerArt -Os` draws them in another OS's
+colour.
+
 ## D4. AGENTS.md
 
 AGENTS.md is a real convention: a Markdown file at the repository root that

@@ -124,6 +124,8 @@ Describe 'the art rules' {
         @{ Case = 'a blank licence'; Change = { param($a) $a['licence'] = ' ' }; Expected = 'licence: missing (a piece in art\base needs title, artist, licence, source)' }
         @{ Case = 'art wider than 64 columns'; Change = { param($a) $a['art'][0] = $a['art'][0].PadRight(65); $a['mask'][0] = $a['mask'][0].PadRight(65) }; Expected = 'art: 65 columns, more than 64' }
         @{ Case = 'art taller than 30 rows'; Change = { param($a) $a['art'] = @($a['art']) + @(' ') * 20; $a['mask'] = @($a['mask']) + @(' ') * 20 }; Expected = 'art: 31 rows, more than 30' }
+        @{ Case = 'a tint that is not one of the four'; Change = { param($a) $a['palette']['m'] = [ordered]@{ tint = 'os-bright' } }; Expected = "palette 'm'.tint: one of os, os-light, os-dark, os-fill" }
+        @{ Case = 'a tint with a colour of its own'; Change = { param($a) $a['palette']['m'] = [ordered]@{ tint = 'os'; rgb = '#FFFFFF' } }; Expected = "palette 'm': a tint takes its colours from the OS; leave out rgb, from and to" }
     ) {
         $problems = @(InModuleScope UsaBanner -Parameters @{ Change = $Change } {
                 param($Change)

@@ -18,6 +18,10 @@ function Show-UsaBannerArt {
     | none      | the plain ASCII art, exactly as shown before login   |
     +-----------+------------------------------------------------------+
 
+    Art drawn in the OS colour takes this host's: Windows blue, Ubuntu
+    orange, or a neutral grey on any other system. -Os draws it in another
+    OS's colour instead.
+
     With -List, one line per piece instead: its name, its folder (base for
     ours, apps for another owner's logo, drawn by us), its size in columns by
     rows, its title, who drew it (and whose logo it is), and its licence.
@@ -28,12 +32,17 @@ function Show-UsaBannerArt {
     The art to draw; -List shows what there is.
     .PARAMETER ColorMode
     One of the modes in the table; auto by default.
+    .PARAMETER Os
+    Whose colour art drawn in the OS colour takes: windows, ubuntu or linux
+    (any other system); auto, the default, is this host's.
     .PARAMETER List
     List every piece of art instead of drawing one.
     .EXAMPLE
     Show-UsaBannerArt
     .EXAMPLE
     Show-UsaBannerArt -Name rabbit -ColorMode 256
+    .EXAMPLE
+    Show-UsaBannerArt -Name server -Os ubuntu
     .EXAMPLE
     Show-UsaBannerArt -List
     #>
@@ -47,6 +56,10 @@ function Show-UsaBannerArt {
         [Parameter(ParameterSetName = 'Draw')]
         [ValidateSet('auto', 'truecolor', '256', '16', 'none')]
         [string]$ColorMode = 'auto',
+
+        [Parameter(ParameterSetName = 'Draw')]
+        [ValidateSet('auto', 'windows', 'ubuntu', 'linux')]
+        [string]$Os = 'auto',
 
         [Parameter(Mandatory, ParameterSetName = 'List')]
         [switch]$List
@@ -69,6 +82,9 @@ function Show-UsaBannerArt {
             return
         }
         $art = Get-UsaBannerArtData -Name $Name
+        $artOs = $Os
+        if ($artOs -eq 'auto') { $artOs = Get-UsaBannerHostOs }
+        $art = Resolve-UsaBannerArtTint -Art $art -Os $artOs
         $mode = Resolve-UsaBannerColorMode -Requested $ColorMode
         ConvertTo-UsaBannerArtText -Art $art -ColorMode $mode
     }
