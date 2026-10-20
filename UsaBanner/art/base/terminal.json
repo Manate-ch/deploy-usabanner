@@ -1,0 +1,65 @@
+{
+  "name": "terminal",
+  "title": "A terminal window",
+  "artist": "Claude, for UsagiTools",
+  "licence": "MIT",
+  "source": "drawn for UsaBanner V1 (M1), picked from a gallery of candidates on 2026-10-20",
+  "art": [
+    ".----------------------------.",
+    "| >_ shell            _ [] x |",
+    "|----------------------------|",
+    "| $ ssh contoso-web01        |",
+    "|   Welcome to Contoso       |",
+    "| $ _                        |",
+    "'----------------------------'"
+  ],
+  "mask": [
+    "ffffffffffffffffffffffffffffff",
+    "f hh hhhhh            w ww x f",
+    "ffffffffffffffffffffffffffffff",
+    "f p ccc ccccccccccccc        f",
+    "f   mmmmmmm mm mmmmmmm       f",
+    "f p u                        f",
+    "ffffffffffffffffffffffffffffff"
+  ],
+  "palette": {
+    "f": {
+      "label": "window frame: the OS colour",
+      "tint": "os"
+    },
+    "h": {
+      "label": "the window's title",
+      "rgb": "#F3F6FA",
+      "basic": "bright-white"
+    },
+    "w": {
+      "label": "minimise and maximise",
+      "rgb": "#7D8794",
+      "basic": "bright-black"
+    },
+    "x": {
+      "label": "close",
+      "rgb": "#FF5F57",
+      "basic": "bright-red"
+    },
+    "p": {
+      "label": "prompts",
+      "rgb": "#3DDC84",
+      "basic": "bright-green"
+    },
+    "c": {
+      "label": "the command typed",
+      "rgb": "#F3F6FA",
+      "basic": "bright-white"
+    },
+    "m": {
+      "label": "the banner's welcome line: a light shade of the OS colour",
+      "tint": "os-light"
+    },
+    "u": {
+      "label": "the cursor",
+      "rgb": "#3DDC84",
+      "basic": "bright-green"
+    }
+  }
+}

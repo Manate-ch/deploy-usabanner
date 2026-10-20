@@ -20,9 +20,11 @@
 #   | fill    | optional: the class of the cells inside the shape, and   |
 #   |         | the character they get in colour (a space without)       |
 #   | palette | per class: rgb, one colour; or from and to, a gradient   |
-#   |         | down the rows; sheen, true to shade it; basic, its       |
-#   |         | 16-colour name. A class with no colour keys is drawn in  |
-#   |         | the terminal's own colour                                |
+#   |         | down the rows; or tint, the host's OS colour or a shade  |
+#   |         | of it: os, os-light, os-dark or os-fill (Tint.ps1);      |
+#   |         | sheen, true to shade it; basic, its 16-colour name. A    |
+#   |         | class with no colour keys is drawn in the terminal's     |
+#   |         | own colour                                               |
 #   | sheen   | peak and drop, and regions: rows and cols as [first,     |
 #   |         | last], with a middle column and a half-width             |
 #   +---------+----------------------------------------------------------+
@@ -101,8 +103,9 @@ function Test-UsaBannerArtData {
     - a fill-class cell is a space in the art; the fill character is one
       printable character, not a space;
     - every class in the mask has a palette entry. Colours are #RRGGBB; a
-      gradient has both from and to, and not rgb as well; basic is one of
-      the 16 names in $script:UsaBasicSgr;
+      gradient has both from and to, and not rgb as well; a tint is one of
+      $script:UsaTintNames, with no rgb, from or to beside it; basic is one
+      of the 16 names in $script:UsaBasicSgr;
     - each sheen region has rows and cols as [first, last], a middle, and a
       half-width above 0, and the sheen has a peak and a drop.
     #>
@@ -170,6 +173,10 @@ function Test-UsaBannerArtData {
         if (-not $palette.ContainsKey($class)) { "palette: no entry for class '$class'"; continue }
         $entry = $palette[$class]
         if ($entry -isnot [System.Collections.IDictionary]) { "palette '$class': not an object"; continue }
+        if ($entry.Contains('tint')) {
+            if ([string]$entry['tint'] -cnotin $script:UsaTintNames) { "palette '$class'.tint: one of $($script:UsaTintNames -join ', ')" }
+            if ($entry.Contains('rgb') -or $entry.Contains('from') -or $entry.Contains('to')) { "palette '$class': a tint takes its colours from the OS; leave out rgb, from and to" }
+        }
         foreach ($key in 'rgb', 'from', 'to') {
             if ($entry.Contains($key) -and [string]$entry[$key] -notmatch '^#[0-9A-Fa-f]{6}$') { "palette '$class'.${key}: write colours as #RRGGBB" }
         }

@@ -1,0 +1,69 @@
+{
+  "name": "server",
+  "title": "A server",
+  "artist": "Claude, for UsagiTools",
+  "licence": "MIT",
+  "source": "drawn for UsaBanner V1 (M1), picked from a gallery of candidates on 2026-10-20",
+  "art": [
+    "   .-----------.",
+    "  /           /|",
+    " /___________/ |",
+    " | [_______] | |",
+    " | [_______] | |",
+    " |           | |",
+    " | ::::::::: | |",
+    " | ::::::::: | |",
+    " | ::::::::: | |",
+    " |           | |",
+    " |   (O)  o  | /",
+    " |___________|/ "
+  ],
+  "mask": [
+    "   ttttttttttttt",
+    "  t           ts",
+    " ttttttttttttt s",
+    " f bbbbbbbbb f s",
+    " f bbbbbbbbb f s",
+    " f           f s",
+    " f vvvvvvvvv f s",
+    " f vvvvvvvvv f s",
+    " f vvvvvvvvv f s",
+    " f           f s",
+    " f   ppp  l  f s",
+    " fffffffffffffs "
+  ],
+  "palette": {
+    "t": {
+      "label": "top and back edges: a light shade of the OS colour",
+      "tint": "os-light"
+    },
+    "s": {
+      "label": "side edges: a dark shade of the OS colour",
+      "tint": "os-dark"
+    },
+    "f": {
+      "label": "front edges: the OS colour",
+      "tint": "os"
+    },
+    "b": {
+      "label": "drive bays",
+      "rgb": "#C9CED6",
+      "basic": "white"
+    },
+    "v": {
+      "label": "vent grille",
+      "rgb": "#7D8794",
+      "basic": "bright-black"
+    },
+    "p": {
+      "label": "power button",
+      "rgb": "#F3F6FA",
+      "basic": "bright-white"
+    },
+    "l": {
+      "label": "power light",
+      "rgb": "#3DDC84",
+      "basic": "bright-green"
+    }
+  }
+}

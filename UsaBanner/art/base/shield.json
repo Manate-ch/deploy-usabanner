@@ -1,0 +1,52 @@
+{
+  "name": "shield",
+  "title": "A shield",
+  "artist": "Claude, for UsagiTools",
+  "licence": "MIT",
+  "source": "drawn for UsaBanner V1 (M1), picked from a gallery of candidates on 2026-10-20",
+  "art": [
+    ".---------------.",
+    "|               |",
+    "|            /  |",
+    "|           /   |",
+    "|   \\      /    |",
+    "|    \\    /     |",
+    "|     \\  /      |",
+    " \\     \\/      / ",
+    "  \\           /  ",
+    "   '.       .'   ",
+    "     '-._.-'     "
+  ],
+  "mask": [
+    "fffffffffffffffff",
+    "f###############f",
+    "f############k##f",
+    "f###########k###f",
+    "f###k######k####f",
+    "f####k####k#####f",
+    "f#####k##k######f",
+    " f#####kk######f ",
+    "  f###########f  ",
+    "   ff#######ff   ",
+    "     fffffff     "
+  ],
+  "fill": {
+    "class": "#",
+    "char": ":"
+  },
+  "palette": {
+    "f": {
+      "label": "edge: the OS colour",
+      "tint": "os"
+    },
+    "#": {
+      "label": "inside: a dark shade of the OS colour, drawn as the fill character",
+      "tint": "os-fill"
+    },
+    "k": {
+      "label": "the tick",
+      "rgb": "#F3F6FA",
+      "basic": "bright-white"
+    }
+  }
+}
