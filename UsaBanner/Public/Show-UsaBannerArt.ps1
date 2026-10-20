@@ -1,8 +1,8 @@
 function Show-UsaBannerArt {
     <#
     .SYNOPSIS
-    Draws one of the module's pieces of art, in colour where the terminal
-    has it, or lists them all.
+    Draws one of the module's pieces of art, or a name in block letters, in
+    colour where the terminal has it; or lists the art there is.
     .DESCRIPTION
     Returns one string per line of the art, with the colour escapes in it;
     at the console the lines print as the picture.
@@ -22,6 +22,11 @@ function Show-UsaBannerArt {
     orange, or a neutral grey on any other system. -Os draws it in another
     OS's colour instead.
 
+    With -Text, a name set in block letters instead, such as the company's:
+    the font's glyphs side by side, in the welcome line's colours from left
+    to right. Lower case comes out in capitals, and a name may come out at
+    most 64 columns wide.
+
     With -List, one line per piece instead: its name, its folder (base for
     ours, apps for another owner's logo, drawn by us), its size in columns by
     rows, its title, who drew it (and whose logo it is), and its licence.
@@ -35,6 +40,10 @@ function Show-UsaBannerArt {
     .PARAMETER Os
     Whose colour art drawn in the OS colour takes: windows, ubuntu or linux
     (any other system); auto, the default, is this host's.
+    .PARAMETER Text
+    A name to set in block letters instead of drawing a piece of art.
+    .PARAMETER Font
+    The font for -Text; pixel, the default, is the one there is.
     .PARAMETER List
     List every piece of art instead of drawing one.
     .EXAMPLE
@@ -43,6 +52,8 @@ function Show-UsaBannerArt {
     Show-UsaBannerArt -Name rabbit -ColorMode 256
     .EXAMPLE
     Show-UsaBannerArt -Name server -Os ubuntu
+    .EXAMPLE
+    Show-UsaBannerArt -Text 'Contoso LLC'
     .EXAMPLE
     Show-UsaBannerArt -List
     #>
@@ -54,12 +65,21 @@ function Show-UsaBannerArt {
         [string]$Name = 'rabbit',
 
         [Parameter(ParameterSetName = 'Draw')]
+        [Parameter(ParameterSetName = 'Text')]
         [ValidateSet('auto', 'truecolor', '256', '16', 'none')]
         [string]$ColorMode = 'auto',
 
         [Parameter(ParameterSetName = 'Draw')]
         [ValidateSet('auto', 'windows', 'ubuntu', 'linux')]
         [string]$Os = 'auto',
+
+        [Parameter(Mandatory, ParameterSetName = 'Text')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Text,
+
+        [Parameter(ParameterSetName = 'Text')]
+        [ValidatePattern('^[a-z0-9][a-z0-9-]*$')]
+        [string]$Font = 'pixel',
 
         [Parameter(Mandatory, ParameterSetName = 'List')]
         [switch]$List
@@ -81,10 +101,16 @@ function Show-UsaBannerArt {
             }
             return
         }
-        $art = Get-UsaBannerArtData -Name $Name
-        $artOs = $Os
-        if ($artOs -eq 'auto') { $artOs = Get-UsaBannerHostOs }
-        $art = Resolve-UsaBannerArtTint -Art $art -Os $artOs
+        if ($PSCmdlet.ParameterSetName -eq 'Text') {
+            $fontData = Get-UsaBannerFontData -Name $Font
+            $art = ConvertTo-UsaBannerWordArt -Text $Text -Font $fontData
+        }
+        else {
+            $art = Get-UsaBannerArtData -Name $Name
+            $artOs = $Os
+            if ($artOs -eq 'auto') { $artOs = Get-UsaBannerHostOs }
+            $art = Resolve-UsaBannerArtTint -Art $art -Os $artOs
+        }
         $mode = Resolve-UsaBannerColorMode -Requested $ColorMode
         ConvertTo-UsaBannerArtText -Art $art -ColorMode $mode
     }

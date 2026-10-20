@@ -126,6 +126,8 @@ Describe 'the art rules' {
         @{ Case = 'art taller than 30 rows'; Change = { param($a) $a['art'] = @($a['art']) + @(' ') * 20; $a['mask'] = @($a['mask']) + @(' ') * 20 }; Expected = 'art: 31 rows, more than 30' }
         @{ Case = 'a tint that is not one of the four'; Change = { param($a) $a['palette']['m'] = [ordered]@{ tint = 'os-bright' } }; Expected = "palette 'm'.tint: one of os, os-light, os-dark, os-fill" }
         @{ Case = 'a tint with a colour of its own'; Change = { param($a) $a['palette']['m'] = [ordered]@{ tint = 'os'; rgb = '#FFFFFF' } }; Expected = "palette 'm': a tint takes its colours from the OS; leave out rgb, from and to" }
+        @{ Case = 'across that is not true or false'; Change = { param($a) $a['palette']['f']['across'] = 'yes' }; Expected = "palette 'f'.across: true or false" }
+        @{ Case = 'across with only one colour'; Change = { param($a) $a['palette']['m']['across'] = $true }; Expected = "palette 'm': across runs a gradient left to right, so it needs from and to, or a tint" }
     ) {
         $problems = @(InModuleScope UsaBanner -Parameters @{ Change = $Change } {
                 param($Change)

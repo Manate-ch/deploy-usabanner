@@ -20,11 +20,11 @@
 #   | fill    | optional: the class of the cells inside the shape, and   |
 #   |         | the character they get in colour (a space without)       |
 #   | palette | per class: rgb, one colour; or from and to, a gradient   |
-#   |         | down the rows; or tint, the host's OS colour or a shade  |
-#   |         | of it: os, os-light, os-dark or os-fill (Tint.ps1);      |
-#   |         | sheen, true to shade it; basic, its 16-colour name. A    |
-#   |         | class with no colour keys is drawn in the terminal's     |
-#   |         | own colour                                               |
+#   |         | down the rows (across: true, left to right instead); or  |
+#   |         | tint, the host's OS colour or a shade of it: os,         |
+#   |         | os-light, os-dark or os-fill (Tint.ps1); sheen, true to  |
+#   |         | shade it; basic, its 16-colour name. A class with no     |
+#   |         | colour keys is drawn in the terminal's own colour        |
 #   | sheen   | peak and drop, and regions: rows and cols as [first,     |
 #   |         | last], with a middle column and a half-width             |
 #   +---------+----------------------------------------------------------+
@@ -104,8 +104,9 @@ function Test-UsaBannerArtData {
       printable character, not a space;
     - every class in the mask has a palette entry. Colours are #RRGGBB; a
       gradient has both from and to, and not rgb as well; a tint is one of
-      $script:UsaTintNames, with no rgb, from or to beside it; basic is one
-      of the 16 names in $script:UsaBasicSgr;
+      $script:UsaTintNames, with no rgb, from or to beside it; across is
+      true or false, and true only with from and to or a tint; basic is
+      one of the 16 names in $script:UsaBasicSgr;
     - each sheen region has rows and cols as [first, last], a middle, and a
       half-width above 0, and the sheen has a peak and a drop.
     #>
@@ -177,6 +178,10 @@ function Test-UsaBannerArtData {
             if ([string]$entry['tint'] -cnotin $script:UsaTintNames) { "palette '$class'.tint: one of $($script:UsaTintNames -join ', ')" }
             if ($entry.Contains('rgb') -or $entry.Contains('from') -or $entry.Contains('to')) { "palette '$class': a tint takes its colours from the OS; leave out rgb, from and to" }
         }
+        if ($entry.Contains('across')) {
+            if ($entry['across'] -isnot [bool]) { "palette '$class'.across: true or false" }
+            elseif ($entry['across'] -and -not ($entry.Contains('from') -or $entry.Contains('tint'))) { "palette '$class': across runs a gradient left to right, so it needs from and to, or a tint" }
+        }
         foreach ($key in 'rgb', 'from', 'to') {
             if ($entry.Contains($key) -and [string]$entry[$key] -notmatch '^#[0-9A-Fa-f]{6}$') { "palette '$class'.${key}: write colours as #RRGGBB" }
         }
@@ -230,11 +235,12 @@ function Get-UsaBannerCellRgb {
     The 24-bit colour of one cell, or nothing for a class drawn in the
     terminal's own colour.
     .DESCRIPTION
-    In:  the class's palette entry, the cell's row, the art's row count, and
-         the cell's sheen factor.
+    In:  the class's palette entry, the cell's row and column, the art's row
+         count and widest row, and the cell's sheen factor.
     Out: three channels, 0-255, or nothing.
     rgb is one colour. from and to are a gradient down the rows, at
-    t = row / (rows - 1). With sheen true, each channel is multiplied by the
+    t = row / (rows - 1); with across true, left to right instead, at
+    t = col / (cols - 1). With sheen true, each channel is multiplied by the
     factor. Each channel is then rounded half to even ([Math]::Round's own
     rule) and capped at 255. docs/rabbit.svg was drawn with the same
     arithmetic, and a test compares the two.
@@ -245,6 +251,8 @@ function Get-UsaBannerCellRgb {
         [Parameter(Mandatory)][System.Collections.IDictionary]$Entry,
         [int]$Row,
         [int]$Rows,
+        [int]$Col,
+        [int]$Cols,
         [double]$Sheen = 1.0
     )
     if ($Entry.Contains('rgb')) {
@@ -256,7 +264,11 @@ function Get-UsaBannerCellRgb {
         $to = @(ConvertFrom-UsaBannerHex -Hex $Entry['to'])
     }
     else { return }
-    $t = if ($Rows -gt 1) { $Row / ($Rows - 1) } else { 0.0 }
+    $t = if ($Entry['across']) {
+        if ($Cols -gt 1) { $Col / ($Cols - 1) } else { 0.0 }
+    }
+    elseif ($Rows -gt 1) { $Row / ($Rows - 1) }
+    else { 0.0 }
     $factor = if ($Entry['sheen']) { $Sheen } else { 1.0 }
     foreach ($i in 0..2) {
         [int][Math]::Min(255.0, [Math]::Round(($from[$i] + ($to[$i] - $from[$i]) * $t) * $factor))
@@ -292,6 +304,7 @@ function ConvertTo-UsaBannerArtText {
         return
     }
     $mask = @($Art['mask'])
+    $widest = ($rows | ForEach-Object { ([string]$_).Length } | Measure-Object -Maximum).Maximum
     $reset = "$script:UsaEsc[0m"
     $fillClass = ''
     $fillChar = ' '
@@ -324,7 +337,7 @@ function ConvertTo-UsaBannerArtText {
                 }
                 else {
                     $factor = Get-UsaBannerSheen -Sheen $Art['sheen'] -Row $row -Col $col
-                    $rgb = @(Get-UsaBannerCellRgb -Entry $entry -Row $row -Rows $rows.Count -Sheen $factor)
+                    $rgb = @(Get-UsaBannerCellRgb -Entry $entry -Row $row -Rows $rows.Count -Col $col -Cols $widest -Sheen $factor)
                     if ($rgb.Count -eq 3) { $sgr = ConvertTo-UsaBannerSgr -Rgb $rgb -Mode $ColorMode }
                 }
             }

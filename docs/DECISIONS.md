@@ -206,6 +206,12 @@ parts take the host's OS colour: Windows blue, Ubuntu orange, and a neutral
 grey on any other system. `Show-UsaBannerArt -Os` draws them in another OS's
 colour.
 
+The company name is set in the Pixel font (`fonts/pixel.json`, also picked
+from the gallery): every capital and digit, and the punctuation names tend
+to use, five rows high, in the welcome line's colours from left to right.
+`Show-UsaBannerArt -Text` sets one. A name wider than 64 columns, the most
+any art may be, is refused for now; M2 decides what a banner shows instead.
+
 ## D4. AGENTS.md
 
 AGENTS.md is a real convention: a Markdown file at the repository root that
