@@ -1,6 +1,7 @@
 # Font.ps1 - the block-letter fonts, and a name set in one as art: "the
 # company name in block letters from a font of our own" (docs/DECISIONS.md,
-# D3).
+# D3). A name too wide for the Pixel font takes the Small font, on two lines
+# if it must, then spaced capitals, then itself: Get-UsaBannerNameForm.
 #
 # A font file is fonts\<name>.json in the module. It holds:
 #
@@ -93,22 +94,18 @@ function Test-UsaBannerFontData {
     }
 }
 
-function ConvertTo-UsaBannerWordArt {
+function Get-UsaBannerFontRows {
     <#
     .SYNOPSIS
-    A name set in a font, as art the module's renderer draws.
+    A text's rows in one font: its glyphs side by side, gap columns apart.
     .DESCRIPTION
     In:  the text, and a checked font (Get-UsaBannerFontData).
-    Out: art: the font's title, artist, licence and source; the glyphs' rows
-         side by side, gap columns apart; a mask with every stroke in class
-         w; and w's colours, today's welcome line from #78C8FF to #FFC850,
-         left to right.
-    A lower-case letter is drawn as its capital. Throws when the font has no
-    glyph for a character, naming each, and when the name comes out wider
-    than 64 columns, the most any art may be.
+    Out: one string per row of the font; a lower-case letter is drawn as its
+         capital.
+    Throws when the font has no glyph for a character, naming each.
     #>
     [CmdletBinding()]
-    [OutputType([System.Collections.IDictionary])]
+    [OutputType([string])]
     param(
         [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Text,
         [Parameter(Mandatory)][System.Collections.IDictionary]$Font
@@ -122,21 +119,169 @@ function ConvertTo-UsaBannerWordArt {
         throw "UsaBanner: the $fontName font has no glyph for $(@($missing | ForEach-Object { "'$_'" }) -join ', '). It has A-Z, 0-9, a space and: $others"
     }
     $gap = ' ' * [int]$Font['gap']
-    $rows = [string[]]@(for ($r = 0; $r -lt [int]$Font['height']; $r++) {
-            (@(foreach ($ch in $upper.ToCharArray()) { [string]@($glyphs[[string]$ch])[$r] }) -join $gap)
-        })
-    $width = $rows[0].Length
-    if ($width -gt 64) { throw "UsaBanner: '$Text' comes out $width columns wide in the $fontName font; art may be at most 64." }
-    $mask = [string[]]@(foreach ($row in $rows) { $row -replace '[^ ]', 'w' })
+    for ($r = 0; $r -lt [int]$Font['height']; $r++) {
+        (@(foreach ($ch in $upper.ToCharArray()) { [string]@($glyphs[[string]$ch])[$r] }) -join $gap)
+    }
+}
+
+function New-UsaBannerNameArtData {
+    <#
+    .SYNOPSIS
+    Rows of a name as art the module's renderer draws.
+    .DESCRIPTION
+    In:  the rows, and the art's title, artist, licence and source.
+    Out: art: a mask with every stroke in class w, and w's colours, today's
+         welcome line from #78C8FF to #FFC850, left to right.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.IDictionary])]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string[]]$Rows,
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)][string]$Artist,
+        [Parameter(Mandatory)][string]$Licence,
+        [Parameter(Mandatory)][string]$Source
+    )
+    $mask = [string[]]@(foreach ($row in $Rows) { $row -replace '[^ ]', 'w' })
     $palette = [System.Collections.Specialized.OrderedDictionary]::new([StringComparer]::Ordinal)
     $palette['w'] = [ordered]@{ label = 'the letters, in the welcome line''s colours'; from = '#78C8FF'; to = '#FFC850'; across = $true; basic = 'bright-blue' }
     [ordered]@{
-        title   = $Text
-        artist  = $Font['artist']
-        licence = $Font['licence']
-        source  = "set in the $fontName font"
-        art     = $rows
+        title   = $Title
+        artist  = $Artist
+        licence = $Licence
+        source  = $Source
+        art     = $Rows
         mask    = $mask
         palette = $palette
     }
+}
+
+function ConvertTo-UsaBannerWordArt {
+    <#
+    .SYNOPSIS
+    A name set in one font, as art the module's renderer draws.
+    .DESCRIPTION
+    In:  the text, and a checked font (Get-UsaBannerFontData).
+    Out: art: the font's title, artist, licence and source, and the rows of
+         Get-UsaBannerFontRows in the welcome line's colours.
+    Throws when the font has no glyph for a character, naming each, and when
+    the name comes out wider than 64 columns, the most any art may be.
+    ConvertTo-UsaBannerNameArt is the one that finds a form that fits.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.IDictionary])]
+    param(
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Text,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Font
+    )
+    $fontName = if ($Font['name']) { [string]$Font['name'] } else { [string]$Font['title'] }
+    $rows = [string[]]@(Get-UsaBannerFontRows -Text $Text -Font $Font)
+    $width = $rows[0].Length
+    if ($width -gt 64) { throw "UsaBanner: '$Text' comes out $width columns wide in the $fontName font; art may be at most 64." }
+    New-UsaBannerNameArtData -Rows $rows -Title $Text -Artist ([string]$Font['artist']) -Licence ([string]$Font['licence']) -Source "set in the $fontName font"
+}
+
+function Get-UsaBannerNameForm {
+    <#
+    .SYNOPSIS
+    How a company name is set to fit a width.
+    .DESCRIPTION
+    The first form, in this order, that fits the width (picked in the M2
+    gallery, docs/DECISIONS.md D3):
+
+    +--------+---------------------------------------------------------+
+    | Form   | The name                                                |
+    +--------+---------------------------------------------------------+
+    | pixel  | in the Pixel font, on one line                          |
+    | small  | in the Small font, on one line                          |
+    | small2 | in the Small font on two lines, broken at the space     |
+    |        | that leaves the wider line narrowest, the lines centred |
+    |        | over each other with a blank row between                |
+    | spaced | in capitals, a space after each character               |
+    | plain  | as written                                              |
+    +--------+---------------------------------------------------------+
+
+    A font's forms are passed over when it has no glyph for a character of
+    the name. plain is given even when it is wider than the width: the name
+    is never shorter than itself.
+    Out: @{ Form; Rows; Font }, Font the font's data for pixel, small and
+         small2, $null otherwise.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name,
+        [int]$Width = $script:UsaBannerWidth
+    )
+    $upper = $Name.ToUpperInvariant()
+    $fits = {
+        # In:  rows
+        # Out: $true when the widest is no wider than -Width
+        # Why: every form is tried against the same width
+        param([string[]]$Rows)
+        ($Rows | Measure-Object -Property Length -Maximum).Maximum -le $Width
+    }
+    $hasGlyphs = {
+        # In:  a font
+        # Out: $true when it has a glyph for every character of the name
+        # Why: a form in a font missing one is passed over, not an error
+        param([System.Collections.IDictionary]$Font)
+        @($upper.ToCharArray() | Where-Object { -not $Font['glyphs'].Contains([string]$_) }).Count -eq 0
+    }
+    foreach ($fontName in 'pixel', 'small') {
+        $font = Get-UsaBannerFontData -Name $fontName
+        if (-not (& $hasGlyphs $font)) { continue }
+        $rows = [string[]]@(Get-UsaBannerFontRows -Text $Name -Font $font)
+        if (& $fits $rows) { return @{ Form = $fontName; Rows = $rows; Font = $font } }
+    }
+    $small = Get-UsaBannerFontData -Name 'small'
+    $words = @($Name -split ' ' | Where-Object { $_ })
+    if ($words.Count -gt 1 -and (& $hasGlyphs $small)) {
+        $best = $null
+        for ($i = 1; $i -lt $words.Count; $i++) {
+            $top = [string[]]@(Get-UsaBannerFontRows -Text ($words[0..($i - 1)] -join ' ') -Font $small)
+            $bottom = [string[]]@(Get-UsaBannerFontRows -Text ($words[$i..($words.Count - 1)] -join ' ') -Font $small)
+            $wider = [Math]::Max($top[0].Length, $bottom[0].Length)
+            if ($wider -le $Width -and ($null -eq $best -or $wider -lt $best.Wider)) { $best = @{ Wider = $wider; Top = $top; Bottom = $bottom } }
+        }
+        if ($best) {
+            $rows = [System.Collections.Generic.List[string]]::new()
+            foreach ($part in @($best.Top), @($best.Bottom)) {
+                if ($rows.Count -gt 0) { $rows.Add('') }
+                $left = ' ' * [int][Math]::Floor(($best.Wider - $part[0].Length) / 2)
+                foreach ($row in $part) { $rows.Add($left + $row) }
+            }
+            return @{ Form = 'small2'; Rows = $rows.ToArray(); Font = $small }
+        }
+    }
+    $spaced = [string[]]@(($upper.ToCharArray() -join ' '))
+    if (& $fits $spaced) { return @{ Form = 'spaced'; Rows = $spaced; Font = $null } }
+    @{ Form = 'plain'; Rows = [string[]]@($Name); Font = $null }
+}
+
+function ConvertTo-UsaBannerNameArt {
+    <#
+    .SYNOPSIS
+    The company name as the banner sets it, as art the module's renderer
+    draws.
+    .DESCRIPTION
+    In:  the name, and the columns it may take (64, the widest art, by
+         default).
+    Out: art in the form Get-UsaBannerNameForm finds: in a font, with that
+         font's artist and licence; in spaced capitals or as written, with
+         the module's own.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.IDictionary])]
+    param(
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Name,
+        [int]$Width = $script:UsaBannerWidth
+    )
+    $form = Get-UsaBannerNameForm -Name $Name -Width $Width
+    if ($form.Font) {
+        $fontName = [string]$form.Font['name']
+        return New-UsaBannerNameArtData -Rows $form.Rows -Title $Name -Artist ([string]$form.Font['artist']) -Licence ([string]$form.Font['licence']) -Source "set in the $fontName font$(if ($form.Form -eq 'small2') { ', on two lines' })"
+    }
+    $how = if ($form.Form -eq 'spaced') { 'in spaced capitals' } else { 'as written' }
+    New-UsaBannerNameArtData -Rows $form.Rows -Title $Name -Artist 'UsagiTools' -Licence 'MIT' -Source "the name ${how}: no font fits it"
 }

@@ -212,6 +212,15 @@ to use, five rows high, in the welcome line's colours from left to right.
 `Show-UsaBannerArt -Text` sets one. A name wider than 64 columns, the most
 any art may be, is refused for now; M2 decides what a banner shows instead.
 
+**Decided in M2 (2026-10-21), from the gallery:** a name too wide for the
+Pixel font (about ten characters; "Contoso LLC" is 63 columns) takes the
+Small font (`fonts/small.json`), three rows of lines and bars drawn for this.
+Next it takes two lines of Small, broken at the space that leaves the wider
+line narrowest; then spaced capitals; then the name as written, never cut.
+A font with no glyph for one of the name's characters is passed over.
+"Contoso Systems" fits Small on one line, and "Contoso Pharmaceuticals" on
+two. `tests/frames` holds each sample name's frame.
+
 The logos in `art/apps` are Tux (sitting), the Windows logo and the Ubuntu
 Circle of Friends, also picked from the gallery, each naming its owner and
 carrying its line in `UsaBanner/NOTICE` and the README. Tux and the Circle

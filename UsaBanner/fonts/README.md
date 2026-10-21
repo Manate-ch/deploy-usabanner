@@ -9,6 +9,14 @@ D3). Each is a JSON file named for the font, holding:
   ASCII. Every capital, every digit and a space are required; a lower-case
   letter is drawn as its capital.
 
-`Show-UsaBannerArt -Text 'Contoso LLC'` sets a name in the Pixel font, in
-the welcome line's colours from left to right. A name may come out at most
-64 columns wide, as any art may.
+There are two:
+
+- **Pixel** (`pixel.json`): five rows, the company name's first choice.
+- **Small** (`small.json`): three rows of lines and bars, for a name too wide
+  for Pixel.
+
+`Show-UsaBannerArt -Text 'Contoso LLC'` sets a name as the banner does, in
+the welcome line's colours from left to right: in Pixel when it fits 64
+columns; else in Small, on two lines if it must; else in spaced capitals;
+else as written. `-Font pixel` or `-Font small` sets it in that font alone,
+and then a name may come out at most 64 columns wide, as any art may.

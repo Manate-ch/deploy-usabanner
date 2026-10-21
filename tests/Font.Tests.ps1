@@ -10,6 +10,7 @@ BeforeDiscovery {
 BeforeAll {
     $repoRoot = Split-Path $PSScriptRoot -Parent
     Import-Module (Join-Path $repoRoot 'UsaBanner' 'UsaBanner.psd1') -Force
+    . (Join-Path $PSScriptRoot 'Golden.ps1')
     $esc = [char]27
 }
 
@@ -68,13 +69,13 @@ Describe 'a name in block letters' {
         (@(Show-UsaBannerArt -Text 'hi there' -ColorMode none) -join "`n") | Should -BeExactly (@(Show-UsaBannerArt -Text 'HI THERE' -ColorMode none) -join "`n")
     }
 
-    It 'fits Contoso LLC into 63 columns, and refuses a name wider than 64' {
+    It 'fits Contoso LLC into 63 columns, and in one font named, refuses a name wider than 64' {
         @(Show-UsaBannerArt -Text 'Contoso LLC' -ColorMode none)[0].Length | Should -Be 63
-        { Show-UsaBannerArt -Text 'Contoso Holdings' -ColorMode none } | Should -Throw "*'Contoso Holdings' comes out 93 columns wide in the pixel font; art may be at most 64.*"
+        { Show-UsaBannerArt -Text 'Contoso Holdings' -Font pixel -ColorMode none } | Should -Throw "*'Contoso Holdings' comes out 93 columns wide in the pixel font; art may be at most 64.*"
     }
 
-    It 'names each character the font has no glyph for' {
-        { Show-UsaBannerArt -Text 'Cafe ~ #1' -ColorMode none } | Should -Throw "*the pixel font has no glyph for '~', '#'. It has A-Z, 0-9, a space and: *"
+    It 'in one font named, names each character it has no glyph for' {
+        { Show-UsaBannerArt -Text 'Cafe ~ #1' -Font pixel -ColorMode none } | Should -Throw "*the pixel font has no glyph for '~', '#'. It has A-Z, 0-9, a space and: *"
     }
 
     It 'colours the letters left to right, from the welcome line''s blue to its gold' {
@@ -96,6 +97,60 @@ Describe 'a name in block letters' {
     }
 
     It 'names the fonts there are when asked for one that is not' {
-        { Show-UsaBannerArt -Text 'HI' -Font 'gothic' } | Should -Throw "*there is no font called 'gothic'. There is: *pixel*"
+        { Show-UsaBannerArt -Text 'HI' -Font 'gothic' } | Should -Throw "*there is no font called 'gothic'. There is: pixel, small.*"
+    }
+}
+
+Describe 'a long company name' {
+    # The order picked in the M2 gallery (D3): Pixel, the Small font, the
+    # Small font on two lines, spaced capitals, the name as written.
+    It '<Name> comes out <Form>, as its golden frame shows' -ForEach @(
+        @{ Name = 'Contoso'; Form = 'pixel' }
+        @{ Name = 'Contoso LLC'; Form = 'pixel' }
+        @{ Name = 'Contoso Systems'; Form = 'small' }
+        @{ Name = 'Contoso Pharmaceuticals'; Form = 'small2' }
+        @{ Name = 'Contoso Regional Medical Center'; Form = 'small2' }
+        @{ Name = 'Contoso Wholesale Electrical Distributors'; Form = 'plain' }
+    ) {
+        (InModuleScope UsaBanner -Parameters @{ Name = $Name } { param($Name) Get-UsaBannerNameForm -Name $Name }).Form | Should -BeExactly $Form
+        $lines = @(Show-UsaBannerArt -Text $Name -ColorMode none)
+        foreach ($line in $lines) { $line.Length | Should -BeLessOrEqual 64 -Because $line }
+        Assert-UsaBannerGoldenFrame -Name ('name-' + ($Name.ToLowerInvariant() -replace '[^a-z0-9]+', '-')) -Lines $lines
+    }
+
+    It 'breaks two lines at the space that leaves the wider line narrowest, and centres them' {
+        $form = InModuleScope UsaBanner { Get-UsaBannerNameForm -Name 'Contoso Regional Medical Center' }
+        $small = InModuleScope UsaBanner { Get-UsaBannerFontData -Name small }
+        $top = @(InModuleScope UsaBanner -Parameters @{ Font = $small } { param($Font) Get-UsaBannerFontRows -Text 'CONTOSO REGIONAL' -Font $Font })
+        $bottom = @(InModuleScope UsaBanner -Parameters @{ Font = $small } { param($Font) Get-UsaBannerFontRows -Text 'MEDICAL CENTER' -Font $Font })
+        $left = ' ' * [Math]::Floor(($top[0].Length - $bottom[0].Length) / 2)
+        $form.Rows | Should -BeExactly (@($top) + @('') + @($bottom | ForEach-Object { $left + $_ }))
+    }
+
+    It 'fits the name to the width it is given: beside the art, 44 columns, Contoso LLC takes the Small font' {
+        (InModuleScope UsaBanner { Get-UsaBannerNameForm -Name 'Contoso LLC' -Width 44 }).Form | Should -BeExactly 'small'
+    }
+
+    It 'passes over a font with no glyph for a character: Contoso #1 comes out in spaced capitals' {
+        $form = InModuleScope UsaBanner { Get-UsaBannerNameForm -Name 'Contoso #1' }
+        $form.Form | Should -BeExactly 'spaced'
+        $form.Rows | Should -BeExactly @('C O N T O S O   # 1')
+    }
+
+    It 'gives the name as written, never cut, when nothing else fits' {
+        $name = 'Contoso Wholesale Electrical Distributors of the Great Lakes'
+        $form = InModuleScope UsaBanner -Parameters @{ Name = $name } { param($Name) Get-UsaBannerNameForm -Name $Name }
+        $form.Form | Should -BeExactly 'plain'
+        $form.Rows | Should -BeExactly @($name)
+    }
+
+    It 'makes art that keeps every art rule, in every form' {
+        foreach ($name in 'Contoso', 'Contoso Systems', 'Contoso Pharmaceuticals', 'Contoso #1', 'Contoso Wholesale Electrical Distributors') {
+            InModuleScope UsaBanner -Parameters @{ Name = $name } { param($Name) Test-UsaBannerArtData -Art (ConvertTo-UsaBannerNameArt -Name $Name) } | Should -BeNullOrEmpty -Because $name
+        }
+    }
+
+    It 'colours two lines as one name, from the welcome line''s blue to its gold, as the golden frame shows' {
+        Assert-UsaBannerGoldenFrame -Name 'name-contoso-pharmaceuticals-truecolor' -Lines @(Show-UsaBannerArt -Text 'Contoso Pharmaceuticals' -ColorMode truecolor)
     }
 }
