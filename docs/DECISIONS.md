@@ -395,6 +395,16 @@ set is the fallback.
 default is **Classic**; the interactive default is **Rounded**, falling back to
 Classic.
 
+**Drawn in M2 (2026-10-21).** All fourteen sets are in
+`UsaBanner/Private/Frame.ps1`, each marked as right in the M2 gallery. The
+Unicode ones are written as code points, so the module stays ASCII, and Block
+is the full block, which joins up. A Unicode set asked for where the text
+shows before login draws as Classic. The title cap moved to where you asked
+for a kaomoji: `border.cap`, an ASCII face such as `(^_^)`, sits centred in
+the top line between the title and the hint. ASCII keeps it whole before
+login, where Unicode kaomoji would break the box for the reason above.
+`tests/frames` holds each set's box as a golden frame.
+
 ## D7. Colour presets and the preview
 
 | Preset | What | Works on |
@@ -488,6 +498,15 @@ WILL BE REPORTED TO LAW ENFORCEMENT.
   64-column box.
 
 **Decided:** all five as drafted, and **L3** is the default.
+
+**Drawn in M2 (2026-10-21).** The box's top line keeps today's shape, picked
+from the M2 gallery: the text's title on the left and "Log in for more
+information" on the right. The title is the word the text opens with,
+WARNING (L3, L4) or ATTENTION (L5), and the text then drops it; L1 and L2
+open with none, so they get HELLO and PRIVATE. Text you write yourself keeps
+its lines as paragraphs, and takes its title from an opening word in capitals
+with a colon, such as "PRIVATE PROPERTY:", or else NOTICE.
+`tests/Legal.Tests.ps1` holds the templates to the text above, word for word.
 
 ## D9. Host name and IP before login
 

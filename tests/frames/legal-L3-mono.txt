@@ -1,0 +1,7 @@
+╭─ ⎋[1mWARNING⎋[0m ─────── ⎋[1m(^_^)⎋[0m ──────── Log in for more information ─╮
+│                                                              │
+│  This system is for authorized use only. Activity on this    │
+│  system is monitored and recorded. Unauthorized access or    │
+│  use is prohibited.                                          │
+│                                                              │
+╰──────────────────────────────────────────────────────────────╯
