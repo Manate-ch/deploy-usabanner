@@ -1,0 +1,7 @@
++- PRIVATE PROPERTY ------------- Log in for more information -+
+|                                                              |
+|  Contoso staff only.                                         |
+|                                                              |
+|  Questions go to the help desk at example.com.               |
+|                                                              |
++--------------------------------------------------------------+

@@ -1,0 +1,7 @@
+⎋[94m╭─⎋[0m ⎋[1;93mWARNING⎋[0m ⎋[94m───────⎋[0m ⎋[1;93m(^_^)⎋[0m ⎋[94m────────⎋[0m ⎋[90mLog in for more information⎋[0m ⎋[94m─╮⎋[0m
+⎋[94m│⎋[0m                                                              ⎋[94m│⎋[0m
+⎋[94m│⎋[0m  This system is for authorized use only. Activity on this    ⎋[94m│⎋[0m
+⎋[94m│⎋[0m  system is monitored and recorded. Unauthorized access or    ⎋[94m│⎋[0m
+⎋[94m│⎋[0m  use is prohibited.                                          ⎋[94m│⎋[0m
+⎋[94m│⎋[0m                                                              ⎋[94m│⎋[0m
+⎋[94m╰──────────────────────────────────────────────────────────────╯⎋[0m

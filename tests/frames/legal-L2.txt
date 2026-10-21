@@ -1,0 +1,6 @@
++- PRIVATE ---------------------- Log in for more information -+
+|                                                              |
+|  Private system. Authorized users only. If you are not       |
+|  supposed to be here, please disconnect now.                 |
+|                                                              |
++--------------------------------------------------------------+

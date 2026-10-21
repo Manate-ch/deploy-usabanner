@@ -93,7 +93,7 @@
           "pattern": "^[!-~]$"
         },
         "cap": {
-          "description": "A label in the top line, such as an ASCII emoticon.",
+          "description": "A label centred in the top line, between the title and the hint: an ASCII face such as (^_^).",
           "$ref": "#/$defs/ascii",
           "maxLength": 16
         }

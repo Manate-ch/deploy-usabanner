@@ -1,0 +1,6 @@
++- HELLO ------------------------ Log in for more information -+
+|                                                              |
+|  Hey there. This is a private home machine. Please don't     |
+|  hack me, buddy.                                             |
+|                                                              |
++--------------------------------------------------------------+

@@ -1,0 +1,7 @@
+╭─ WARNING ────────────────────── Log in for more information ─╮
+│                                                              │
+│  This system is for authorized use only. Activity on this    │
+│  system is monitored and recorded. Unauthorized access or    │
+│  use is prohibited.                                          │
+│                                                              │
+╰──────────────────────────────────────────────────────────────╯

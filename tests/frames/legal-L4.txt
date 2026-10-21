@@ -1,0 +1,10 @@
++- WARNING ---------------------- Log in for more information -+
+|                                                              |
+|  AUTHORIZED USE ONLY. Unauthorized access to this computer   |
+|  system is prohibited and may be a crime under state and     |
+|  federal law, including the Computer Fraud and Abuse Act,    |
+|  18 U.S.C. 1030. All activity is monitored and logged, and   |
+|  evidence of unauthorized use may be given to law            |
+|  enforcement.                                                |
+|                                                              |
++--------------------------------------------------------------+
