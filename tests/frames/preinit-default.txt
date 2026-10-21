@@ -1,0 +1,20 @@
+    \e[93m.-----------.\e[0m
+   \e[93m/           /\e[31m|\e[0m
+  \e[93m/___________/ \e[31m|\e[0m     \e[94m####  ###  #   # #####  ###   ####  ### \e[0m
+  \e[33m| \e[37m[_______] \e[33m| \e[31m|\e[0m    \e[94m#     #   # ##  #   #   #   # #     #   #\e[0m
+  \e[33m| \e[37m[_______] \e[33m| \e[31m|\e[0m    \e[94m#     #   # # # #   #   #   #  ###  #   #\e[0m
+  \e[33m|           | \e[31m|\e[0m    \e[94m#     #   # #  ##   #   #   #     # #   #\e[0m
+  \e[33m| \e[90m::::::::: \e[33m| \e[31m|\e[0m     \e[94m####  ###  #   #   #    ###  ####   ### \e[0m
+  \e[33m| \e[90m::::::::: \e[33m| \e[31m|\e[0m
+  \e[33m| \e[90m::::::::: \e[33m| \e[31m|\e[0m    \e[1;97m\n\e[0m   \e[97m\4\e[0m
+  \e[33m|           | \e[31m|\e[0m
+  \e[33m|   \e[97m(O)  \e[92mo  \e[33m| \e[31m/\e[0m
+  \e[33m|___________|\e[31m/ \e[0m
+
+\e[33m+-\e[0m \e[1;93mWARNING\e[0m \e[33m----------------------\e[0m \e[90mLog in for more information\e[0m \e[33m-+\e[0m
+\e[33m|\e[0m                                                              \e[33m|\e[0m
+\e[33m|\e[0m  This system is for authorized use only. Activity on this    \e[33m|\e[0m
+\e[33m|\e[0m  system is monitored and recorded. Unauthorized access or    \e[33m|\e[0m
+\e[33m|\e[0m  use is prohibited.                                          \e[33m|\e[0m
+\e[33m|\e[0m                                                              \e[33m|\e[0m
+\e[33m+--------------------------------------------------------------+\e[0m

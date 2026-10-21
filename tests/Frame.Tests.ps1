@@ -50,6 +50,16 @@ Describe 'spans and blocks' {
         $lines | Should -BeExactly @('    /\', '   /__\', '0123456789')
     }
 
+    It 'a centred stack leaves an empty line empty: a pad alone would be spaces on the right' {
+        $lines = InModuleScope UsaBanner {
+            $art = New-UsaBannerTextBlock -Lines @('/\', '', '\/')
+            $gap = New-UsaBannerBlock
+            Add-UsaBannerLine -Block $gap
+            ConvertTo-UsaBannerFrameText -Block (Join-UsaBannerStack -Blocks @($art, $gap) -Align center -Width 6) -Mode none
+        }
+        $lines | Should -BeExactly @('  /\', '', '  \/', '')
+    }
+
     It 'side by side pads each block but the last, sits the shorter one in the middle, and leaves no line ending in spaces' {
         $lines = InModuleScope UsaBanner {
             $tall = New-UsaBannerTextBlock -Lines @('a', 'bbb', 'c')

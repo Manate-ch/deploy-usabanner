@@ -186,7 +186,8 @@ function Join-UsaBannerStack {
     In:  the blocks, top first ($null ones are left out), left or center,
          and the least width of the result.
     Out: one block. Centring moves each block right as a whole, so art keeps
-         its shape; no line gains spaces on its right.
+         its shape; no line gains spaces on its right, and an empty line
+         stays empty.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -203,7 +204,7 @@ function Join-UsaBannerStack {
         $left = if ($Align -eq 'center') { [int][Math]::Floor(($widest - $part.Width) / 2) } else { 0 }
         foreach ($line in $part.Lines) {
             $spans = @($line)
-            if ($left -gt 0) { $spans = @(New-UsaBannerSpan -Text (' ' * $left)) + $spans }
+            if ($left -gt 0 -and (Measure-UsaBannerLine -Spans $spans) -gt 0) { $spans = @(New-UsaBannerSpan -Text (' ' * $left)) + $spans }
             Add-UsaBannerLine -Block $out -Spans $spans
         }
     }

@@ -352,6 +352,33 @@ RDP). On both OSes the legal text shows in two places: before login, and
 before SSH authentication (the SSH `Banner`). That is where you saw the
 original one pop up on the VMs it reached.
 
+**Drawn in M2 (2026-10-21).** One arrangement for all three, picked from the
+M2 gallery: the art on the left, the company name beside it in block
+letters, the host line under the name (D9), and the legal box below, 64
+columns at most. A name that comes out in block letters only on a line of its
+own goes under the art instead.
+
+- **SSH** (`Get-UsaBannerPreLogon`): plain ASCII, in the border set's ASCII
+  form; Classic stands in for a Unicode set (D6).
+- **Console** (`Get-UsaBannerPreInit`): the same frame in 16 colours, as an
+  issue file. agetty reads every backslash in that file as an escape: `\e`
+  prints ESC, `\n` the host name and `\4` an IPv4 address, and any other
+  escape prints the character after the backslash. So the file writes each
+  backslash of the art and the border as `\\` and each ESC as `\e`, and
+  leaves the host name and IP to agetty, which fills them in each time it
+  prints. agetty has read the file this way since util-linux 2.32, the
+  version that brought `/etc/issue.d` (D16) [fetched: `term-utils/agetty.c`
+  at v2.32 and v2.39.3]. `tests/PreLogin.Tests.ps1` reads each file back as
+  agetty does and compares the result with the frame drawn.
+- **Windows** (`Get-UsaBannerLogonNotice`): the legal text's title as the
+  caption, and its paragraphs, joined by CRLF, as the text; Windows wraps it.
+  That is the single string the registry ends up holding. Group Policy
+  carries the text as one string per line, and there an empty string ends
+  the value, so whatever writes the policy sends a blank line as one space
+  [measured: Server 2025, 2026-10-18].
+
+A voice (D25) speaks in all three.
+
 ## D6. Border and corner sets
 
 Pre-login banners must be plain ASCII (characters 32-126): an SSH client
@@ -544,6 +571,15 @@ things weigh the other way for the **SSH** banner:
   name and the IP are each opt-in.
 - **On a PUB host:** turning either on shows a warning that anyone who starts
   to log in can read it, and then the admin's choice stands.
+
+**Drawn in M2 (2026-10-21).** The configuration's `preInit` and `preLogon`
+each hold `hostName` and `ip`: on at the console and off over SSH unless
+set. The host line goes under the company name. Over SSH the two values go in
+when the banner is drawn. At the console agetty fills them in as it prints
+(D5), so a renamed or readdressed host shows its new name and address with no
+redraw. agetty picks that address itself: the first interface that is up,
+running and not loopback, or else the address the host name resolves to
+[fetched: `term-utils/agetty.c` at v2.32].
 
 ## D10. Default services, and services that are not found
 
