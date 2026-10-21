@@ -123,6 +123,15 @@
         }
       }
     },
+    "voice": {
+      "description": "A meme voice for a lab VM: the banner's own words rewritten, never its facts. plain is no voice.",
+      "enum": [
+        "plain",
+        "uwu",
+        "random",
+        "leet"
+      ]
+    },
     "preInit": {
       "description": "What the console shows before login, besides the company name and the legal text.",
       "$ref": "#/$defs/shown"

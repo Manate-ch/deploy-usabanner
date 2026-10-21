@@ -4,7 +4,9 @@
 # The box's top line holds the text's title on the left and a hint on the
 # right, as the gallery of M2 picked (D8): the title is the word the text
 # would open with, so the text drops it. The configuration's border.cap, an
-# ASCII face such as (^_^), sits centred between the two.
+# ASCII face such as (^_^), sits centred between the two. A meme voice
+# (Voice.ps1, D25) rewrites the title, the hint and the text, and brings its
+# own cap when the configuration sets none.
 
 # D8's templates, word for word, with the title each box carries.
 $script:UsaLegalTemplates = [ordered]@{
@@ -15,8 +17,10 @@ $script:UsaLegalTemplates = [ordered]@{
     L5 = @{ Title = 'ATTENTION'; Text = 'ATTENTION: THIS IS A PRIVATE COMPUTER SYSTEM. ACCESS IS LIMITED TO AUTHORIZED USERS FOR AUTHORIZED PURPOSES. BY CONTINUING, YOU CONSENT TO THE MONITORING, RECORDING AND SEARCH OF ALL ACTIVITY AND DATA ON THIS SYSTEM, AND YOU HAVE NO EXPECTATION OF PRIVACY IN IT. UNAUTHORIZED ACCESS OR USE IS A CRIME UNDER 18 U.S.C. 1030 (THE COMPUTER FRAUD AND ABUSE ACT) AND OTHER LAWS, AND WILL BE REPORTED TO LAW ENFORCEMENT.' }
 }
 
-# The right of the top line: logging in shows the rest of the banner.
+# The right of the top line: logging in shows the rest of the banner. The
+# short hint is for a top line too full for the long one.
 $script:UsaLegalHint = 'Log in for more information'
+$script:UsaLegalShortHint = 'Log in for more'
 
 function Get-UsaBannerLegal {
     <#
@@ -69,12 +73,15 @@ function New-UsaBannerLegalBox {
     .DESCRIPTION
     In:  the text (Get-UsaBannerLegal), the border set
          (Get-UsaBannerBorderSet), the cap for the middle of the top line,
-         the box's width, and the styles of the border, the title, the cap
-         and the hint.
+         the voice (plain by default), the box's width, and the styles of
+         the border, the title, the cap and the hint.
     Out: the box as a block, exactly -Width wide: the title on the left of
          the top line, the hint on its right, the cap centred between them,
          and the text wrapped to the room inside, a blank line above and
-         below it.
+         below it. When the top line is too full, the cap gives way first,
+         then the hint shortens.
+         A voice rewrites the title, the hint and each paragraph (as prose),
+         and its own cap stands in when -Cap is empty.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -82,18 +89,31 @@ function New-UsaBannerLegalBox {
         [Parameter(Mandatory)][hashtable]$Legal,
         [Parameter(Mandatory)][hashtable]$Set,
         [AllowEmptyString()][string]$Cap = '',
+        [AllowEmptyString()][string]$Voice = 'plain',
         [int]$Width = $script:UsaBannerWidth,
         [System.Collections.IDictionary]$Edge,
         [System.Collections.IDictionary]$TitleStyle,
         [System.Collections.IDictionary]$CapStyle,
         [System.Collections.IDictionary]$HintStyle
     )
+    $words = Get-UsaBannerVoice -Voice $Voice
+    $hint = $script:UsaLegalHint
+    $shortHint = $script:UsaLegalShortHint
+    $paragraphs = @($Legal.Paragraphs)
+    if ($words) {
+        $hint = $words.Hint
+        $shortHint = $words.ShortHint
+        if (-not $Cap) { $Cap = $words.Cap }
+        $paragraphs = @(foreach ($paragraph in $paragraphs) { if ($paragraph.Trim()) { ConvertTo-UsaBannerVoiced -Text $paragraph -Voice $Voice -Prose } else { '' } })
+    }
     $room = $Width - 6
-    $lines = foreach ($paragraph in $Legal.Paragraphs) {
+    $lines = foreach ($paragraph in $paragraphs) {
         if ($paragraph.Trim()) { ConvertTo-UsaBannerWrapped -Text $paragraph -Width $room } else { '' }
     }
-    $middle = if ($Cap) { @(New-UsaBannerLabel -Text $Cap -Style $CapStyle) } else { @() }
-    New-UsaBannerBox -Sections @(New-UsaBannerTextBlock -Lines @($lines)) -Set $Set -Width $Width -Edge $Edge `
-        -LeftLabel @(New-UsaBannerLabel -Text $Legal.Title -Style $TitleStyle) -MiddleLabel $middle `
-        -RightLabel @(New-UsaBannerLabel -Text $script:UsaLegalHint -Style $HintStyle)
+    $left = @(New-UsaBannerLabel -Text (Get-UsaBannerVoiceTitle -Title $Legal.Title -Voice $Voice) -Style $TitleStyle)
+    $middle = @(if ($Cap) { New-UsaBannerLabel -Text $Cap -Style $CapStyle })
+    $right = @(New-UsaBannerLabel -Text $hint -Style $HintStyle)
+    if ((Measure-UsaBannerTopLine -LeftLabel $left -MiddleLabel $middle -RightLabel $right) -gt $Width) { $middle = @() }
+    if ((Measure-UsaBannerTopLine -LeftLabel $left -MiddleLabel $middle -RightLabel $right) -gt $Width) { $right = @(New-UsaBannerLabel -Text $shortHint -Style $HintStyle) }
+    New-UsaBannerBox -Sections @(New-UsaBannerTextBlock -Lines @($lines)) -Set $Set -Width $Width -Edge $Edge -LeftLabel $left -MiddleLabel $middle -RightLabel $right
 }
