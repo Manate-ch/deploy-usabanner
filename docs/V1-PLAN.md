@@ -60,8 +60,8 @@ and says what to install; M6 installs it.
   the README carries the trademark notice (D3).
 - **`New-UsaBannerArt`:** an image to art. Windows' own decoder on Windows;
   PNG on Linux, and ImageMagick for other formats there (D19).
-- **The logo how-to in AGENTS.md:** from here on, a logo comes as a merge
-  request (D4).
+- **The logo how-to:** `CONTRIBUTING.md`, which AGENTS.md points to. From
+  here on, a logo comes as a merge request (D4).
 
 **Done when:** every piece of art passes the rabbit's checks (ASCII, the mask
 the same shape as the art, a round trip through the JSON), and

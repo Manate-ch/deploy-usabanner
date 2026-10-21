@@ -36,6 +36,9 @@ was originally drawn by Larry Ewing using The GIMP. This project is not
 affiliated with or endorsed by their owners; `UsaBanner/NOTICE` has the
 details.
 
+Bugs, ideas and logos are welcome, as issues and merge requests:
+`CONTRIBUTING.md` says how, and how to add your own logo to the art.
+
 ## Quickstart
 
 For a host that Group Policy does not reach: off the domain, at another
