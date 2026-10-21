@@ -78,6 +78,9 @@ the same shape as the art, a round trip through the JSON), and
 - **The host name and IP before login**, each opt-in (D9).
 - **The environment tier strip, the naming standard (D20) and the VLAN
   badge**, and the colour presets (D7).
+- **Long company names** in the Small font, picked in the M2 gallery (D3).
+- **Meme voices** for a lab VM, uwu, random and leet (D25): the `voice`
+  setting, plain unless set.
 - **`Show-UsaBanner`:** any moment, from a configuration, with made-up facts
   in the tests.
 

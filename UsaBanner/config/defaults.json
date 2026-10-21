@@ -16,6 +16,7 @@
     "template": "L3",
     "text": []
   },
+  "voice": "plain",
   "preInit": {
     "hostName": true,
     "ip": true

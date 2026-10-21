@@ -78,6 +78,14 @@ Describe 'the admin''s own text' {
         (InModuleScope UsaBanner { Get-UsaBannerLegal -Template custom -Text @('', 'Be nice: this box is shared.') }).Title | Should -BeExactly 'NOTICE'
     }
 
+    It 'gives way in a full top line: with a long title, the cap goes rather than the box failing' {
+        $top = InModuleScope UsaBanner {
+            $legal = Get-UsaBannerLegal -Template custom -Text @('PRIVATE PROPERTY: Contoso staff only.')
+            @(ConvertTo-UsaBannerFrameText -Block (New-UsaBannerLegalBox -Legal $legal -Set (Get-UsaBannerBorderSet -Name Classic) -Cap '[ CONTOSO ONLY ]') -Mode none)[0]
+        }
+        $top | Should -BeExactly ('+- PRIVATE PROPERTY ' + ('-' * 13) + ' Log in for more information -+')
+    }
+
     It 'is refused when it is empty, or not printable ASCII' {
         { InModuleScope UsaBanner { Get-UsaBannerLegal -Template custom -Text @('', '  ') } } | Should -Throw '*legal.text holds no text*'
         { InModuleScope UsaBanner { Get-UsaBannerLegal -Template custom -Text @("Caf$([char]0xE9) only") } } | Should -Throw '*printable ASCII only*'

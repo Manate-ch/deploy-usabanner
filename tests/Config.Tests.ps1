@@ -26,6 +26,7 @@ Describe 'the defaults' {
         @{ Key = 'preLogon.ip'; Value = $false; Why = 'likewise' }
         @{ Key = 'services'; Value = 'default'; Why = 'the OS''s own list' }
         @{ Key = 'color.mode'; Value = 'auto'; Why = 'the terminal''s signals decide' }
+        @{ Key = 'voice'; Value = 'plain'; Why = 'a meme voice is a deliberate change, never a default' }
     ) {
         $value = InModuleScope UsaBanner { Get-UsaBannerConfigDefault }
         foreach ($part in $Key.Split('.')) { $value = $value[$part] }
@@ -78,6 +79,7 @@ Describe 'reading and writing a configuration' {
         @{ Case = 'services that are neither default nor a list'; Json = '{"version":1,"services":"none"}'; Where = '/services' }
         @{ Case = 'a OneChar character that is two'; Json = '{"version":1,"border":{"set":"OneChar","char":"ab"}}'; Where = '/border/char' }
         @{ Case = 'legal text that is not ASCII'; Json = '{"version":1,"legal":{"template":"custom","text":["' + [char]0x00A7 + ' 1030"]}}'; Where = '/legal/text/0' }
+        @{ Case = 'a voice it does not know'; Json = '{"version":1,"voice":"pirate"}'; Where = '/voice' }
     ) {
         $path = Join-Path $TestDrive 'bad.json'
         Set-Content -LiteralPath $path -Value $Json

@@ -1,7 +1,7 @@
 # UsaBanner: decisions
 
 > Companion to [SPEC.md](SPEC.md). Each decision has an ID, the question, the
-> options, the recommendation and why, and what was decided. All 24 are
+> options, the recommendation and why, and what was decided. All 25 are
 > decided; the table below sums them up. Facts are tagged **[measured]** (on a
 > test host), **[fetched]** (read at the cited source on 2026-10-09, unless a
 > date says otherwise) or **[known]** (from experience, not re-checked).
@@ -33,6 +33,7 @@
 | D21 | deploy-usawinssh owns SSH and the PowerShell 7 install. This module calls it |
 | D22 | later |
 | D23 | as proposed |
+| D25 | meme voices for a lab VM (uwu, random, leet): the banner's own words, never its facts; `voice` is plain unless set, on any tier (2026-10-21) |
 
 ## Contents
 
@@ -62,6 +63,7 @@
 | D22 | Network devices (stretch) | decided: later |
 | D23 | Names and paths without "Manatech" | decided |
 | D24 | A LICENSE | decided: MIT |
+| D25 | Meme voices | decided: plain unless set |
 
 ## D1. Where the code lives, and its name
 
@@ -1068,6 +1070,35 @@ Without a licence, others may read the code but have no right to use or
 change it. MIT's warranty disclaimer is also what gives D14's "not liable"
 its footing, and it gives a logo contribution (D4) terms to be given under
 [known].
+
+## D25. Meme voices
+
+Asked for in the M2 gallery (2026-10-21), for a lab VM: the banner in a meme
+voice, as an engineering prank or a newcomer's first lab box. Three voices,
+each drawn in the gallery and marked as right:
+
+| Voice | WARNING becomes | The rules |
+|---|---|---|
+| `uwu` | `W-WAWNING!! OwO` | r and l to w, ny before a vowel; a stutter and a face on every sentence |
+| `random` | `WARNING!!1!one` | the to teh, for to 4, to to 2, you to u; `XD`, `lolz`, `*holds up spork*` after every sentence |
+| `leet` | `\/\/4RN1NG!!` | capitals, then A 4, E 3, I 1, O 0, S 5, T 7; a BBS sign-off at the end |
+
+**Decided (2026-10-21):**
+
+- **A voice rewrites the banner's own words, never its facts.** It changes
+  the legal box and its text, the welcome line, the panel's labels, the
+  tier's meaning and all clear. Names, addresses, numbers and the company
+  stay as they are, so the banner still tells the truth.
+- **The voices are rules, not word lists,** so text the admin writes gets
+  them too. They give ASCII, and the same text the same way every time, so a
+  voice can show before login and its frames can be golden.
+- **It takes a deliberate setting:** `voice` in the configuration, `plain`
+  unless set. A voice is allowed on any tier, PROD and PUB included. Turning
+  one on is a manual change; a lab's PROD or PUB host may still be a friend's
+  server, and someone turning a voice on in production has a bigger question
+  to answer than the banner.
+- **When a voiced top line is full,** the cap gives way first, then the hint
+  shortens: the same rule as for any box.
 
 ## Appendix A. Art mock-ups (rough)
 

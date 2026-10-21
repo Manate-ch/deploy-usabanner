@@ -421,6 +421,26 @@ function New-UsaBannerLabel {
     @((New-UsaBannerSpan -Text ' '), (New-UsaBannerSpan -Text $Text -Style $Style), (New-UsaBannerSpan -Text ' '))
 }
 
+function Measure-UsaBannerTopLine {
+    <#
+    .SYNOPSIS
+    The columns a box's top line needs for its labels.
+    .DESCRIPTION
+    In:  spans for the top line's left, middle and right.
+    Out: the corners with one fill character each side, the labels, and one
+         fill character between each two labels that are there.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param([object[]]$LeftLabel = @(), [object[]]$MiddleLabel = @(), [object[]]$RightLabel = @())
+    # Three calls, not a pipeline over the three: @($null) would be one label holding nothing.
+    $widths = @((Measure-UsaBannerLine -Spans $LeftLabel), (Measure-UsaBannerLine -Spans $MiddleLabel), (Measure-UsaBannerLine -Spans $RightLabel) | Where-Object { $_ -gt 0 })
+    $needed = 4
+    foreach ($width in $widths) { $needed += $width }
+    if ($widths.Count -gt 1) { $needed += $widths.Count - 1 }
+    $needed
+}
+
 function New-UsaBannerBox {
     <#
     .SYNOPSIS
@@ -458,10 +478,7 @@ function New-UsaBannerBox {
     $leftWidth = Measure-UsaBannerLine -Spans $LeftLabel
     $middleWidth = Measure-UsaBannerLine -Spans $MiddleLabel
     $rightWidth = Measure-UsaBannerLine -Spans $RightLabel
-    $needed = 2 + $leftWidth + $middleWidth + $rightWidth + 2
-    if ($middleWidth -gt 0 -and $leftWidth -gt 0) { $needed++ }
-    if ($middleWidth -gt 0 -and $rightWidth -gt 0) { $needed++ }
-    if ($leftWidth -gt 0 -and $rightWidth -gt 0 -and $middleWidth -eq 0) { $needed++ }
+    $needed = Measure-UsaBannerTopLine -LeftLabel $LeftLabel -MiddleLabel $MiddleLabel -RightLabel $RightLabel
     if ($needed -gt $Width) { throw "UsaBanner: the box's top line needs $needed columns for its labels; the box is $Width." }
 
     $out = New-UsaBannerBlock
