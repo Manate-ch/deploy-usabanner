@@ -22,10 +22,12 @@ function Show-UsaBannerArt {
     orange, or a neutral grey on any other system. -Os draws it in another
     OS's colour instead.
 
-    With -Text, a name set in block letters instead, such as the company's:
-    the font's glyphs side by side, in the welcome line's colours from left
-    to right. Lower case comes out in capitals, and a name may come out at
-    most 64 columns wide.
+    With -Text, a name set in block letters instead, as the banner sets the
+    company's: in the welcome line's colours from left to right, in the
+    Pixel font when it fits 64 columns; else in the Small font, on two lines
+    if it must; else in spaced capitals; else as written. Lower case comes
+    out in capitals. With -Font too, the name is set in that font alone, and
+    may come out at most 64 columns wide.
 
     With -Path, the art in a file instead, such as one New-UsaBannerArt
     saved; it must keep the same rules as the module's own art.
@@ -46,7 +48,8 @@ function Show-UsaBannerArt {
     .PARAMETER Text
     A name to set in block letters instead of drawing a piece of art.
     .PARAMETER Font
-    The font for -Text; pixel, the default, is the one there is.
+    One font to set -Text in: pixel or small. Without it, the name takes
+    the first form that fits, as on the banner.
     .PARAMETER Path
     An art file to draw instead of a piece of the module's art.
     .PARAMETER List
@@ -59,6 +62,8 @@ function Show-UsaBannerArt {
     Show-UsaBannerArt -Name server -Os ubuntu
     .EXAMPLE
     Show-UsaBannerArt -Text 'Contoso LLC'
+    .EXAMPLE
+    Show-UsaBannerArt -Text 'Contoso Pharmaceuticals' -ColorMode none
     .EXAMPLE
     Show-UsaBannerArt -Path ./logo.json -ColorMode none
     .EXAMPLE
@@ -88,7 +93,7 @@ function Show-UsaBannerArt {
 
         [Parameter(ParameterSetName = 'Text')]
         [ValidatePattern('^[a-z0-9][a-z0-9-]*$')]
-        [string]$Font = 'pixel',
+        [string]$Font,
 
         [Parameter(Mandatory, ParameterSetName = 'File')]
         [ValidateNotNullOrEmpty()]
@@ -115,8 +120,8 @@ function Show-UsaBannerArt {
             return
         }
         if ($PSCmdlet.ParameterSetName -eq 'Text') {
-            $fontData = Get-UsaBannerFontData -Name $Font
-            $art = ConvertTo-UsaBannerWordArt -Text $Text -Font $fontData
+            if ($Font) { $art = ConvertTo-UsaBannerWordArt -Text $Text -Font (Get-UsaBannerFontData -Name $Font) }
+            else { $art = ConvertTo-UsaBannerNameArt -Name $Text }
         }
         else {
             $art = if ($PSCmdlet.ParameterSetName -eq 'File') { Read-UsaBannerArtFile -Path $PSCmdlet.GetUnresolvedProviderPathFromPSPath($Path) } else { Get-UsaBannerArtData -Name $Name }
