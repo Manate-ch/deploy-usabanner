@@ -242,6 +242,12 @@ Describe 'the welcome line and the health lines' {
         $welcome | Should -BeExactly "  Wewcome to $company"
     }
 
+    It 'says all clear only when a check ran: with none, no health line at all' {
+        $lines = @(Invoke-PostLogin -Facts @{ Name = 'h-vsl-web1.ad.example'; Ip = '10.20.40.80' })
+        ($lines -join "`n") | Should -Not -Match 'all clear'
+        $lines[-1] | Should -Match '^\+-+\+$'
+    }
+
     It 'wraps a long problem under itself' {
         $facts = Get-Facts web
         $facts.Problems = @(@{ Level = 'warn'; Text = 'reboot pending since Tuesday: kernel 6.8.0-88, libc6 2.39-0ubuntu8.6 and systemd 255.4-1ubuntu8.11' })

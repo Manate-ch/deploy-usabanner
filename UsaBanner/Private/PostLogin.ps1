@@ -369,8 +369,9 @@ function New-UsaBannerHealth {
     .DESCRIPTION
     Out: a block no wider than 64 columns: a problem's text wraps under
          itself, and the checks wrap between checks; today's one line runs
-         to 70 columns when it names six. A voice changes all clear, never
-         a problem or a check.
+         to 70 columns when it names six. With no problem and no check,
+         the block is empty: all clear would claim what nothing checked. A
+         voice changes all clear, never a problem or a check.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -394,6 +395,8 @@ function New-UsaBannerHealth {
         }
     }
     if ($problems.Count -gt 0) { return $block }
+    $checks = @(@($Facts['Checked']) | Where-Object { $_ })
+    if ($checks.Count -eq 0) { return $block }
 
     $words = Get-UsaBannerVoice -Voice $Voice
     $clear = "$($Glyphs.Ok) $(if ($words) { $words.AllClear } else { 'all clear' })"
@@ -401,7 +404,7 @@ function New-UsaBannerHealth {
     $room = $script:UsaBannerWidth - $indent
     $lines = [System.Collections.Generic.List[string]]::new()
     $current = ''
-    foreach ($check in @($Facts['Checked'] | Where-Object { $_ })) {
+    foreach ($check in $checks) {
         $next = if ($current) { "$current $($Glyphs.Sep) $check" } else { [string]$check }
         if ($next.Length -gt $room -and $current) {
             $lines.Add($current)
@@ -483,8 +486,8 @@ function New-UsaBannerPostLogin {
         $(if ($welcome) { $blank })
         (New-UsaBannerTierStrip -Tier ([string]$Config['environment']) -Palette $Palette)
         (New-UsaBannerPanel -Config $Config -Facts $Facts -Palette $Palette -Glyphs $glyphs -AsciiOnly:$AsciiOnly)
-        $blank
-        $health
+        $(if ($health.Lines.Count) { $blank })
+        $(if ($health.Lines.Count) { $health })
     )
 }
 
