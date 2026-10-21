@@ -69,6 +69,16 @@ Describe 'reading and writing a configuration' {
         $config['border']['set'] | Should -BeExactly 'Classic'
     }
 
+    It 'takes a host''s own sites in place of the examples, keeps the shipped types, and reads a VLAN''s colour and badge name' {
+        $path = Join-Path $TestDrive 'identity.json'
+        Set-Content -LiteralPath $path -Value '{"version":1,"naming":{"sites":[{"code":"nw","name":"North Warehouse","color":"Teal"}]},"vlans":[{"name":"Management","tag":10,"cidr":"10.20.10.0/24","color":"Blue","short":"Mgmt"}]}'
+        $config = InModuleScope UsaBanner -Parameters @{ Path = $path } { param($Path) Read-UsaBannerConfig -Path $Path }
+        @($config['naming']['sites'] | ForEach-Object { $_['name'] }) | Should -BeExactly @('North Warehouse')
+        @($config['naming']['types']).Count | Should -Be 7
+        $config['vlans'][0]['color'] | Should -BeExactly 'Blue'
+        $config['vlans'][0]['short'] | Should -BeExactly 'Mgmt'
+    }
+
     It 'names the problem: <Case>' -ForEach @(
         @{ Case = 'a tier it does not know'; Json = '{"version":1,"environment":"STAGING"}'; Where = '/environment' }
         @{ Case = 'a version it cannot read'; Json = '{"version":2}'; Where = '/version' }
@@ -80,6 +90,8 @@ Describe 'reading and writing a configuration' {
         @{ Case = 'a OneChar character that is two'; Json = '{"version":1,"border":{"set":"OneChar","char":"ab"}}'; Where = '/border/char' }
         @{ Case = 'legal text that is not ASCII'; Json = '{"version":1,"legal":{"template":"custom","text":["' + [char]0x00A7 + ' 1030"]}}'; Where = '/legal/text/0' }
         @{ Case = 'a voice it does not know'; Json = '{"version":1,"voice":"pirate"}'; Where = '/voice' }
+        @{ Case = 'a naming code of two letters where one goes'; Json = '{"version":1,"naming":{"types":[{"code":"vv","name":"Virtual"}]}}'; Where = '/naming/types/0/code' }
+        @{ Case = 'a colour it does not know'; Json = '{"version":1,"vlans":[{"name":"Servers","tag":40,"cidr":"10.20.40.0/22","color":"Mauve"}]}'; Where = '/vlans/0/color' }
     ) {
         $path = Join-Path $TestDrive 'bad.json'
         Set-Content -LiteralPath $path -Value $Json

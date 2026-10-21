@@ -1027,6 +1027,29 @@ examples, since every user's sites differ.
 public `schema-names.tsv`, exactly as the private copy has them, in their own
 small MR. They are vendor names, not lab details.
 
+**Built in M2 (2026-10-21).** The table lives in the configuration as
+`naming`: four lists, `sites`, `types`, `subtypes` and `os`, each row a code,
+a name and a colour. The defaults are today's `schema-names.tsv` row for row,
+and `tests/Identity.Tests.ps1` holds them to it while the old scripts ship.
+A list replaces its default whole, so a host's own `sites` take the place of
+the five examples and the shipped types, subtypes and OS codes stay. Two
+rules are new:
+
+- A name is decoded only when its type, subtype and OS are all in the table;
+  a site the table lacks shows as `?`, as today. Today's scripts decode any
+  name of the right shape, which in a public tool would show `proxy-01` as
+  "? / ? / Networking Switch / ?".
+- An empty `types` list turns decoding off, for a host named by another
+  standard.
+
+The VLAN rows (SPEC §3.1) gain two of the columns today's `vlans.tsv` has
+beyond the name, tag and network: a colour for the badge, and a short name
+for it (`Mgmt` in "HQ - 10-Mgmt"). The site column stays out, since the host
+name gives the site; a host whose name is not decoded gets a badge without
+one. The named colours are today's `colors.tsv`, and the tiers keep today's
+`envs.tsv` colours: UNSET grey, DEV-TEST charcoal, LAB orange, PROD blue and
+PUB pink.
+
 ## D21. Who owns SSH: this module or deploy-usawinssh
 
 The spec has `Deploy-UsaBanner` set up SSH where asked, and the Windows

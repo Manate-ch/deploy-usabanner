@@ -166,6 +166,51 @@
             "description": "An IPv4 network, as 10.20.30.0/24.",
             "type": "string",
             "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+          },
+          "color": {
+            "description": "The colour of the VLAN's badge after login. Without one, the badge is grey.",
+            "$ref": "#/$defs/colorName"
+          },
+          "short": {
+            "description": "The VLAN's name in the badge, as Servers in 'HQ - 40-Servers'. Without one, the badge shows the name.",
+            "$ref": "#/$defs/ascii",
+            "minLength": 1,
+            "maxLength": 12
+          }
+        }
+      }
+    },
+    "naming": {
+      "description": "The naming standard host names are decoded with: <site:2><type><subtype><os>-<name><number>, so h-vsl-web1 is HQ / Virtual / Server / Linux. A name is decoded only when its type, subtype and OS are all listed; a site that is not listed shows as ?. The sites shipped are examples: list your own. An empty types list turns decoding off.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sites": {
+          "description": "Two characters: a site letter, then a sub-site letter or - for none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/siteRow"
+          }
+        },
+        "types": {
+          "description": "The third character: what kind of machine it is.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/codeRow"
+          }
+        },
+        "subtypes": {
+          "description": "The fourth character: what the machine does.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/codeRow"
+          }
+        },
+        "os": {
+          "description": "The fifth character: the operating system.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/codeRow"
           }
         }
       }
@@ -201,6 +246,72 @@
         },
         "ip": {
           "type": "boolean"
+        }
+      }
+    },
+    "colorName": {
+      "description": "One of the named colours, each drawn in 24-bit colour and as its nearest of the 16 basic ones.",
+      "enum": [
+        "Pink",
+        "White",
+        "Beige",
+        "Grey",
+        "Black",
+        "Red",
+        "Green",
+        "Blue",
+        "Yellow",
+        "Orange",
+        "Purple",
+        "L.Green",
+        "Teal",
+        "Gold",
+        "Brown"
+      ]
+    },
+    "siteRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "name"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]$"
+        },
+        "name": {
+          "$ref": "#/$defs/ascii",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "color": {
+          "description": "The colour of this code's letters in the host name after login.",
+          "$ref": "#/$defs/colorName"
+        }
+      }
+    },
+    "codeRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "name"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z0-9]$"
+        },
+        "name": {
+          "$ref": "#/$defs/ascii",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "color": {
+          "description": "The colour of this code's letter in the host name after login.",
+          "$ref": "#/$defs/colorName"
         }
       }
     }

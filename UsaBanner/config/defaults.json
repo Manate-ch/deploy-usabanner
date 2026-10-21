@@ -26,5 +26,205 @@
     "ip": false
   },
   "vlans": [],
+  "naming": {
+    "sites": [
+      {
+        "code": "h-",
+        "name": "HQ",
+        "color": "Blue"
+      },
+      {
+        "code": "be",
+        "name": "Branch East",
+        "color": "Purple"
+      },
+      {
+        "code": "cw",
+        "name": "Cloud West",
+        "color": "Teal"
+      },
+      {
+        "code": "la",
+        "name": "Lab A",
+        "color": "Pink"
+      },
+      {
+        "code": "lb",
+        "name": "Lab B",
+        "color": "Gold"
+      }
+    ],
+    "types": [
+      {
+        "code": "p",
+        "name": "Physical",
+        "color": "Orange"
+      },
+      {
+        "code": "v",
+        "name": "Virtual",
+        "color": "Blue"
+      },
+      {
+        "code": "a",
+        "name": "Azure",
+        "color": "Teal"
+      },
+      {
+        "code": "z",
+        "name": "Amazon",
+        "color": "Gold"
+      },
+      {
+        "code": "c",
+        "name": "Cloud Shared VM",
+        "color": "Purple"
+      },
+      {
+        "code": "d",
+        "name": "Cloud Dedicated Device",
+        "color": "Pink"
+      },
+      {
+        "code": "l",
+        "name": "Lab Device",
+        "color": "L.Green"
+      }
+    ],
+    "subtypes": [
+      {
+        "code": "a",
+        "name": "Appliance",
+        "color": "Grey"
+      },
+      {
+        "code": "b",
+        "name": "Backups",
+        "color": "Brown"
+      },
+      {
+        "code": "d",
+        "name": "Desktop",
+        "color": "Beige"
+      },
+      {
+        "code": "f",
+        "name": "Firewall",
+        "color": "Red"
+      },
+      {
+        "code": "h",
+        "name": "HandHeld",
+        "color": "Pink"
+      },
+      {
+        "code": "l",
+        "name": "Laptop",
+        "color": "Beige"
+      },
+      {
+        "code": "n",
+        "name": "NAS",
+        "color": "Teal"
+      },
+      {
+        "code": "p",
+        "name": "Proxy",
+        "color": "Purple"
+      },
+      {
+        "code": "r",
+        "name": "Router",
+        "color": "Orange"
+      },
+      {
+        "code": "s",
+        "name": "Server",
+        "color": "Blue"
+      },
+      {
+        "code": "v",
+        "name": "Voice/Video/Phone",
+        "color": "Yellow"
+      },
+      {
+        "code": "q",
+        "name": "Database",
+        "color": "Gold"
+      },
+      {
+        "code": "x",
+        "name": "Networking Switch",
+        "color": "Green"
+      },
+      {
+        "code": "w",
+        "name": "Access Point",
+        "color": "L.Green"
+      },
+      {
+        "code": "2",
+        "name": "Printer (2D)",
+        "color": "White"
+      },
+      {
+        "code": "3",
+        "name": "Printer (3D)",
+        "color": "White"
+      }
+    ],
+    "os": [
+      {
+        "code": "a",
+        "name": "Android",
+        "color": "L.Green"
+      },
+      {
+        "code": "c",
+        "name": "Containers (NonKube)",
+        "color": "Teal"
+      },
+      {
+        "code": "f",
+        "name": "FortiOS",
+        "color": "Red"
+      },
+      {
+        "code": "i",
+        "name": "iOS",
+        "color": "White"
+      },
+      {
+        "code": "k",
+        "name": "Kubernetes",
+        "color": "Blue"
+      },
+      {
+        "code": "l",
+        "name": "Linux",
+        "color": "Yellow"
+      },
+      {
+        "code": "m",
+        "name": "Mac",
+        "color": "Grey"
+      },
+      {
+        "code": "u",
+        "name": "Unifi",
+        "color": "Blue"
+      },
+      {
+        "code": "w",
+        "name": "Windows",
+        "color": "Blue"
+      },
+      {
+        "code": "x",
+        "name": "Unknown/Misc",
+        "color": "Grey"
+      }
+    ]
+  },
   "services": "default"
 }
