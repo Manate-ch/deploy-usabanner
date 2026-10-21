@@ -69,8 +69,8 @@ the same shape as the art, a round trip through the JSON), and
 
 ## M2. The banners, composed
 
-- **The three moments** (D5): pre-init (the console), pre-logon (SSH, and the
-  Windows logon notice) and post-logon.
+- **The three moments** (D5): pre-init (the console, and the Windows logon
+  notice), pre-logon (SSH) and post-logon.
 - **Borders and corners** (D6): the ASCII sets everywhere, and the Unicode
   sets after login, with the ASCII set as the fallback.
 - **The legal templates** L1 to L5, and "write your own", wrapped to the box
