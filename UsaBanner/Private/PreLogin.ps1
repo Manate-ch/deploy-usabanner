@@ -140,6 +140,56 @@ function Get-UsaBannerPreInit {
     }
 }
 
+function Get-UsaBannerConsoleBanner {
+    <#
+    .SYNOPSIS
+    The console's banner as agetty prints it: the issue file's frame with
+    the host name and IP filled in.
+    .DESCRIPTION
+    In:  the configuration, the OS, the host's short name and IPv4 address,
+         and the mode: 16, the console's, or none for a terminal without
+         colour.
+    Out: the lines, in that mode. The host name and IP show where preInit
+         turns them on, as in the issue file.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Config,
+        [Parameter(Mandatory)][ValidateSet('windows', 'ubuntu', 'linux')][string]$Os,
+        [AllowEmptyString()][string]$HostName = '',
+        [AllowEmptyString()][string]$Ip = '',
+        [ValidateSet('none', '16')][string]$Mode = '16'
+    )
+    $hostText = if ($Config['preInit']['hostName']) { $HostName } else { '' }
+    $addressText = if ($Config['preInit']['ip']) { $Ip } else { '' }
+    ConvertTo-UsaBannerFrameText -Block (New-UsaBannerPreLogin -Config $Config -Os $Os -Mode $Mode -HostText $hostText -AddressText $addressText) -Mode $Mode
+}
+
+function ConvertTo-UsaBannerNoticeText {
+    <#
+    .SYNOPSIS
+    Windows' logon notice as lines to read at a terminal.
+    .DESCRIPTION
+    In:  the notice (Get-UsaBannerLogonNotice).
+    Out: the caption, a blank line, then the text, each paragraph wrapped at
+         64 columns and blank lines kept. Windows wraps the notice to its own
+         dialog; these lines show what it says.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Notice)
+    [string]$Notice.Caption
+    ''
+    foreach ($paragraph in ([string]$Notice.Text -split "`r`n")) {
+        if (-not $paragraph.Trim()) {
+            ''
+            continue
+        }
+        ConvertTo-UsaBannerWrapped -Text $paragraph -Width $script:UsaBannerWidth
+    }
+}
+
 function ConvertTo-UsaBannerIssueLine {
     <#
     .SYNOPSIS

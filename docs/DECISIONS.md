@@ -452,6 +452,13 @@ the top line between the title and the hint. ASCII keeps it whole before
 login, where Unicode kaomoji would break the box for the reason above.
 `tests/frames` holds each set's box as a golden frame.
 
+After login, a client that is not UTF-8 gets Classic too. Which clients are
+UTF-8 is read as `Show-UsaBanner -Glyphs auto` does: `USABANNER_GLYPHS`
+(unicode or ascii) when set, as `USABANNER_COLOR` overrides the colour mode;
+else Windows counts as UTF-8, as today's Windows banner does; else the locale,
+the first of `LC_ALL`, `LC_CTYPE` and `LANG` that is set; with none set, the
+C locale, which is not.
+
 ## D7. Colour presets and the preview
 
 | Preset | What | Works on |

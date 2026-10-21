@@ -1,5 +1,5 @@
 # Color.ps1 - colour escapes for each mode, the nearest of the 256 xterm
-# colours, and which mode a terminal gets.
+# colours, which mode a terminal gets, and whether it shows Unicode.
 
 $script:UsaEsc = [string][char]27
 
@@ -168,4 +168,60 @@ function Resolve-UsaBannerColorMode {
     if ($term) { return '16' }
     if ($OnWindows) { return 'truecolor' }
     'none'
+}
+
+function Resolve-UsaBannerGlyphs {
+    <#
+    .SYNOPSIS
+    Whether to draw for a client that shows Unicode: unicode or ascii.
+    .DESCRIPTION
+    The first row that gives an answer wins:
+
+    +------------------------+--------------------------------------------+
+    | Source                 | Gives                                      |
+    +------------------------+--------------------------------------------+
+    | -Requested             | itself, unless auto: the caller asked      |
+    | USABANNER_GLYPHS       | itself: the user's own override            |
+    | Windows                | unicode, as today's Windows banner draws   |
+    | LC_ALL, LC_CTYPE, LANG | the first one set: unicode when it names   |
+    |                        | UTF-8, ascii for any other character set   |
+    | none of them set       | ascii: the C locale's character set        |
+    +------------------------+--------------------------------------------+
+
+    ascii draws a Unicode border set as Classic, and the panel's marks as
+    today's ASCII ones. A USABANNER_GLYPHS other than unicode or ascii is
+    ignored, with a warning. -Environment replaces the process environment,
+    for tests.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [ValidateSet('auto', 'unicode', 'ascii')][string]$Requested = 'auto',
+        [System.Collections.IDictionary]$Environment,
+        [bool]$OnWindows = $IsWindows
+    )
+    if ($Requested -ne 'auto') { return $Requested }
+    $readVariable = {
+        # In:  an environment variable's name, and the environment handed in ($null for the real one)
+        # Out: its value, or '' when it is not set
+        # Why: tests hand in an environment of their own; a run reads the process's
+        param([string]$VariableName, [System.Collections.IDictionary]$Source)
+        $value = if ($null -ne $Source) { $Source[$VariableName] } else { [Environment]::GetEnvironmentVariable($VariableName) }
+        if ($null -eq $value) { '' } else { [string]$value }
+    }
+
+    $user = & $readVariable 'USABANNER_GLYPHS' $Environment
+    if ($user) {
+        if ($user -in 'unicode', 'ascii') { return $user.ToLowerInvariant() }
+        Write-Warning "UsaBanner: USABANNER_GLYPHS is '$user'. It takes unicode or ascii, so it is ignored."
+    }
+    if ($OnWindows) { return 'unicode' }
+    foreach ($name in 'LC_ALL', 'LC_CTYPE', 'LANG') {
+        $locale = & $readVariable $name $Environment
+        if ($locale) {
+            if ($locale -match 'utf-?8') { return 'unicode' }
+            return 'ascii'
+        }
+    }
+    'ascii'
 }

@@ -23,6 +23,14 @@ see how far it has got, from a clone:
     Show-UsaBannerArt tux              # a logo: tux, windows or ubuntu
     New-UsaBannerArt ./logo.png        # an image as art; -OutFile ./logo.json saves it
     Show-UsaBannerArt -Path ./logo.json   # art saved in a file
+    Show-UsaBanner                     # the banner after login, from the defaults
+    Show-UsaBanner PreLogon -Path ./usabanner.json   # the SSH banner a configuration sets
+    Show-UsaBanner PreInit             # the console's banner; on Windows, the logon notice
+
+`Show-UsaBanner` draws a banner as a configuration file sets it, with the
+defaults for anything the file leaves out. The module does not read a host's
+facts yet, so the banner after login shows the ones `-Facts` hands it, and
+otherwise only the host's name: `Get-Help Show-UsaBanner -Full` lists them.
 
 `New-UsaBannerArt` reads PNG itself, on every system. It reads JPEG, GIF, BMP
 and TIFF through Windows' own decoder, and on Linux any other format through
