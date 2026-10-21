@@ -1,0 +1,37 @@
+                           .-----------.
+                          /           /|
+                         /___________/ |
+                         | [_______] | |
+                         | [_______] | |
+                         |           | |
+                         | ::::::::: | |
+                         | ::::::::: | |
+                         | ::::::::: | |
+                         |           | |
+                         |   (O)  o  | /
+                         |___________|/ 
+
+  Welcome to Contoso
+
+                             L A B                              
++- h-vsl-web1.department-of-long-names.ad.example -------- 40 -+
+|  schema    HQ / Virtual / Server / Linux                     |
+|  vlan      40  Servers  (10.20.40.0/22)                      |
+|  tier       LAB   larger-scale testing                       |
+|  os        Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic       |
+|  role      Web front end                                     |
+|  uptime    12d 6h 40m                                        |
+|  cpu       12%  24h 3-71%  4 cores @ 2.4 GHz                 |
+|  memory    ━━━━━━──── 57%  4.5 of 7.8 GiB  DDR4  24h 48-66%  |
+|  disk /    ━━━━────── 38%  11 of 29 GiB  SSD  24h 38-39%     |
+|  disk /var ━━━━━───── 52%  21 of 40 GiB  SSD  24h 51-53%     |
+|  sessions  2  (admin)                                        |
+|  time      Tue 2026-10-20 09:30 CDT                          |
+|  ipv4      ens160     10.20.40.80/22                         |
+|  updates   none pending                                      |
+|  reboot    none pending, none scheduled                      |
+|  services  ssh, cron, systemd-timesyncd active               |
++--------------------------------------------------------------+
+
+  ✔ all clear   services · disks <85% · memory · ssh · clock
+                reboot

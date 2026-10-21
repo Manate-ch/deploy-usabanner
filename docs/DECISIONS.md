@@ -379,6 +379,15 @@ own goes under the art instead.
 
 A voice (D25) speaks in all three.
 
+**After login** (`Get-UsaBannerPostLogon`), arrangement A from the gallery,
+today's order: the art; "Welcome to <company>"; the tier strip; the panel,
+titled with the host name and its badge, a row per fact; then the health
+lines, each problem, or all clear with the checks that ran. Those lines wrap
+at 64 columns, where today's all-clear line runs to 70 with six checks. A
+client that is not UTF-8 gets Classic and today's ASCII marks (`#`, `.`,
+`[ok]`, `[!!]`, `[XX]`). A fact the host does not give gets no row, so M3
+can add facts one at a time.
+
 ## D6. Border and corner sets
 
 Pre-login banners must be plain ASCII (characters 32-126): an SSH client
@@ -489,6 +498,24 @@ own? Partly.**
 
 **Decided:** the presets, the console preview and the three layers, as
 recommended.
+
+**Drawn in M2 (2026-10-21).** A preset is a style for each role the banner
+after login draws: labels, values, dim text, ok, warn and bad, the border,
+and the welcome gradient.
+
+- **UsagiTools** is today's palette.
+- **Classic 16** is the same palette drawn in 16 colours at most, so it
+  looks the same on every colour terminal.
+- **High contrast** has bold yellow labels, white values and a white border.
+- **Mono** keeps bold and reverse only: the tier strip, the tier and the
+  badge in reverse video.
+- **Custom** draws as UsagiTools for now: the configuration has nowhere to
+  keep its colours until the colour step (M5) asks for them.
+
+`NO_COLOR` now gives the mono mode, which draws Mono's palette whatever the
+preset, since no other one shows without colour. M0 had read it as none,
+which drops bold and reverse too. Art has neither, so `Show-UsaBannerArt`
+under `NO_COLOR` still draws it plain.
 
 ## D8. The five legal templates
 

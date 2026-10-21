@@ -108,7 +108,7 @@ function ConvertTo-UsaBannerSgr {
 function Resolve-UsaBannerColorMode {
     <#
     .SYNOPSIS
-    The colour mode to draw in: truecolor, 256, 16 or none.
+    The colour mode to draw in: truecolor, 256, 16, mono or none.
     .DESCRIPTION
     The first row that gives a mode wins:
 
@@ -117,7 +117,8 @@ function Resolve-UsaBannerColorMode {
     +-------------------------+-------------------------------------------+
     | -Requested              | itself, unless auto: the caller asked     |
     | USABANNER_COLOR         | itself: the user's own override           |
-    | NO_COLOR, not empty     | none (no-color.org)                       |
+    | NO_COLOR, not empty     | mono: no colour, bold and reverse only:   |
+    |                         | D7's Mono preset (no-color.org)           |
     | -HostMode               | itself, unless auto: the mode the admin   |
     |                         | found works on this host                  |
     | COLORTERM               | truecolor for truecolor or 24bit          |
@@ -156,7 +157,7 @@ function Resolve-UsaBannerColorMode {
         if ($user -in 'truecolor', '256', '16', 'none') { return $user.ToLowerInvariant() }
         Write-Warning "UsaBanner: USABANNER_COLOR is '$user'. It takes truecolor, 256, 16 or none, so it is ignored."
     }
-    if (& $readVariable 'NO_COLOR' $Environment) { return 'none' }
+    if (& $readVariable 'NO_COLOR' $Environment) { return 'mono' }
     if ($HostMode -ne 'auto') { return $HostMode }
 
     if ((& $readVariable 'COLORTERM' $Environment) -in 'truecolor', '24bit') { return 'truecolor' }

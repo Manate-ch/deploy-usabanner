@@ -1,0 +1,37 @@
+                           .-----------.
+                          /           /|
+                         /___________/ |
+                         | [_______] | |
+                         | [_______] | |
+                         |           | |
+                         | ::::::::: | |
+                         | ::::::::: | |
+                         | ::::::::: | |
+                         |           | |
+                         |   (O)  o  | /
+                         |___________|/ 
+
+  \/\/3LC0M3 2 Contoso, D00D
+
+                             L A B                              
++- h-vsl-web1.ad.example -------------------- HQ - 40-Servers -+
+|  5CH3M4    HQ / Virtual / Server / Linux                     |
+|  VL4N      40  Servers  (10.20.40.0/22)                      |
+|  713R       LAB   L4RG3R-5C4L3 73571NG                       |
+|  05        Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic       |
+|  R0L3      Web front end                                     |
+|  UP71M3    12d 6h 40m                                        |
+|  CPU       12%  24h 3-71%  4 cores @ 2.4 GHz                 |
+|  M3M0RY    ━━━━━━──── 57%  4.5 of 7.8 GiB  DDR4  24h 48-66%  |
+|  D15K /    ━━━━────── 38%  11 of 29 GiB  SSD  24h 38-39%     |
+|  D15K /var ━━━━━───── 52%  21 of 40 GiB  SSD  24h 51-53%     |
+|  U53RZ     2  (admin)                                        |
+|  71M3      Tue 2026-10-20 09:30 CDT                          |
+|  1PV4      ens160     10.20.40.80/22                         |
+|  UPD473Z   none pending                                      |
+|  R3B007    none pending, none scheduled                      |
+|  53RV1C3Z  ssh, cron, systemd-timesyncd active               |
++--------------------------------------------------------------+
+
+  ✔ 4LL CL34R, D00D   services · disks <85% · memory · ssh
+                      clock · reboot

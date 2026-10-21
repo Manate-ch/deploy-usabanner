@@ -324,6 +324,8 @@ function ConvertTo-UsaBannerArtText {
     Out: one string per row of the art.
     - none: the art rows exactly. Fill cells are spaces in the art, so this
       is the picture as shown before login.
+    - mono: as none. D7's Mono preset keeps only bold and reverse, and art
+      has neither.
     - truecolor, 256: each visible cell in its class's colour, gradient and
       sheen included; 256 takes the nearest palette entry. Fill cells get the
       fill character.
@@ -337,10 +339,10 @@ function ConvertTo-UsaBannerArtText {
     [OutputType([string])]
     param(
         [Parameter(Mandatory)][System.Collections.IDictionary]$Art,
-        [Parameter(Mandatory)][ValidateSet('truecolor', '256', '16', 'none')][string]$ColorMode
+        [Parameter(Mandatory)][ValidateSet('truecolor', '256', '16', 'mono', 'none')][string]$ColorMode
     )
     $rows = @($Art['art'])
-    if ($ColorMode -eq 'none') {
+    if ($ColorMode -in 'none', 'mono') {
         foreach ($line in $rows) { [string]$line }
         return
     }

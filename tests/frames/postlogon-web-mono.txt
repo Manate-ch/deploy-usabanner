@@ -1,0 +1,37 @@
+                           .-----------.
+                          /           /|
+                         /___________/ |
+                         | [_______] | |
+                         | [_______] | |
+                         |           | |
+                         | ::::::::: | |
+                         | ::::::::: | |
+                         | ::::::::: | |
+                         |           | |
+                         |   (O)  o  | /
+                         |___________|/ 
+
+  Welcome to Contoso
+
+⎋[1;7m                             L A B                              ⎋[0m
++- ⎋[1mh-vsl-web1.ad.example⎋[0m --------------------⎋[1;7m HQ - 40-Servers ⎋[0m-+
+|  ⎋[1mschema   ⎋[0m HQ / Virtual / Server / Linux                     |
+|  ⎋[1mvlan     ⎋[0m 40  Servers  (10.20.40.0/22)                      |
+|  ⎋[1mtier     ⎋[0m ⎋[1;7m LAB ⎋[0m  larger-scale testing                       |
+|  ⎋[1mos       ⎋[0m Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic       |
+|  ⎋[1mrole     ⎋[0m Web front end                                     |
+|  ⎋[1muptime   ⎋[0m 12d 6h 40m                                        |
+|  ⎋[1mcpu      ⎋[0m 12%  24h 3-71%  4 cores @ 2.4 GHz                 |
+|  ⎋[1mmemory   ⎋[0m ━━━━━━──── 57%  4.5 of 7.8 GiB  DDR4  24h 48-66%  |
+|  ⎋[1mdisk /   ⎋[0m ━━━━────── 38%  11 of 29 GiB  SSD  24h 38-39%     |
+|  ⎋[1mdisk /var⎋[0m ━━━━━───── 52%  21 of 40 GiB  SSD  24h 51-53%     |
+|  ⎋[1msessions ⎋[0m 2  (admin)                                        |
+|  ⎋[1mtime     ⎋[0m Tue 2026-10-20 09:30 CDT                          |
+|  ⎋[1mipv4     ⎋[0m ens160     10.20.40.80/22                         |
+|  ⎋[1mupdates  ⎋[0m none pending                                      |
+|  ⎋[1mreboot   ⎋[0m none pending, none scheduled                      |
+|  ⎋[1mservices ⎋[0m ssh, cron, systemd-timesyncd active               |
++--------------------------------------------------------------+
+
+  ✔ all clear   services · disks <85% · memory · ssh · clock
+                reboot

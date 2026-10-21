@@ -12,7 +12,7 @@ Describe 'choosing the colour mode' {
         @{ Case = 'a mode asked for wins over everything'; Requested = '16'; HostMode = 'truecolor'; Vars = @{ USABANNER_COLOR = 'none'; COLORTERM = 'truecolor' }; Expected = '16' }
         @{ Case = 'USABANNER_COLOR wins over NO_COLOR and the host''s mode'; HostMode = '256'; Vars = @{ USABANNER_COLOR = 'truecolor'; NO_COLOR = '1' }; Expected = 'truecolor' }
         @{ Case = 'USABANNER_COLOR in any case'; Vars = @{ USABANNER_COLOR = 'TrueColor' }; Expected = 'truecolor' }
-        @{ Case = 'NO_COLOR means none, over the host''s mode'; HostMode = 'truecolor'; Vars = @{ NO_COLOR = '1' }; Expected = 'none' }
+        @{ Case = 'NO_COLOR means mono, over the host''s mode: no colour, bold and reverse kept (D7)'; HostMode = 'truecolor'; Vars = @{ NO_COLOR = '1' }; Expected = 'mono' }
         @{ Case = 'an empty NO_COLOR counts as not set'; Vars = @{ NO_COLOR = ''; TERM = 'xterm-256color' }; Expected = '256' }
         @{ Case = 'the host''s mode wins over the terminal''s signals'; HostMode = 'truecolor'; Vars = @{ TERM = 'xterm-256color' }; Expected = 'truecolor' }
         @{ Case = 'COLORTERM=truecolor'; Vars = @{ COLORTERM = 'truecolor'; TERM = 'xterm' }; Expected = 'truecolor' }
@@ -45,6 +45,19 @@ Describe 'choosing the colour mode' {
         }
         $result.Mode | Should -BeExactly '16'
         $result.Warned | Should -BeLike "*USABANNER_COLOR is 'rainbow'. It takes truecolor, 256, 16 or none*"
+    }
+
+    It 'draws art plain under NO_COLOR: art has no bold or reverse to keep' {
+        $saved = @{ NO_COLOR = $env:NO_COLOR; USABANNER_COLOR = $env:USABANNER_COLOR }
+        try {
+            $env:NO_COLOR = '1'
+            $env:USABANNER_COLOR = $null
+            (@(Show-UsaBannerArt -Name rabbit) -join "`n") | Should -BeExactly (@(Show-UsaBannerArt -Name rabbit -ColorMode none) -join "`n")
+        }
+        finally {
+            $env:NO_COLOR = $saved.NO_COLOR
+            $env:USABANNER_COLOR = $saved.USABANNER_COLOR
+        }
     }
 
     It 'reads the process environment when none is handed in' {
