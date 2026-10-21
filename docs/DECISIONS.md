@@ -926,6 +926,19 @@ and TIFF [known]. On Linux, PNG works out of the box, and any other format needs
 ImageMagick. When it is missing, the cmdlet says so with the install line
 (`sudo apt install imagemagick`) instead of a bare "unsupported format".
 
+**Built in M1 (2026-10-20), and what that settled:**
+- A PNG goes through the module's own decoder on Windows as well, so one PNG
+  makes the same art on every system. System.Drawing takes the other formats.
+- The ASCII version has two styles. *Shape*, for logos, picks each character
+  by its shape, sampling each cell as 2 x 4 dots: the method M1's logos were
+  drawn with. *Ramp*, for photos, is the character ramp above. auto picks
+  shape for an image with a background and few colours.
+- The colour version is a colour class per character, in the art file's mask
+  and palette, as the module's own art has: every colour mode draws it, and
+  its plain version is the one shown before login. The half-block version
+  needs two colours per cell, which the art format does not have; it waits
+  for a decision.
+
 ## D20. The naming standard as the shipped default
 
 The author is fine with publishing the naming standard (SPEC §5.4). Today's

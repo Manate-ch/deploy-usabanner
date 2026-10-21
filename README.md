@@ -21,6 +21,13 @@ see how far it has got, from a clone:
     Show-UsaBannerArt server -Os ubuntu   # in an OS's colour: windows, ubuntu or linux
     Show-UsaBannerArt -Text 'Contoso LLC' # a name in block letters
     Show-UsaBannerArt tux              # a logo: tux, windows or ubuntu
+    New-UsaBannerArt ./logo.png        # an image as art; -OutFile ./logo.json saves it
+    Show-UsaBannerArt -Path ./logo.json   # art saved in a file
+
+`New-UsaBannerArt` reads PNG itself, on every system. It reads JPEG, GIF, BMP
+and TIFF through Windows' own decoder, and on Linux any other format through
+ImageMagick (`sudo apt install imagemagick`). How it draws:
+`Get-Help New-UsaBannerArt -Full`.
 
 The logos are drawn by this project, to identify what a host runs, and show
 only where an admin turns them on. Windows is a trademark of the Microsoft

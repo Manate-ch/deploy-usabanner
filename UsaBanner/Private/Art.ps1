@@ -79,12 +79,53 @@ function Get-UsaBannerArtData {
     if ($Name -cnotmatch '^[a-z0-9][a-z0-9-]*$' -or -not $index.Contains($Name)) {
         throw "UsaBanner: there is no art called '$Name'. There is: $(@($index.Keys) -join ', ')."
     }
-    $path = $index[$Name].Path
-    try { $art = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable }
-    catch { throw "UsaBanner: $path is not JSON: $($_.Exception.Message)" }
-    $problems = @(Test-UsaBannerArtData -Art $art -Folder $index[$Name].Folder)
-    if ($problems.Count -gt 0) { throw ("UsaBanner: $path breaks the art rules:`n  " + ($problems -join "`n  ")) }
+    Read-UsaBannerArtFile -Path $index[$Name].Path -Folder $index[$Name].Folder
+}
+
+function Read-UsaBannerArtFile {
+    <#
+    .SYNOPSIS
+    Reads one art file, and checks it.
+    .DESCRIPTION
+    In:  the file's full path, and the folder whose rules it keeps: base, the
+         default, or apps.
+    Out: the file as an ordered hashtable.
+    Throws when there is no such file, when it is not JSON or not a JSON
+    object, and when it breaks a rule of Test-UsaBannerArtData.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.IDictionary])]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [ValidateSet('base', 'apps')][string]$Folder = 'base'
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "UsaBanner: there is no file at $Path." }
+    try { $art = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable }
+    catch { throw "UsaBanner: $Path is not JSON: $($_.Exception.Message)" }
+    if ($art -isnot [System.Collections.IDictionary]) { throw "UsaBanner: $Path holds no art: it is not a JSON object." }
+    $problems = @(Test-UsaBannerArtData -Art $art -Folder $Folder)
+    if ($problems.Count -gt 0) { throw ("UsaBanner: $Path breaks the art rules:`n  " + ($problems -join "`n  ")) }
     $art
+}
+
+function Save-UsaBannerArtFile {
+    <#
+    .SYNOPSIS
+    Writes art to a JSON file, which Show-UsaBannerArt -Path draws.
+    .DESCRIPTION
+    In:  the art, and the file's full path.
+    Out: nothing. The file is UTF-8 with no byte-order mark, and has LF line
+         ends on every system, as the module's own art files do.
+    Throws, with the system's reason, when the file cannot be written.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Art,
+        [Parameter(Mandatory)][string]$Path
+    )
+    $json = (ConvertTo-Json -InputObject $Art -Depth 10) -replace "`r`n", "`n"
+    try { [System.IO.File]::WriteAllText($Path, $json + "`n", [System.Text.UTF8Encoding]::new($false)) }
+    catch { throw "UsaBanner: cannot write $Path`: $($_.Exception.GetBaseException().Message)" }
 }
 
 function Test-UsaBannerArtData {
