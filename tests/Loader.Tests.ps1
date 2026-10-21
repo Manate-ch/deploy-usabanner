@@ -133,6 +133,21 @@ Describe 'the hand-off to pwsh' {
         }
     }
 
+    It 'has pwsh write UTF-8 before it runs the command: Windows PowerShell read a bar as ? through IBM437 (lab, 2026-10-21)' {
+        InModuleScope UsaBanner {
+            $lines = @((ConvertTo-UsaBannerHandoffScript -Command 'Show-UsaBanner' -Manifest 'x' -Pwsh 'y') -split "`n")
+            $encodingAt = [array]::IndexOf($lines, '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)')
+            $encodingAt | Should -BeGreaterThan -1
+            $encodingAt | Should -BeLessThan ([array]::IndexOf($lines, 'Show-UsaBanner @parameters'))
+        }
+    }
+
+    It 'gives the console its own encoding back after a hand-off' {
+        $before = [Console]::OutputEncoding.WebName
+        $null = InModuleScope UsaBanner { Invoke-UsaBannerHandoff -Command 'Show-UsaBannerArt' -Parameters @{ ColorMode = 'none' } -Pwsh (Get-Process -Id $PID).Path }
+        [Console]::OutputEncoding.WebName | Should -BeExactly $before
+    }
+
     It 'refuses a name that is not one of the module''s commands' {
         InModuleScope UsaBanner {
             { ConvertTo-UsaBannerHandoffScript -Command 'Remove-Item' -Manifest 'x' -Pwsh 'y' } | Should -Throw "*'Remove-Item' is not a command of this module*"
