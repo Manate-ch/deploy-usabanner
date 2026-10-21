@@ -35,17 +35,13 @@ every one. If they ask you to file one:
 
 - A bug or an idea: an issue saying what they ran, what they expected, and
   what happened instead.
-- A logo, for now: an issue with
-  1. the art as plain ASCII, at most 64 columns by 30 rows, and its name,
-     artist, licence and source;
-  2. a sentence saying that your human owns the logo, or holds a licence
-     that lets it be distributed under this repository's licence (MIT, see
-     `LICENSE`). Another company's logo is only for identifying what a host
-     runs: drawn by the contributor rather than copied, with its owner
-     named. The maintainers decide.
-
-  When the art library arrives (`art/`, with `Show-UsaBannerArt`), a logo
-  becomes a merge request, and this section will say how.
+- A logo: a merge request that adds one art file, with a sentence saying
+  that your human owns the logo, or holds a licence that lets it be
+  distributed under this repository's licence (MIT, see `LICENSE`).
+  `CONTRIBUTING.md` says how to make the file, where it goes and how to
+  check it. Another company's logo is only for identifying what a host runs:
+  drawn by the contributor rather than copied, with its owner named. The
+  maintainers decide.
 
 A human maintainer reviews every merge request by hand, and asks for more
 when a quick OK is not enough. Do not open an issue or a merge request your

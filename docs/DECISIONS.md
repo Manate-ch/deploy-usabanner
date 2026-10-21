@@ -12,7 +12,7 @@
 |---|---|
 | D1 | Stage in `deploy-usamotd` until V1, then V1 lives at `deploy-usabanner` (the name is open either way) |
 | D2 | Native renderers at login. PowerShell 7 for admin work, and on Windows the banner shows only in remote sessions |
-| D4 | AGENTS.md as an invitation that encourages feedback of every kind, never a "permission" |
+| D4 | AGENTS.md as an invitation that encourages feedback of every kind, never a "permission"; the logo how-to in CONTRIBUTING.md |
 | D9 | Host name and IP before login: opt-in, the admin's choice |
 | D13 | One GPO plus an OU -> package table. Enforced stays a manual tool, for pushing an OU's policy through Block Inheritance below it |
 | D16 | Leave conffiles alone, and mask the motd-news timer. Done and lab-tested 2026-10-11 |
@@ -297,6 +297,14 @@ as drafted above except for logos. `art/` and `Show-UsaBannerArt` do not exist
 yet, so for now a logo comes as an issue carrying the art, its metadata and
 the ownership sentence. The merge-request how-to arrives with the art library
 (V1), and the open question above is settled then.
+
+**Settled with M1 (2026-10-21): CONTRIBUTING.md holds the logo how-to, and
+AGENTS.md points to it.** People send logos with or without an agent, and
+CONTRIBUTING.md is the file a person looks for; AGENTS.md, which an agent
+reads in full every session, stays short. A logo is a merge request that
+adds one art file, which `New-UsaBannerArt -OutFile` makes from an image.
+The draft's pair of files, `art/<name>.art` and `art/<name>.json`, became one
+JSON file per piece, art and mask and metadata together.
 
 ## D5. What pre-init, pre-logon and post-logon mean on each OS
 
