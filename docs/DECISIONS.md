@@ -948,6 +948,29 @@ reboot set for five minutes from now shows the moment it is scheduled. That
 is the point of the one-minute idea, without a job running every minute. On
 Windows, a PowerShell task every minute would be a lot of churn for one fact.
 
+**How the samples are kept (M3, 2026-10-22):**
+
+- **The periodic job** is `UsaBanner/linux/sample.sh` on Linux, as root,
+  and `Update-UsaBannerSample` in the module on Windows, as SYSTEM. M4
+  installs the timer and the task.
+- **The samples** are in `/var/lib/usabanner/samples.tsv` or
+  `%ProgramData%\UsagiTools\Banner\samples.tsv`. Each line is a sample, its
+  fields separated by tabs: the time in seconds since 1970; `cpu`, `memory`
+  or `disk` with the disk's mount point or drive; the percentage. Samples
+  older than 24 hours go at every run. The file is written whole and moved
+  into place, so a login never reads half of it, and every user can read
+  it: `Show-UsaBanner` does.
+- **A sample takes the measure a login takes:** on Linux, the 1-minute load
+  as a share of the CPUs; on Windows, the busy percentage over 200 ms (D26).
+- **The range at login** is the lowest and highest of the samples newer than
+  24 hours and of the value now, so it always holds the value shown. Until
+  the first sample there is no range.
+- **On Linux the job also caches the FQDN** (D26) in
+  `/var/lib/usabanner/fqdn`, looking it up for 5 seconds at most. A name is
+  cached only when it is the host's own name followed by a domain, so a
+  hosts file's `localhost.localdomain` never shows; when the lookup gives
+  the short name alone, the cache goes.
+
 ## D18. Installing PowerShell 7 before the module can run
 
 R3 says to install PowerShell 7 when it is missing, but the cmdlets that

@@ -58,7 +58,8 @@ BeforeAll {
         Mock -ModuleName UsaBanner Get-UsaBannerWinSession { $calls.Add('quser'); $Session }
         Mock -ModuleName UsaBanner Get-UsaBannerWinCpuSample { $calls.Add('cpu'); $samples.Dequeue() }
         Mock -ModuleName UsaBanner Start-Sleep { $calls.Add("sleep $Milliseconds") }
-        $splat = @{ Now = $Probes.Now } + $Arguments
+        $splat = @{ Now = $Probes.Now; SamplePath = (Join-Path $TestDrive 'no-samples.tsv') }
+        foreach ($key in $Arguments.Keys) { $splat[$key] = $Arguments[$key] }
         $facts = InModuleScope UsaBanner -Parameters @{ Splat = $splat } { param($Splat) Get-UsaBannerWindowsFacts @Splat }
         @{ Facts = $facts; Calls = $calls.ToArray() }
     }
@@ -189,6 +190,16 @@ Describe 'Get-UsaBannerWindowsFacts' {
             @{ Name = 'D:'; Type = 'Fixed'; Ready = $true; Size = 20GB; Free = 10GB }
         )
         @((Invoke-WindowsFacts $probes -Change @{ SystemDrive = 'D:' }).Facts.Disks | ForEach-Object { $_.Name }) -join ',' | Should -BeExactly 'D:,C:,E:'
+    }
+
+    It 'takes the CPU''s, the memory''s and each disk''s 24-hour range from the periodic job''s samples' {
+        $file = Join-Path $TestDrive 'windows-samples.tsv'
+        $time = $Recorded['Server 2025'].Now.ToUnixTimeSeconds()
+        [System.IO.File]::WriteAllText($file, (@("$($time - 900)`tcpu`t40", "$($time - 900)`tmemory`t25", "$($time - 900)`tdisk`tC:`t19") -join "`n") + "`n")
+        $facts = (Invoke-WindowsFacts $Recorded['Server 2025'] -Arguments @{ SamplePath = $file }).Facts
+        '{0}-{1}' -f $facts.Cpu.Min, $facts.Cpu.Max | Should -BeExactly '3-40'
+        '{0}-{1}' -f $facts.Memory.Min, $facts.Memory.Max | Should -BeExactly '25-30'
+        '{0}-{1}' -f $facts.Disks[0].Min, $facts.Disks[0].Max | Should -BeExactly '19-20'
     }
 
     It 'gives no uptime after a clock was set back' {
