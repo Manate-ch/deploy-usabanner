@@ -136,6 +136,34 @@ configuration changes. At each login, `awk` fills in what changes between
 logins: the facts (D26) and the health. A login waits on `sh` and `awk`
 alone, and the banner keeps the module's look.
 
+**The login time, measured (M3, 2026-10-22).** On three lab VMs, each figure
+the median of five fresh processes, the banner drawn without colour;
+"added" is the time over the empty shell that a login starts anyway
+[measured]:
+
+| | Ubuntu 24.04, 2 vCPUs | Server 2022, 4 vCPUs | Server 2025, 4 vCPUs |
+|---|---|---|---|
+| Today's banner | 81 ms, its two `update-motd.d` scripts | 1.86 s in Windows PowerShell, 1.61 s added | 2.09 s, 1.83 s added |
+| M3's code | 58 ms, `facts.sh` | 2.57 s in `pwsh`, 2.15 s added | 2.61 s, 2.18 s added |
+| The same through 5.1's hand-off | | 2.93 s, 2.68 s added | 3.34 s, 3.09 s added |
+
+- **On Ubuntu** the facts take less than today's two scripts do; M4's `awk`
+  fill comes on top. All of `update-motd.d` took 211 ms, most of it the
+  stock scripts.
+- **On Windows M3's code is 0.35 to 0.54 s slower than today's banner.** In
+  a fresh `pwsh` [measured on both hosts]: the module's import takes 0.47 to
+  0.50 s, the facts 1.05 to 1.36 s, the drawing 0.63 to 0.69 s cold and 0.11
+  to 0.12 s warm, the rest being first-call compilation. Of the facts, the
+  probes take 0.73 to 0.77 s cold and the CPU's quiet window 0.2 s. The
+  costliest probes are the CIM read of the system (0.16 to 0.18 s) and the
+  two registry checks for a reboot pending (0.15 s cold, 0.07 s warm:
+  PowerShell's registry provider).
+- **For M4:** the pre-drawn banner takes most of the drawing away; registry
+  reads through `[Microsoft.Win32.Registry]` instead of `Test-Path`, for the
+  reboot keys and the trigger-start check, and a module that loads only what
+  a login needs, take the rest. **Proposed for M4's "done when":** no slower
+  than today's banner, on either OS.
+
 ## D3. Default logos, and what may ship in a public repo
 
 The spec's defaults are OS logos (Windows in blue, Ubuntu in orange, Tux),
@@ -642,6 +670,11 @@ running and not loopback, or else the address the host name resolves to
   today's code shows. A lookup for a missing service fails at once on both
   OSes [known]; the slow parts are broad queries (all services through
   WMI/CIM). **Decided:** measure it in the lab before the UI warns about it.
+  **Measured (2026-10-22):** looking up a service that is not there took 3
+  and 15 ms on the two Windows lab hosts (`Get-Service`) and 5 ms on the
+  Ubuntu one (`systemctl show`). The banner asks the service manager for
+  every service at once, which took 84 to 89 ms in a fresh process and 34 to
+  42 ms after. Speed needs no warning.
 - The Ubuntu picker lists systemd service units, the same UI.
 - §5.4 item 17 (a non-standard automatic service not running) is what today's
   Windows module does: auto-start services that are stopped, minus
@@ -981,8 +1014,8 @@ and disks.
 | RAM speed | `dmidecode -t memory` (root) | `Win32_PhysicalMemory` (Speed, ConfiguredClockSpeed) |
 | Disk type | `lsblk -d -o NAME,ROTA,TRAN` (rotational, NVMe, USB) | `Get-PhysicalDisk` (MediaType, BusType) |
 | Pending updates | apt's update-notifier stamp (as `90-updates-available` reads it) | Windows Update agent COM API (slow: cache only) |
-| Reboot pending, and why | `/run/reboot-required(.pkgs)` | the usual registry keys (CBS, Windows Update, pending file renames) |
-| Reboot scheduled | **live at every login**: `/run/systemd/shutdown/scheduled`, the file `shutdown --show` reads (when and why) | **live at every login**: the last restart-initiated event (System log, event 1074) since boot. Administrators can read the System log over SSH; for other users, the job's cached value. Windows Update's own restart schedule comes from the cache [known; to measure] |
+| Reboot pending, and why | `/run/reboot-required(.pkgs)` | the usual registry keys (CBS, Windows Update); pending file renames left out, as measured below |
+| Reboot scheduled | **live at every login**: `/run/systemd/shutdown/scheduled`, the file `shutdown --show` reads (when and why) | **not read yet:** neither the last restart-initiated event (System log, event 1074) nor Windows Update's own restart task tells that a restart is coming, as measured below |
 
 **Your call: min/max over what window?** Since boot, over the last 24 hours,
 or something else? Anything but "now" needs the job to sample between logins
@@ -1016,7 +1049,11 @@ Windows, a PowerShell task every minute would be a lot of churn for one fact.
   `/var/lib/usabanner/fqdn`, looking it up for 5 seconds at most. A name is
   cached only when it is the host's own name followed by a domain, so a
   hosts file's `localhost.localdomain` never shows; when the lookup gives
-  the short name alone, the cache goes.
+  the short name alone, the cache goes. The names are compared without
+  case, as DNS compares them: the lab's Ubuntu host has its name in
+  capitals to the kernel and in lower case to DNS, and the first lab run
+  cached nothing [measured]. The cache keeps the host's own case and the
+  domain in lower case, as Windows shows its name.
 
 **The slow facts on Linux (M3, 2026-10-22).** The job writes them anew at
 every run to `/var/lib/usabanner/slow.tsv`, a line each with its time, and a
@@ -1065,8 +1102,13 @@ would be one more CIM query for every login to wait on.
   `Online` off, so it does not go online [fetched:
   `IUpdateSearcher::Online`]: it answers from the agent's own last scan, as
   `apt-check` answers from apt's lists, and the job adds no scan to an update
-  server's load. How long the search takes, and that its count is the one
-  Settings shows, are measured in the lab run (M3's last merge request).
+  server's load. In the lab run (2026-10-22) the search took 2.1 and 3.1 s,
+  the job's to pay. Its count equalled a fresh online scan's on one host (4
+  waiting, 2 for security) and was one short on the other (6 for 7: an
+  update published since the agent's last scan); after the online scan the
+  search gave 7 there too [measured]. So the count is the agent's last
+  scan's, the one Settings shows [known], and only the agent's own next scan
+  makes it newer.
 
 A virtual machine's memory and drives get no kind, as on Linux. Windows has
 no `systemd-detect-virt`, and `HypervisorPresent` cannot tell: it was true on
@@ -1078,14 +1120,22 @@ large clouds name themselves in one or the other [known, not measured].
 
 A reboot pending is read live at login from the two registry keys today's
 banner reads: Component Based Servicing's `RebootPending`, shown as
-`servicing`, and Windows Update's `RebootRequired`. Pending file renames, in
-the table above, are left out for now, as today's banner leaves them: an
-installer replacing a file in use queues one, but so does one deleting a
-temporary file [known], and how often the key is set on a host where no
-restart is planned is counted in the lab run before they are added. A
-restart scheduled is not read yet either: event 1074 and Windows Update's
-own schedule are measured in the lab run first. Until then the row says
-`none pending`, never `none scheduled`.
+`servicing`, and Windows Update's `RebootRequired`. **Pending file renames
+stay out,** as today's banner leaves them: an installer replacing a file in
+use queues one, but so does one deleting a temporary file [known], and in
+the lab run (2026-10-22) both Windows hosts had six, every one queued by
+Edge's updater for its own files (eleven deletes and one move), with
+neither key set and no restart planned [measured]. Counted, they would have said `reboot pending` on both.
+
+**A restart scheduled is not read** [measured, the same run]: neither host
+had an event 1074 since its boot (reading the last five took 61 and 115 ms).
+Windows Update's `Reboot_AC` task was set for the next night on one host
+while neither key was set, and only shows a notification
+(`MusNotification.exe Display`); the other host has no such task. Neither
+tells that a restart is coming. Whether a 1074 marks a restart still to
+come, and whether one cancelled with `shutdown /a` leaves its 1074 behind,
+needs a lab host given a timed restart that is then cancelled: not measured.
+Until then the row says `none pending`, never `none scheduled`.
 
 ## D18. Installing PowerShell 7 before the module can run
 
