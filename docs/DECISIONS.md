@@ -155,6 +155,26 @@ in the host's mode and glyphs, which the deploy sets. A row's label is cut
 at 24 columns, ending in `~`: a Kubernetes volume's mount point made the
 panel too wide to draw.
 
+**The look at an Ubuntu login (M4, 2026-10-22), for your review.** pam_motd
+runs the scripts with no terminal and no locale, and every login gets the
+same text, so nothing can tell what the client shows. The host's settings
+decide alone: `color.mode` and `glyphs` (D6, D27). Where they say `auto`,
+the frame is drawn in 256 colours, which most SSH sessions announce
+(`TERM=xterm-256color`, D7), and in ASCII, which every client shows, as
+§3.1 asks of a setup made without the walk-through. Today's banner draws in
+truecolor with Unicode by default; `-ColorMode truecolor -Glyphs unicode`
+gives that look.
+
+**When the frame is drawn again.** The frame holds the host's name and its
+VLAN, so it is drawn again when they change. After each sample,
+`linux/redraw.sh` compares the name, the address and the configuration
+file's SHA-256 with those the banners were drawn from
+(`/var/lib/usabanner/drawn`). When one differs, it has the module draw them
+again (`Update-UsaBannerDrawing`). That covers a VM made from a template and
+renamed, an address that moved, and a hand edit of
+`/etc/usabanner/usabanner.json`, within 15 minutes. PowerShell runs then
+only, never at a login.
+
 **The login time, measured (M3, 2026-10-22).** On three lab VMs, each figure
 the median of five fresh processes, the banner drawn without colour;
 "added" is the time over the empty shell that a login starts anyway
@@ -1025,6 +1045,17 @@ installer had set up, where `dpkg --verify` flagged `/etc/issue`,
 (`/etc/issue.d/50-manatech.issue`, `/etc/manatech/issue.net`); V1 renames them
 per D23.
 
+**Built in V1 (M4, 2026-10-22).** `Deploy-UsaBanner` does the same under
+D23's names: `/etc/issue.d/50-usabanner.issue`, `/etc/usabanner/issue.net`,
+`/etc/ssh/sshd_config.d/00-usabanner.conf`. It turns off one stock script
+more than `install.sh` does, `90-updates-available`: the banner's updates
+row gives its count now (D17). `/var/lib/usabanner/deploy.json` records each
+change the deploy made outside the banner's own files: each script turned
+off and the mode it had, the statoverride, the masked timer and whether it
+was running, and the folders it made. `Remove-UsaBanner` undoes exactly
+those. So a script someone else turned off stays off, and the host is left
+as it was.
+
 ## D17. Slow facts, and min/max over what window
 
 §5.4 asks for things that are slow to read or need history: CPU model, RAM
@@ -1061,7 +1092,10 @@ Windows, a PowerShell task every minute would be a lot of churn for one fact.
 
 - **The periodic job** is `UsaBanner/linux/sample.sh` on Linux, as root,
   and `Update-UsaBannerSample` in the module on Windows, as SYSTEM. M4
-  installs the timer and the task.
+  installs the timer and the task. On Ubuntu that is
+  `usabanner-sample.timer`: 2 minutes after boot, then 15 minutes after
+  each run, so hosts started at different times sample apart. A deploy
+  takes the first sample at once.
 - **The samples** are in `/var/lib/usabanner/samples.tsv` or
   `%ProgramData%\UsagiTools\Banner\samples.tsv`. Each line is a sample, its
   fields separated by tabs: the time in seconds since 1970; `cpu`, `memory`
@@ -1391,6 +1425,17 @@ GPO. A Manatech host moves when its old install is removed, by a step that
 only in the private site fork.
 
 **Decided (2026-10-09): as proposed.**
+
+**Built on Ubuntu (M4, 2026-10-22).** The paths are as proposed, except
+the configuration's: `/etc/usabanner/usabanner.json`, since D12 made it
+JSON. The periodic job is `usabanner-sample.timer`; `usabanner-update.timer`
+stays the update channel's name (D14).
+
+**Decided (2026-10-22): until M7, a host with today's banner is refused,**
+and `Deploy-UsaBanner` names what of it it found. The step that moves such a
+host, removing today's banner and deploying this one in one run, comes with
+V1's release (M7). **And a command to take the banner off:**
+`Remove-UsaBanner` leaves the host as it was before the deploy (D16).
 
 ## D24. A LICENSE
 
