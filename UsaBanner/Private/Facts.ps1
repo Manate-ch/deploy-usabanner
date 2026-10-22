@@ -12,8 +12,9 @@ function ConvertFrom-UsaBannerFactRecord {
     In:  the records' lines.
     Out: a hashtable with a key for each kind of record there is: Name, Ip,
          Os, Uptime, Sessions and Time as text; Cpu and Memory as
-         @{ Now or Pct; Min; Max; Text; (Kind) }; Disks and Ipv4 as a row
-         per record. An empty field is $null, so the banner leaves it out.
+         @{ Now or Pct; Min; Max; Text; (Kind) }; Updates and Reboot as
+         @{ Text; Level }; Disks and Ipv4 as a row per record. An empty
+         field is $null, so the banner leaves it out.
          A kind it does not know is passed over: an older module reads a
          newer collector.
     #>
@@ -49,6 +50,8 @@ function ConvertFrom-UsaBannerFactRecord {
             'cpu' { $facts['Cpu'] = @{ Now = & $asNumber $f[1]; Min = & $asNumber $f[2]; Max = & $asNumber $f[3]; Text = & $asText $f[4] } }
             'memory' { $facts['Memory'] = @{ Pct = & $asNumber $f[1]; Min = & $asNumber $f[2]; Max = & $asNumber $f[3]; Text = & $asText $f[4]; Kind = & $asText $f[5] } }
             'disk' { $disks.Add(@{ Name = $f[1]; Pct = & $asNumber $f[2]; Min = & $asNumber $f[3]; Max = & $asNumber $f[4]; Text = & $asText $f[5]; Kind = & $asText $f[6] }) }
+            'updates' { $facts['Updates'] = @{ Text = & $asText $f[1]; Level = & $asText $f[2] } }
+            'reboot' { $facts['Reboot'] = @{ Text = & $asText $f[1]; Level = & $asText $f[2] } }
             'ipv4' { $adapters.Add(@{ Name = $f[1]; Address = $f[2] }) }
         }
     }
