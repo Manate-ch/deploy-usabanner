@@ -222,7 +222,10 @@ fi
 
 if [ -n "$ad" ]; then
 	# The banner reads the cache at login; a failure keeps the previous one.
-	sh "$src/usr/local/share/manatech/ad-description.sh" || rc=1
+	# 75 is no DC reachable at all: a warning the banner shows, not a failure.
+	ad_rc=0
+	sh "$src/usr/local/share/manatech/ad-description.sh" || ad_rc=$?
+	case $ad_rc in 0 | 75) ;; *) rc=1 ;; esac
 fi
 
 # install_units GENERATOR [ARGS] - write the units GENERATOR (from units.sh)

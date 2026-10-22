@@ -105,6 +105,19 @@ case $p_count in
 esac
 ran setup
 
+# No domain controller could be contacted at all: ad-description.sh leaves
+# this note, the time first, and its next good run removes it. Only the time
+# is shown, and only when it is a number.
+if [ -r "$MT_ROOT/var/lib/manatech/ad-unreached" ]; then
+	IFS=$(printf '\t') read -r u_time u_what <"$MT_ROOT/var/lib/manatech/ad-unreached" || true
+	u_when=
+	case $u_time in
+	'' | *[!0-9]*) ;;
+	*) u_when=$(LC_ALL=C date -d "@$u_time" '+%a %H:%M' 2>/dev/null) ;;
+	esac
+	note warn "could not contact any domain controller${u_when:+ at $u_when}; AD role not refreshed"
+fi
+
 # demo.sh faults: sample problems so every style can be seen. Never set by pam_motd.
 if [ "${MANATECH_DEMO_FAULTS:-}" = 1 ]; then
 	note bad "2 failed unit(s): demo-a.service demo-b.service"

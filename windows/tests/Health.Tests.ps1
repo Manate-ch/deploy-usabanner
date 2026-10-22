@@ -18,18 +18,17 @@ BeforeAll {
         & chmod 755 (Join-Path $Bin $stub.Name)
     }
 
-    # Invoke-Health NOTE
+    # Invoke-Health NOTE [-Unreached TEXT]
     # Out: the health script's output, run the way pam_motd runs it, with NOTE (when given) as the
-    #      host's var/lib/manatech/pending.
+    #      host's var/lib/manatech/pending, and -Unreached as its var/lib/manatech/ad-unreached.
     function Invoke-Health {
-        param([string]$Note)
+        param([string]$Note, [string]$Unreached)
         $root = Join-Path $TestDrive ([guid]::NewGuid().ToString())
         Copy-Item -LiteralPath (Join-Path $RepoRoot 'rootfs') -Destination $root -Recurse
         [System.IO.File]::WriteAllText((Join-Path $root 'etc/manatech/motd.conf'), "COLOR=none`nGLYPHS=ascii`nDISK_WARN=101`nMEM_WARN=101`nWATCH=`n")
-        if ($Note) {
-            New-Item -ItemType Directory -Path (Join-Path $root 'var/lib/manatech') -Force | Out-Null
-            [System.IO.File]::WriteAllText((Join-Path $root 'var/lib/manatech/pending'), $Note)
-        }
+        New-Item -ItemType Directory -Path (Join-Path $root 'var/lib/manatech') -Force | Out-Null
+        if ($Note) { [System.IO.File]::WriteAllText((Join-Path $root 'var/lib/manatech/pending'), $Note) }
+        if ($Unreached) { [System.IO.File]::WriteAllText((Join-Path $root 'var/lib/manatech/ad-unreached'), $Unreached) }
         & env -i "PATH=$($Bin):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "MANATECH_ROOT=$root" `
             sh (Join-Path $root 'etc/update-motd.d/15-manatech-health') 2>&1 | Out-String
     }
@@ -66,5 +65,22 @@ Describe '15-manatech-health: setup changes waiting' -Skip:(-not (Get-Command sh
         $out | Should -Not -Match 'setup change'
         # The real host's /run/reboot-required can add a line of its own; the all-clear shows only without one.
         if ($out -match 'all clear') { $out | Should -Match 'all clear .*setup' }
+    }
+}
+
+Describe '15-manatech-health: no domain controller reached' -Skip:(-not (Get-Command sh -ErrorAction SilentlyContinue)) {
+    It 'warns that no domain controller could be contacted, and when' {
+        # 1792645632 is Thu 2026-10-22 05:07:12 UTC, and pam_motd's environment has no TZ.
+        $out = Invoke-Health -Unreached "1792645632`ttried: dc1.ad.example dc2.ad.example`n"
+        $out | Should -Match '(?m) could not contact any domain controller at Thu 05:07; AD role not refreshed$'
+    }
+
+    It 'warns without a time it cannot read' {
+        $out = Invoke-Health -Unreached "soon`ttried: dc1.ad.example`n"
+        $out | Should -Match '(?m) could not contact any domain controller; AD role not refreshed$'
+    }
+
+    It 'says nothing of it without the note' {
+        Invoke-Health '' | Should -Not -Match 'domain controller'
     }
 }
