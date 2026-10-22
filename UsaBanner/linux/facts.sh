@@ -19,20 +19,25 @@
 #   | ipv4     | an adapter, and its addresses                          |
 #   +----------+--------------------------------------------------------+
 #
-# A field this script cannot know at login is empty: min and max come from
-# the 24-hour samples (D17), the memory's and disks' kinds from the periodic
-# job's cache. cpu is the 1-minute load as a share of the online CPUs, so it
-# can pass 100. A fact it cannot read gets no record. Nothing here waits on
-# the network, and each command that could stall is time-boxed: pam_motd
-# runs the renderer at every login.
+# A field this script cannot know at login is empty: the memory's and disks'
+# kinds come from the periodic job's cache. min and max are the lowest and
+# highest of the periodic job's samples of the last 24 hours (sample.sh,
+# D17), the value now included; until there is a sample, they stay empty.
+# cpu is the 1-minute load as a share of the online CPUs, so it can pass
+# 100. A fact it cannot read gets no record. Nothing here waits on the
+# network, and each command that could stall is time-boxed: pam_motd runs
+# the renderer at every login.
 #
 # USABANNER_ROOT (tests only) prefixes each file it reads.
+# USABANNER_NOW (tests only) is the time, in seconds since 1970.
 # USABANNER_IFACE_HIDE replaces the adapters it leaves out: an ERE, matched
 # against the adapter's name; empty leaves none out.
 
 root=${USABANNER_ROOT:-}
 hide=${USABANNER_IFACE_HIDE-'^(docker|br-|veth|virbr|lxcbr|cni|flannel|tun|tap|wg|tailscale|zt)'}
 tab=$(printf '\t')
+now=${USABANNER_NOW:-$(date +%s)}
+case $now in '' | *[!0-9]*) now=0 ;; esac
 
 # out KIND FIELD... - one record. A field loses its tabs and control
 # characters, so it can never split the record or end its line; only a field
@@ -47,6 +52,32 @@ out() {
 		_line="$_line$tab$_f"
 	done
 	printf '%s\n' "$_line"
+}
+
+# range - its input's cpu, memory and disk records with min and max filled
+# in: the lowest and highest of the samples of the last 24 hours and of the
+# value now. A record without a sample keeps them empty.
+range() {
+	awk -F '\t' -v OFS='\t' -v cut=$((now - 86400)) -v samples="$root/var/lib/usabanner/samples.tsv" '
+	function widen(key, at) {
+		if (!(key in lo) || $at !~ /^[0-9]+$/) return
+		$(at + 1) = (lo[key] < $at + 0) ? lo[key] : $at + 0
+		$(at + 2) = (hi[key] > $at + 0) ? hi[key] : $at + 0
+	}
+	BEGIN {
+		while ((getline line < samples) > 0) {
+			n = split(line, f, "\t")
+			if (n < 3 || f[1] !~ /^[0-9]+$/ || f[1] + 0 <= cut) continue
+			if (f[2] == "disk") { key = "disk" SUBSEP f[3]; v = f[4] }
+			else { key = f[2]; v = f[3] }
+			if (v !~ /^[0-9]+$/) continue
+			if (!(key in lo) || v + 0 < lo[key]) lo[key] = v + 0
+			if (!(key in hi) || v + 0 > hi[key]) hi[key] = v + 0
+		}
+	}
+	$1 == "cpu" || $1 == "memory" { widen($1, 2) }
+	$1 == "disk" { widen("disk" SUBSEP $2, 3) }
+	{ print }'
 }
 
 # The name: the FQDN the periodic job caches, else the kernel's. Looking the
@@ -90,43 +121,46 @@ case $up in
 	;;
 esac
 
-# The online CPUs: nproc would follow OMP_NUM_THREADS from a user's shell.
-cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null)
-case $cores in '' | *[!0-9]* | 0) cores= ;; esac
-if [ -n "$cores" ] && [ -r "$root/proc/loadavg" ]; then
-	read -r load _ <"$root/proc/loadavg"
-	now=$(awk -v l="$load" -v c="$cores" 'BEGIN { printf "%d", l * 100 / c + 0.5 }')
-	unit=cores
-	[ "$cores" -eq 1 ] && unit=core
-	out cpu "$now" '' '' "$cores $unit"
-fi
+# The CPU, the memory and the disks, each with its 24-hour range.
+{
+	# The online CPUs: nproc would follow OMP_NUM_THREADS from a user's shell.
+	cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null)
+	case $cores in '' | *[!0-9]* | 0) cores= ;; esac
+	if [ -n "$cores" ] && [ -r "$root/proc/loadavg" ]; then
+		read -r load _ <"$root/proc/loadavg"
+		share=$(awk -v l="$load" -v c="$cores" 'BEGIN { printf "%d", l * 100 / c + 0.5 }')
+		unit=cores
+		[ "$cores" -eq 1 ] && unit=core
+		out cpu "$share" '' '' "$cores $unit"
+	fi
 
-# Memory in use: MemTotal less MemAvailable, as free(1) counts it, the
-# percentage cut as today's banner cuts it.
-if [ -r "$root/proc/meminfo" ]; then
-	set -- $(awk 'BEGIN { a = -1 } /^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 }
-		END { if (t > 0 && a >= 0) printf "%d %.1f %.1f", (t - a) * 100 / t, (t - a) / 1048576, t / 1048576 }' "$root/proc/meminfo")
-	[ $# -eq 3 ] && out memory "$1" '' '' "$2 of $3 GiB" ''
-fi
+	# Memory in use: MemTotal less MemAvailable, as free(1) counts it, the
+	# percentage cut as today's banner cuts it.
+	if [ -r "$root/proc/meminfo" ]; then
+		set -- $(awk 'BEGIN { a = -1 } /^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 }
+			END { if (t > 0 && a >= 0) printf "%d %.1f %.1f", (t - a) * 100 / t, (t - a) / 1048576, t / 1048576 }' "$root/proc/meminfo")
+		[ $# -eq 3 ] && out memory "$1" '' '' "$2 of $3 GiB" ''
+	fi
 
-# Local filesystems only (-l), so an unreachable NFS server cannot hang df,
-# in KiB (-k) whatever BLOCK_SIZE says; /boot and below are left out. / first,
-# then by mount point, which may hold spaces.
-timeout 2 df -P -k -l -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs 2>/dev/null | awk -v tab="$tab" '
-	NR == 1 { next }
-	{
-		m = $6
-		for (i = 7; i <= NF; i++) m = m " " $i
-		gsub(/\t/, " ", m)
-		gsub(/[[:cntrl:]]/, "", m)
-		pct = $5
-		sub(/%$/, "", pct)
-		if (m ~ /^\/boot(\/|$)/ || pct !~ /^[0-9]+$/) next
-		if ($2 >= 1073741824) text = sprintf("%.1f of %.1f TiB", $3 / 1073741824, $2 / 1073741824)
-		else if ($2 >= 10485760) text = sprintf("%d of %d GiB", $3 / 1048576 + 0.5, $2 / 1048576 + 0.5)
-		else text = sprintf("%.1f of %.1f GiB", $3 / 1048576, $2 / 1048576)
-		print (m == "/" ? "" : m) tab "disk" tab m tab pct tab tab tab text tab
-	}' | LC_ALL=C sort | cut -f2-
+	# Local filesystems only (-l), so an unreachable NFS server cannot hang
+	# df, in KiB (-k) whatever BLOCK_SIZE says; /boot and below are left out.
+	# / first, then by mount point, which may hold spaces.
+	timeout 2 df -P -k -l -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs 2>/dev/null | awk -v tab="$tab" '
+		NR == 1 { next }
+		{
+			m = $6
+			for (i = 7; i <= NF; i++) m = m " " $i
+			gsub(/\t/, " ", m)
+			gsub(/[[:cntrl:]]/, "", m)
+			pct = $5
+			sub(/%$/, "", pct)
+			if (m ~ /^\/boot(\/|$)/ || pct !~ /^[0-9]+$/) next
+			if ($2 >= 1073741824) text = sprintf("%.1f of %.1f TiB", $3 / 1073741824, $2 / 1073741824)
+			else if ($2 >= 10485760) text = sprintf("%d of %d GiB", $3 / 1048576 + 0.5, $2 / 1048576 + 0.5)
+			else text = sprintf("%.1f of %.1f GiB", $3 / 1048576, $2 / 1048576)
+			print (m == "/" ? "" : m) tab "disk" tab m tab pct tab tab tab text tab
+		}' | LC_ALL=C sort | cut -f2-
+} | range
 
 if sessions=$(timeout 2 who 2>/dev/null); then
 	count=$(printf '%s\n' "$sessions" | awk 'NF { n++ } END { print n + 0 }')

@@ -253,16 +253,19 @@ function Get-UsaBannerWindowsFacts {
          - Time carries its UTC offset (-05:00), where Linux gives the
            zone's abbreviation.
     The name is the DNS host name in the case the host gives it, with its
-    domain in lower case when it is in one. -Hide is a regex of adapter
-    names to leave out: by default the NAT adapters of WSL, the Default
-    Switch and containers. -Now is the moment the facts describe, for tests.
+    domain in lower case when it is in one. The CPU, the memory and the
+    disks take their 24-hour range from the periodic job's samples, in
+    -SamplePath (Samples.ps1). -Hide is a regex of adapter names to leave
+    out: by default the NAT adapters of WSL, the Default Switch and
+    containers. -Now is the moment the facts describe, for tests.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param(
         [string]$Hide = '^vEthernet \((WSL|Default Switch|nat)\b',
         [int]$CpuWindowMs = 200,
-        [datetimeoffset]$Now = [datetimeoffset]::Now
+        [datetimeoffset]$Now = [datetimeoffset]::Now,
+        [string]$SamplePath = (Get-UsaBannerDataPath -Name 'samples.tsv' -OnWindows $true)
     )
     $system = Get-UsaBannerWinSystem
     $facts = @{}
@@ -323,5 +326,6 @@ function Get-UsaBannerWindowsFacts {
         $unit = if ($system.Cores -eq 1) { 'core' } else { 'cores' }
         $facts['Cpu'] = @{ Now = $busy; Min = $null; Max = $null; Text = '{0} {1}' -f $system.Cores, $unit }
     }
+    Add-UsaBannerSampleRange -Facts $facts -Path $SamplePath -Now $Now
     $facts
 }

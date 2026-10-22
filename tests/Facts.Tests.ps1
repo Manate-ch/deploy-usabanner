@@ -31,7 +31,9 @@ BeforeAll {
     # seconds when STUB_SLOW names it; then it answers the one call the
     # collector makes from STUB_DATA, the recording's commands folder, and
     # fails any other. hostname and date answer for themselves: the README
-    # says why.
+    # says why. hostname -f, which only the periodic job asks, answers from
+    # hostname-f.txt when a test writes one, after 8 seconds when
+    # STUB_SLOW_FQDN is set; date +%s is 2026-10-22 02:18 UTC.
     $script:Bin = Join-Path $TestDrive 'bin'
     $null = New-Item -ItemType Directory -Path $Bin -Force
     $head = @'
@@ -40,13 +42,13 @@ echo "NAME $*" >>"$STUB_LOG"
 case " ${STUB_SLOW-} " in *" NAME "*) sleep 5 ;; esac
 '@
     $stubs = [ordered]@{
-        hostname = '[ $# -eq 0 ] || exit 1; echo h-vsl-web1'
+        hostname = 'case "$*" in "") echo h-vsl-web1 ;; -f) [ -n "${STUB_SLOW_FQDN-}" ] && sleep 8; cat "$STUB_DATA/hostname-f.txt" ;; *) exit 1 ;; esac'
         ip       = 'case "$*" in "-4 route get 1.1.1.1") f=ip-route-get.txt ;; "-br -4 addr show scope global") f=ip-addr.txt ;; *) exit 1 ;; esac; cat "$STUB_DATA/$f"'
         uname    = '[ "$*" = -r ] || exit 1; cat "$STUB_DATA/uname-r.txt"'
         getconf  = '[ "$*" = _NPROCESSORS_ONLN ] || exit 1; cat "$STUB_DATA/getconf.txt"'
         df       = '[ "$*" = "-P -k -l -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs" ] || exit 1; cat "$STUB_DATA/df.txt"'
         who      = '[ $# -eq 0 ] || exit 1; cat "$STUB_DATA/who.txt"'
-        date     = '[ "$*" = "+%a %Y-%m-%d %H:%M %Z" ] || exit 1; if [ "${LC_ALL-}" = C ]; then echo "Thu 2026-10-22 02:18 UTC"; else echo "Do 2026-10-22 02:18 UTC"; fi'
+        date     = 'case "$*" in "+%s") echo 1792635480 ;; "+%a %Y-%m-%d %H:%M %Z") if [ "${LC_ALL-}" = C ]; then echo "Thu 2026-10-22 02:18 UTC"; else echo "Do 2026-10-22 02:18 UTC"; fi ;; *) exit 1 ;; esac'
     }
     foreach ($name in $stubs.Keys) {
         $path = Join-Path $Bin $name
@@ -55,19 +57,40 @@ case " ${STUB_SLOW-} " in *" NAME "*) sleep 5 ;; esac
     }
     $script:StubPath = "$($Bin):/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
+    $script:Sampler = Join-Path $repoRoot 'UsaBanner' 'linux' 'sample.sh'
+    $script:Epoch = 1792635480
+
+    # Samples from the 24 hours before date +%s: the first exactly 24 hours
+    # old, so out of the range; the last of a disk not mounted now.
+    $script:RangeSamples = @(
+        "$($Epoch - 86400)`tcpu`t99"
+        "$($Epoch - 86399)`tcpu`t3"
+        "$($Epoch - 900)`tcpu`t71"
+        "$($Epoch - 900)`tmemory`t20"
+        "$($Epoch - 1800)`tmemory`t10"
+        "$($Epoch - 900)`tdisk`t/`t7"
+        "$($Epoch - 1800)`tdisk`t/`t5"
+        "$($Epoch - 900)`tdisk`t/var`t60"
+        "$($Epoch - 1800)`tdisk`t/var`t50"
+        "$($Epoch - 900)`tdisk`t/srv`t90"
+    )
+
     function Invoke-Collector {
         # In:  the folder its files are read under, the folder its stubs
-        #      answer from, and variables for the run
-        # Out: its records, one string each
-        # Why: pam_motd runs the login renderer with an empty environment
+        #      answer from, variables for the run, and -Program, the sampler
+        #      for the collector
+        # Out: what it prints, a line each
+        # Why: pam_motd runs the login renderer with an empty environment,
+        #      and systemd the periodic job
         param(
             [string]$Root = (Join-Path $Fixture 'root'),
             [string]$Data = (Join-Path $Fixture 'commands'),
-            [hashtable]$Variables = @{}
+            [hashtable]$Variables = @{},
+            [string]$Program = $Collector
         )
         $assignments = @("PATH=$StubPath", "USABANNER_ROOT=$Root", "STUB_DATA=$Data", "STUB_LOG=$Log")
         foreach ($key in $Variables.Keys) { $assignments += "$key=$($Variables[$key])" }
-        @(& env -i @assignments sh $Collector)
+        @(& env -i @assignments sh $Program)
     }
 
     function New-Variant {
@@ -248,6 +271,123 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
         $records = Invoke-Collector -Root $empty -Data $empty
         $LASTEXITCODE | Should -Be 0
         $records -join "`n" | Should -BeExactly ("name`th-vsl-web1", "os`tLinux", "time`tThu 2026-10-22 02:18 UTC" -join "`n")
+    }
+
+    It 'fills min and max from the samples of the last 24 hours, the value now included' {
+        $variant = New-Variant @{ 'root/var/lib/usabanner/samples.tsv' = ($RangeSamples -join "`n") + "`n" }
+        $records = Invoke-Collector @variant
+        @('cpu', 'memory', 'disk' | ForEach-Object { Select-Record $records $_ }) -join "`n" | Should -BeExactly (@(
+                "cpu`t0`t0`t71`t2 cores"
+                "memory`t14`t10`t20`t0.5 of 3.8 GiB`t"
+                "disk`t/`t6`t5`t7`t6 of 121 GiB`t"
+                "disk`t/var`t57`t50`t60`t21 of 39 GiB`t"
+            ) -join "`n")
+    }
+
+    It 'leaves min and max empty for a fact without a sample' {
+        $variant = New-Variant @{ 'root/var/lib/usabanner/samples.tsv' = "$($Epoch - 900)`tcpu`t40`n" }
+        $records = Invoke-Collector @variant
+        Select-Record $records cpu | Should -BeExactly "cpu`t0`t0`t40`t2 cores"
+        Select-Record $records memory | Should -BeExactly "memory`t14`t`t`t0.5 of 3.8 GiB`t"
+    }
+
+    It 'passes over a line in the samples that is not a sample' {
+        $lines = @('not a sample', "$($Epoch - 900)`tcpu`tlots", "$($Epoch - 900)`tmemory", "soon`tcpu`t50", "$($Epoch - 900)`tdisk`t/")
+        $variant = New-Variant @{ 'root/var/lib/usabanner/samples.tsv' = ($lines -join "`n") + "`n" }
+        $records = Invoke-Collector @variant
+        @('cpu', 'memory', 'disk' | ForEach-Object { Select-Record $records $_ }) -join "`n" | Should -BeExactly (@(
+                "cpu`t0`t`t`t2 cores"
+                "memory`t14`t`t`t0.5 of 3.8 GiB`t"
+                "disk`t/`t6`t`t`t6 of 121 GiB`t"
+                "disk`t/var`t57`t`t`t21 of 39 GiB`t"
+            ) -join "`n")
+    }
+
+    It 'fills the range the module fills from the same samples' {
+        $file = Join-Path $TestDrive 'shared-samples.tsv'
+        [System.IO.File]::WriteAllText($file, ($RangeSamples -join "`n") + "`n")
+        $variant = New-Variant @{ 'root/var/lib/usabanner/samples.tsv' = ($RangeSamples -join "`n") + "`n" }
+        $byShell = InModuleScope UsaBanner -Parameters @{ Lines = @(Invoke-Collector @variant) } { param($Lines) ConvertFrom-UsaBannerFactRecord -Line $Lines }
+        $byModule = InModuleScope UsaBanner -Parameters @{ Lines = @(Invoke-Collector); File = $file; Epoch = $Epoch } {
+            param($Lines, $File, $Epoch)
+            $read = ConvertFrom-UsaBannerFactRecord -Line $Lines
+            Add-UsaBannerSampleRange -Facts $read -Path $File -Now ([datetimeoffset]::FromUnixTimeSeconds($Epoch))
+            $read
+        }
+        $ranges = {
+            # In:  facts
+            # Out: their ranges as one line
+            # Why: the two readers are compared whole
+            param($Facts)
+            (@("cpu $($Facts.Cpu.Min)-$($Facts.Cpu.Max)", "memory $($Facts.Memory.Min)-$($Facts.Memory.Max)") + @($Facts.Disks | ForEach-Object { "$($_.Name) $($_.Min)-$($_.Max)" })) -join ', '
+        }
+        & $ranges $byShell | Should -BeExactly 'cpu 0-71, memory 10-20, / 5-7, /var 50-60'
+        & $ranges $byModule | Should -BeExactly (& $ranges $byShell)
+    }
+}
+
+Describe 'linux/sample.sh' -Skip:$IsWindows {
+    BeforeEach { [System.IO.File]::WriteAllText($Log, '') }
+
+    It 'is sh that sh -n accepts' {
+        & sh -n $Sampler
+        $LASTEXITCODE | Should -Be 0
+    }
+
+    It 'adds this host''s cpu, memory and disks with the time, and keeps the last 24 hours' {
+        $kept = @("$($Epoch - 86400)`tcpu`t99", "$($Epoch - 86399)`tcpu`t3", 'not a sample')
+        $variant = New-Variant @{ 'root/var/lib/usabanner/samples.tsv' = ($kept -join "`n") + "`n" }
+        $null = Invoke-Collector @variant -Program $Sampler
+        [System.IO.File]::ReadAllText((Join-Path $variant.Root 'var/lib/usabanner/samples.tsv')) | Should -BeExactly ((@(
+                    "$($Epoch - 86399)`tcpu`t3"
+                    "$Epoch`tcpu`t0"
+                    "$Epoch`tmemory`t14"
+                    "$Epoch`tdisk`t/`t6"
+                    "$Epoch`tdisk`t/var`t57"
+                ) -join "`n") + "`n")
+    }
+
+    It 'caches <Case>' -ForEach @(
+        @{ Case = 'the name hostname -f gives in a domain'; Answer = "h-vsl-web1.ad.example`n"; Before = $null; After = 'h-vsl-web1.ad.example' }
+        @{ Case = 'no name, dropping the old one, when hostname -f gives the short name alone'; Answer = "h-vsl-web1`n"; Before = 'h-vsl-web1.old.example'; After = $null }
+        @{ Case = 'nothing new when hostname -f gives another host''s name'; Answer = "localhost.localdomain`n"; Before = 'h-vsl-web1.ad.example'; After = 'h-vsl-web1.ad.example' }
+        @{ Case = 'nothing new when hostname -f fails'; Answer = $null; Before = 'h-vsl-web1.ad.example'; After = 'h-vsl-web1.ad.example' }
+    ) {
+        $change = @{}
+        if ($null -ne $Answer) { $change['commands/hostname-f.txt'] = $Answer }
+        if ($Before) { $change['root/var/lib/usabanner/fqdn'] = "$Before`n" }
+        $variant = New-Variant $change
+        $null = Invoke-Collector @variant -Program $Sampler
+        $cache = Join-Path $variant.Root 'var/lib/usabanner/fqdn'
+        if ($null -eq $After) { Test-Path -LiteralPath $cache | Should -BeFalse }
+        else { [System.IO.File]::ReadAllText($cache) | Should -BeExactly "$After`n" }
+    }
+
+    It 'leaves the cache as it was when hostname -f stalls, and still samples' {
+        $variant = New-Variant @{ 'commands/hostname-f.txt' = "h-vsl-web1.new.example`n"; 'root/var/lib/usabanner/fqdn' = "h-vsl-web1.ad.example`n" }
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+        $null = Invoke-Collector @variant -Program $Sampler -Variables @{ STUB_SLOW_FQDN = '1' }
+        $watch.Stop()
+        $watch.Elapsed.TotalSeconds | Should -BeLessThan 7.5
+        [System.IO.File]::ReadAllText((Join-Path $variant.Root 'var/lib/usabanner/fqdn')) | Should -BeExactly "h-vsl-web1.ad.example`n"
+        @(Get-Content -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner/samples.tsv')) -match "^$Epoch`tcpu`t" | Should -Not -BeNullOrEmpty
+    }
+
+    It 'writes files any user can read, whatever the umask' {
+        $variant = New-Variant @{ 'commands/hostname-f.txt' = "h-vsl-web1.ad.example`n" }
+        $assignments = @("PATH=$StubPath", "USABANNER_ROOT=$($variant.Root)", "STUB_DATA=$($variant.Data)", "STUB_LOG=$Log")
+        $null = & env -i @assignments sh -c 'umask 077; exec sh "$1"' umask-077 $Sampler
+        $folder = Join-Path $variant.Root 'var/lib/usabanner'
+        (Get-Item -LiteralPath $folder).UnixFileMode | Should -Be ([System.IO.UnixFileMode]'UserRead, UserWrite, UserExecute, GroupRead, GroupExecute, OtherRead, OtherExecute')
+        foreach ($name in 'samples.tsv', 'fqdn') {
+            (Get-Item -LiteralPath (Join-Path $folder $name)).UnixFileMode | Should -Be ([System.IO.UnixFileMode]'UserRead, UserWrite, GroupRead, OtherRead') -Because $name
+        }
+    }
+
+    It 'leaves no file behind but samples.tsv and fqdn' {
+        $variant = New-Variant @{ 'commands/hostname-f.txt' = "h-vsl-web1.ad.example`n" }
+        $null = Invoke-Collector @variant -Program $Sampler
+        @(Get-ChildItem -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner') -Force | ForEach-Object { $_.Name } | Sort-Object) | Should -BeExactly @('fqdn', 'samples.tsv')
     }
 }
 
