@@ -127,15 +127,17 @@ function Get-UsaBannerSha256 {
 }
 
 function New-UsaBannerHostFolder {
-    # In:  the host's root, a folder's path on the host, and the list of the
-    #      folders the deploy made, or none
-    # Out: nothing; the folder and any parent it lacked exist, mode 755, and
-    #      each one made is on the list, parents first
+    # In:  the host's root, a folder's path on the host, the list of the
+    #      folders the deploy made, or none, and the mode a new folder gets;
+    #      none on Windows, where a folder takes its parent's ACL
+    # Out: nothing; the folder and any parent it lacked exist, and each one
+    #      made is on the list, parents first
     # Why: removal takes away a folder the deploy made, once it is empty
     param(
         [AllowEmptyString()][string]$Root,
         [Parameter(Mandatory)][string]$Path,
-        [AllowNull()][System.Collections.Generic.List[string]]$Created
+        [AllowNull()][System.Collections.Generic.List[string]]$Created,
+        [AllowNull()][Nullable[System.IO.UnixFileMode]]$Mode = $script:UsaMode755
     )
     $missing = [System.Collections.Generic.List[string]]::new()
     $at = $Path
@@ -144,7 +146,8 @@ function New-UsaBannerHostFolder {
         $at = [System.IO.Path]::GetDirectoryName($at)
     }
     foreach ($folder in $missing) {
-        $null = [System.IO.Directory]::CreateDirectory("$Root$folder", $script:UsaMode755)
+        if ($null -eq $Mode) { $null = [System.IO.Directory]::CreateDirectory("$Root$folder") }
+        else { $null = [System.IO.Directory]::CreateDirectory("$Root$folder", [System.IO.UnixFileMode]$Mode) }
         if ($null -ne $Created -and -not $Created.Contains($folder)) { $Created.Add($folder) }
     }
 }
@@ -155,8 +158,9 @@ function Set-UsaBannerHostFile {
     Puts one file on the host, where it is not there as it should be.
     .DESCRIPTION
     In:  the host's root; the file's path on the host; its content; its
-         mode; what it is, and a detail, for the line that reports it; the
-         list of folders the deploy made.
+         mode, none on Windows, where a file takes its folder's ACL; what it
+         is, and a detail, for the line that reports it; the list of folders
+         the deploy made.
     Out: a line saying what changed: written, or its mode set. Nothing when
          the file was already so, or under -WhatIf, which says it instead.
     The file is written as <path>.usabanner-tmp, given its mode, then moved
@@ -168,7 +172,7 @@ function Set-UsaBannerHostFile {
         [AllowEmptyString()][string]$Root = '',
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes,
-        [System.IO.UnixFileMode]$Mode = $script:UsaMode644,
+        [AllowNull()][Nullable[System.IO.UnixFileMode]]$Mode = $script:UsaMode644,
         [Parameter(Mandatory)][string]$What,
         [string]$Detail = '',
         [AllowNull()][System.Collections.Generic.List[string]]$Created
@@ -176,16 +180,17 @@ function Set-UsaBannerHostFile {
     $full = "$Root$Path"
     $exists = [System.IO.File]::Exists($full)
     $same = $exists -and [System.Linq.Enumerable]::SequenceEqual([byte[]][System.IO.File]::ReadAllBytes($full), $Bytes)
-    if ($same -and [System.IO.File]::GetUnixFileMode($full) -eq $Mode) { return }
+    if ($same -and ($null -eq $Mode -or [System.IO.File]::GetUnixFileMode($full) -eq $Mode)) { return }
     $about = if ($Detail) { "$What ($Detail)" } else { $What }
     $action = if (-not $exists) { "Write $about" } elseif (-not $same) { "Rewrite $about" } else { "Set the mode to $(ConvertTo-UsaBannerOctal $Mode): $about" }
     if (-not $PSCmdlet.ShouldProcess($Path, $action)) { return }
-    New-UsaBannerHostFolder -Root $Root -Path ([System.IO.Path]::GetDirectoryName($Path)) -Created $Created
-    if ($same) { [System.IO.File]::SetUnixFileMode($full, $Mode) }
+    $folderMode = if ($null -eq $Mode) { $null } else { $script:UsaMode755 }
+    New-UsaBannerHostFolder -Root $Root -Path ([System.IO.Path]::GetDirectoryName($Path)) -Created $Created -Mode $folderMode
+    if ($same) { [System.IO.File]::SetUnixFileMode($full, [System.IO.UnixFileMode]$Mode) }
     else {
         $temp = "$full.usabanner-tmp"
         [System.IO.File]::WriteAllBytes($temp, $Bytes)
-        [System.IO.File]::SetUnixFileMode($temp, $Mode)
+        if ($null -ne $Mode) { [System.IO.File]::SetUnixFileMode($temp, [System.IO.UnixFileMode]$Mode) }
         [System.IO.File]::Move($temp, $full, $true)
     }
     if (-not $exists) { "wrote ${Path}: $about" }
@@ -242,25 +247,29 @@ function Read-UsaBannerDeployRecord {
     The record of what deploys changed on this host outside the banner's own
     files.
     .DESCRIPTION
-    In:  the host's root.
+    In:  the host's root; or the record's path, on Windows.
     Out: an ordered dictionary: retired (the scripts turned off, each with
          its path and its mode before), statoverride (each with its path
          and mode before), masked (each unit, and whether it was active),
          created (the folders made, parents first), module (the module's
-         folder, when a deploy put it there). Empty lists when there is no
-         record.
+         folder, when a deploy put it there); on Windows also notice (the
+         logon notice set, and what it was before) and sshd. Empty lists
+         when there is no record.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
-    param([AllowEmptyString()][string]$Root = '')
+    param([AllowEmptyString()][string]$Root = '', [string]$Path)
     $record = [ordered]@{ version = 1; retired = @(); statoverride = @(); masked = @(); created = @(); module = '' }
-    $path = "$Root$script:UsaLinuxState/deploy.json"
+    $path = if ($Path) { $Path } else { "$Root$script:UsaLinuxState/deploy.json" }
     if (-not [System.IO.File]::Exists($path)) { return $record }
     $saved = [System.IO.File]::ReadAllText($path) | ConvertFrom-Json -AsHashtable
-    foreach ($key in 'retired', 'statoverride', 'masked', 'created') {
-        if ($saved.Contains($key) -and $null -ne $saved[$key]) { $record[$key] = @($saved[$key]) }
+    foreach ($key in $saved.Keys) {
+        if ($null -eq $saved[$key]) { continue }
+        # A list of one comes back from JSON as a list; @() keeps a list a list either way.
+        if ($key -in 'retired', 'statoverride', 'masked', 'created') { $record[$key] = @($saved[$key]) }
+        elseif ($key -eq 'module') { $record[$key] = [string]$saved[$key] }
+        else { $record[$key] = $saved[$key] }
     }
-    if ($saved.Contains('module') -and $saved['module']) { $record['module'] = [string]$saved['module'] }
     $record
 }
 
@@ -457,26 +466,31 @@ function Install-UsaBannerModuleCopy {
     .SYNOPSIS
     Copies the module to where every user's PowerShell finds it.
     .DESCRIPTION
-    In:  the host's root, the record, and the folders made so far.
+    In:  the host's root, the record, the folders made so far; the modules
+         folder for all users, and the mode of each file copied and of each
+         folder made, none on Windows.
     Out: a line when files were copied or removed.
-    The module goes to /usr/local/share/powershell/Modules/UsaBanner/
-    <version>, PowerShell's module folder for all users on Linux: any user's
-    Show-UsaBanner, and the periodic job's redraw, import it from there. A
-    module that runs from there already is not copied onto itself. Files the
-    copy holds and the module does not are removed: the folder is the
-    module's own.
+    The module goes to <modules folder>/UsaBanner/<version>: on Linux
+    /usr/local/share/powershell/Modules, where any user's Show-UsaBanner
+    and the periodic job's redraw import it from; on Windows, Windows
+    PowerShell's, which PowerShell 7 reads too. A module that runs from
+    there already is not copied onto itself. Files the copy holds and the
+    module does not are removed: the folder is the module's own.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param(
         [AllowEmptyString()][string]$Root = '',
         [Parameter(Mandatory)][System.Collections.IDictionary]$Record,
-        [AllowNull()][System.Collections.Generic.List[string]]$Created
+        [AllowNull()][System.Collections.Generic.List[string]]$Created,
+        [string]$Modules = $script:UsaLinuxModules,
+        [AllowNull()][Nullable[System.IO.UnixFileMode]]$FileMode = $script:UsaMode644,
+        [AllowNull()][Nullable[System.IO.UnixFileMode]]$FolderMode = $script:UsaMode755
     )
     $version = [string](Import-PowerShellDataFile -LiteralPath $script:UsaBannerManifest).ModuleVersion
-    $target = "$script:UsaLinuxModules/UsaBanner/$version"
-    $source = [System.IO.Path]::GetFullPath($script:UsaBannerRoot).TrimEnd('/')
-    if ($source -eq [System.IO.Path]::GetFullPath("$Root$target").TrimEnd('/')) { return }
+    $target = "$Modules/UsaBanner/$version"
+    $source = [System.IO.Path]::GetFullPath($script:UsaBannerRoot).TrimEnd('/', '\')
+    if ($source -eq [System.IO.Path]::GetFullPath("$Root$target").TrimEnd('/', '\')) { return }
     $copy = [System.Collections.Generic.List[string]]::new()
     $wanted = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($file in [System.IO.Directory]::GetFiles($source, '*', [System.IO.SearchOption]::AllDirectories)) {
@@ -497,10 +511,10 @@ function Install-UsaBannerModuleCopy {
     if (-not $PSCmdlet.ShouldProcess($target, "Install the module UsaBanner $version for every user: $($copy.Count) file(s) to copy, $($extra.Count) to remove")) { return }
     foreach ($relative in $copy) {
         $there = "$Root$target/$relative"
-        New-UsaBannerHostFolder -Root $Root -Path ([System.IO.Path]::GetDirectoryName("$target/$relative")) -Created $Created
+        New-UsaBannerHostFolder -Root $Root -Path ([System.IO.Path]::GetDirectoryName("$target/$relative")) -Created $Created -Mode $FolderMode
         $temp = "$there.usabanner-tmp"
         [System.IO.File]::Copy((Join-Path $source $relative), $temp, $true)
-        [System.IO.File]::SetUnixFileMode($temp, $script:UsaMode644)
+        if ($null -ne $FileMode) { [System.IO.File]::SetUnixFileMode($temp, [System.IO.UnixFileMode]$FileMode) }
         [System.IO.File]::Move($temp, $there, $true)
     }
     foreach ($relative in $extra) { [System.IO.File]::Delete("$Root$target/$relative") }
