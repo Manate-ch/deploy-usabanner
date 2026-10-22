@@ -25,8 +25,9 @@ function Show-UsaBanner {
     Disks, Sessions, Time, Ipv4, Updates, Reboot, Services, Problems and
     Checked, in the shapes UsaBanner\Private\PostLogin.ps1 gives. A fact
     left out gets no row. Without -Facts, the banner shows this host's own:
-    on Linux, what UsaBanner/linux/facts.sh collects; on Windows, its name.
-    The SSH banner and the console show the name without its domain.
+    on Linux, what UsaBanner/linux/facts.sh collects; on Windows, what the
+    module reads from CIM, the registry and .NET. The SSH banner and the
+    console show the name without its domain.
 
     -ColorMode is as for Show-UsaBannerArt; auto also takes the mode the
     configuration sets for this host. -Glyphs auto reads USABANNER_GLYPHS,
