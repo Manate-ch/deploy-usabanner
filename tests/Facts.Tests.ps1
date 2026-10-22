@@ -40,7 +40,8 @@ BeforeAll {
     # seconds when STUB_SLOW names it; then it answers the one call the
     # collector makes from STUB_DATA, the recording's commands folder, and
     # fails any other. hostname and date answer for themselves: the README
-    # says why. hostname -f, which only the periodic job asks, answers from
+    # says why. hostname answers h-vsl-web1, or from hostname.txt when a test
+    # writes one; hostname -f, which only the periodic job asks, answers from
     # hostname-f.txt when a test writes one, after 8 seconds when
     # STUB_SLOW_FQDN is set; date +%s is 2026-10-22 02:18 UTC, and date -d is
     # the real one in UTC. lsblk answers for a device from lsblk<device>.txt,
@@ -56,7 +57,7 @@ echo "NAME $*" >>"$STUB_LOG"
 case " ${STUB_SLOW-} " in *" NAME "*) sleep 5 ;; esac
 '@
     $stubs = [ordered]@{
-        hostname = 'case "$*" in "") echo h-vsl-web1 ;; -f) [ -n "${STUB_SLOW_FQDN-}" ] && sleep 8; cat "$STUB_DATA/hostname-f.txt" ;; *) exit 1 ;; esac'
+        hostname = 'case "$*" in "") if [ -r "$STUB_DATA/hostname.txt" ]; then cat "$STUB_DATA/hostname.txt"; else echo h-vsl-web1; fi ;; -f) [ -n "${STUB_SLOW_FQDN-}" ] && sleep 8; cat "$STUB_DATA/hostname-f.txt" ;; *) exit 1 ;; esac'
         ip       = 'case "$*" in "-4 route get 1.1.1.1") f=ip-route-get.txt ;; "-br -4 addr show scope global") f=ip-addr.txt ;; *) exit 1 ;; esac; cat "$STUB_DATA/$f"'
         uname    = '[ "$*" = -r ] || exit 1; cat "$STUB_DATA/uname-r.txt"'
         getconf  = '[ "$*" = _NPROCESSORS_ONLN ] || exit 1; cat "$STUB_DATA/getconf.txt"'
@@ -558,8 +559,11 @@ Describe 'linux/sample.sh' -Skip:$IsWindows {
         @{ Case = 'no name, dropping the old one, when hostname -f gives the short name alone'; Answer = "h-vsl-web1`n"; Before = 'h-vsl-web1.old.example'; After = $null }
         @{ Case = 'nothing new when hostname -f gives another host''s name'; Answer = "localhost.localdomain`n"; Before = 'h-vsl-web1.ad.example'; After = 'h-vsl-web1.ad.example' }
         @{ Case = 'nothing new when hostname -f fails'; Answer = $null; Before = 'h-vsl-web1.ad.example'; After = 'h-vsl-web1.ad.example' }
+        @{ Case = 'the host''s own case and the domain in lower case, when DNS answers in another case'; Short = 'H-VSL-WEB1'; Answer = "h-vsl-web1.AD.example`n"; Before = $null; After = 'H-VSL-WEB1.ad.example' }
+        @{ Case = 'no name, dropping the old one, when hostname -f gives the short name alone in another case'; Short = 'H-VSL-WEB1'; Answer = "h-vsl-web1`n"; Before = 'H-VSL-WEB1.old.example'; After = $null }
     ) {
         $change = @{}
+        if ($Short) { $change['commands/hostname.txt'] = "$Short`n" }
         if ($null -ne $Answer) { $change['commands/hostname-f.txt'] = $Answer }
         if ($Before) { $change['root/var/lib/usabanner/fqdn'] = "$Before`n" }
         $variant = New-Variant $change

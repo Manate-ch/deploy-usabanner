@@ -40,16 +40,21 @@ umask 022
 mkdir -p "$dir" || exit 1
 
 # The FQDN: only a name that starts with the host's own and goes on to a
-# domain, so a hosts file's localhost.localdomain is never cached. hostname
-# -f that answers the short name alone means no domain: the cache goes. One
-# that fails or stalls leaves the cache as it was.
+# domain, so a hosts file's localhost.localdomain is never cached. DNS names
+# ignore case, and a host can be H-WEB1 to the kernel and h-web1.ad.example
+# to DNS: the cache keeps the host's own case and the domain in lower case,
+# as Windows shows its name. hostname -f that answers the short name alone
+# means no domain: the cache goes. One that fails or stalls leaves the cache
+# as it was.
 short=$(hostname 2>/dev/null)
 if fqdn=$(timeout 5 hostname -f 2>/dev/null) && [ -n "$short" ]; then
+	lower=$(printf '%s\n' "$short" | tr '[:upper:]' '[:lower:]')
+	fqdn=$(printf '%s\n' "$fqdn" | tr '[:upper:]' '[:lower:]')
 	case $fqdn in
-	"$short".?*)
-		printf '%s\n' "$fqdn" >"$dir/fqdn.$$" && mv -f "$dir/fqdn.$$" "$dir/fqdn"
+	"$lower".?*)
+		printf '%s.%s\n' "$short" "${fqdn#"$lower".}" >"$dir/fqdn.$$" && mv -f "$dir/fqdn.$$" "$dir/fqdn"
 		;;
-	"$short") rm -f "$dir/fqdn" ;;
+	"$lower") rm -f "$dir/fqdn" ;;
 	esac
 fi
 
