@@ -1241,7 +1241,9 @@ its fields separated by tabs, its kind first:
   looking it up could wait on DNS. Its sources are today's banner's, with
   four changes:
   - `getconf _NPROCESSORS_ONLN` counts the CPUs: `nproc` follows
-    `OMP_NUM_THREADS`, which a user's shell may set;
+    `OMP_NUM_THREADS`, which a user's shell may set (with
+    `OMP_NUM_THREADS=1`, `nproc` gave 1 on a 16-CPU host [measured,
+    2026-10-22]);
   - `df -k`, so `BLOCK_SIZE` cannot change the unit;
   - the weekday in English, whatever the locale;
   - os-release is read as text, never run.
