@@ -472,6 +472,18 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
         (Select-Record $records check) -split "`n" | Should -Contain "check`tservices"
     }
 
+    It 'says nothing of the services when systemctl''s answer does not line up with the question' {
+        # A systemctl first on PATH that answers one block, whatever it is asked.
+        $bin = Join-Path $TestDrive 'one-block'
+        $null = New-Item -ItemType Directory -Path $bin -Force
+        $oneBlock = Join-Path $bin 'systemctl'
+        [System.IO.File]::WriteAllText($oneBlock, "#!/bin/sh`ncase `"`$1`" in`nshow) printf 'Id=ssh.service\nTriggeredBy=\nLoadState=loaded\nActiveState=active\n' ;;`nesac`n")
+        & chmod 755 $oneBlock
+        $records = Invoke-Collector -Variables @{ PATH = "$($bin):$StubPath" }
+        Select-Record $records services | Should -BeNullOrEmpty
+        (Select-Record $records check) -split "`n" | Should -Not -Contain "check`tservices"
+    }
+
     It 'watches none when USABANNER_SERVICES is empty, and names no services check' {
         $records = Invoke-Collector -Variables @{ USABANNER_SERVICES = '' }
         Select-Record $records services | Should -BeNullOrEmpty
