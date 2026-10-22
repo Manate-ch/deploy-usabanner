@@ -63,6 +63,19 @@ BeforeAll {
         @{ Facts = $facts; Calls = $calls.ToArray() }
     }
 
+    function Use-Culture {
+        # In:  a culture's name, and a script block
+        # Out: what the block returns, run in that culture
+        # Why: the facts must read the same in every culture
+        param([string]$Name, [scriptblock]$Script)
+        $saved = [cultureinfo]::CurrentCulture
+        try {
+            [cultureinfo]::CurrentCulture = $Name
+            & $Script
+        }
+        finally { [cultureinfo]::CurrentCulture = $saved }
+    }
+
     # Adapters a Hyper-V host with WSL, containers and a VPN might show.
     $script:Adapters = @(
         @{ Name = 'Ethernet 2'; Type = 'Ethernet'; Up = $true; Addresses = @('10.20.40.79/24') }
@@ -159,15 +172,23 @@ Describe 'Get-UsaBannerWindowsFacts' {
         (Invoke-WindowsFacts $Recorded['Server 2025'] -Session $sessions).Facts.Sessions | Should -BeExactly '3  (administrator ops)'
     }
 
-    It 'writes English days and decimal points in any culture' {
-        $culture = [cultureinfo]::CurrentCulture
-        try {
-            [cultureinfo]::CurrentCulture = 'de-DE'
-            $facts = (Invoke-WindowsFacts $Recorded['Server 2025']).Facts
-        }
-        finally { [cultureinfo]::CurrentCulture = $culture }
-        $facts.Time | Should -BeExactly 'Wed 2026-10-21 21:41 -05:00'
-        $facts.Memory.Text | Should -BeExactly '2.4 of 8.0 GiB'
+    It 'writes the day in English in any culture' {
+        (Use-Culture 'de-DE' { (Invoke-WindowsFacts $Recorded['Server 2025']).Facts }).Time | Should -BeExactly 'Wed 2026-10-21 21:41 -05:00'
+    }
+
+    It 'writes the memory with a decimal point in any culture' {
+        (Use-Culture 'de-DE' { (Invoke-WindowsFacts $Recorded['Server 2025']).Facts }).Memory.Text | Should -BeExactly '2.4 of 8.0 GiB'
+    }
+
+    It 'lists the system drive first, then the other fixed drives that are ready, by name' {
+        $probes = $Recorded['Server 2025'].Clone()
+        $probes.Drives = @(
+            @{ Name = 'E:'; Type = 'Fixed'; Ready = $true; Size = 20GB; Free = 10GB }
+            @{ Name = 'C:'; Type = 'Fixed'; Ready = $true; Size = 20GB; Free = 10GB }
+            @{ Name = 'F:'; Type = 'Fixed'; Ready = $false; Size = 0; Free = 0 }
+            @{ Name = 'D:'; Type = 'Fixed'; Ready = $true; Size = 20GB; Free = 10GB }
+        )
+        @((Invoke-WindowsFacts $probes -Change @{ SystemDrive = 'D:' }).Facts.Disks | ForEach-Object { $_.Name }) -join ',' | Should -BeExactly 'D:,C:,E:'
     }
 
     It 'gives no uptime after a clock was set back' {
@@ -193,6 +214,10 @@ Describe 'Format-UsaBannerSize' {
         @{ Case = 'GiB to a tenth below 10 GiB'; Used = 1GB; Size = 5GB; Expected = '1.0 of 5.0 GiB' }
     ) {
         InModuleScope UsaBanner -Parameters @{ Used = $Used; Size = $Size } { param($Used, $Size) Format-UsaBannerSize -Used $Used -Size $Size } | Should -BeExactly $Expected
+    }
+
+    It 'writes a decimal point in any culture' {
+        Use-Culture 'de-DE' { InModuleScope UsaBanner { Format-UsaBannerSize -Used 1GB -Size 5GB } } | Should -BeExactly '1.0 of 5.0 GiB'
     }
 }
 
