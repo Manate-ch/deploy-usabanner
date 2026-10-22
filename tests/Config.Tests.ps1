@@ -26,6 +26,7 @@ Describe 'the defaults' {
         @{ Key = 'preLogon.ip'; Value = $false; Why = 'likewise' }
         @{ Key = 'services'; Value = 'default'; Why = 'the OS''s own list' }
         @{ Key = 'color.mode'; Value = 'auto'; Why = 'the terminal''s signals decide' }
+        @{ Key = 'glyphs'; Value = 'auto'; Why = 'the client''s locale decides' }
         @{ Key = 'voice'; Value = 'plain'; Why = 'a meme voice is a deliberate change, never a default' }
     ) {
         $value = InModuleScope UsaBanner { Get-UsaBannerConfigDefault }

@@ -1,8 +1,9 @@
 # UsaBanner: decisions
 
 > Companion to [SPEC.md](SPEC.md). Each decision has an ID, the question, the
-> options, the recommendation and why, and what was decided. All 26 are
-> decided; the table below sums them up. Facts are tagged **[measured]** (on a
+> options, the recommendation and why, and what was decided. D1 to D26 are
+> decided, and the table below sums them up; D27 waits on your review. Facts
+> are tagged **[measured]** (on a
 > test host), **[fetched]** (read at the cited source on 2026-10-09, unless a
 > date says otherwise) or **[known]** (from experience, not re-checked).
 
@@ -66,6 +67,7 @@
 | D24 | A LICENSE | decided: MIT |
 | D25 | Meme voices | decided: plain unless set |
 | D26 | The facts record | decided |
+| D27 | Deploy-UsaBanner's flags | built; for your review |
 
 ## D1. Where the code lives, and its name
 
@@ -512,6 +514,12 @@ UTF-8 is read as `Show-UsaBanner -Glyphs auto` does: `USABANNER_GLYPHS`
 else Windows counts as UTF-8, as today's Windows banner does; else the locale,
 the first of `LC_ALL`, `LC_CTYPE` and `LANG` that is set; with none set, the
 C locale, which is not.
+
+**The host's glyphs (M4, 2026-10-22).** The configuration's `glyphs`
+(`auto`, `unicode` or `ascii`) is what the admin found the clients of a host
+show, as `color.mode` is for colour (D7's second layer). It comes after
+`USABANNER_GLYPHS` and before Windows and the locale; `auto` leaves the
+answer to those. `Deploy-UsaBanner -Glyphs` sets it (D27).
 
 ## D7. Colour presets and the preview
 
@@ -1513,6 +1521,43 @@ its fields separated by tabs, its kind first:
     from the periodic job's `slow.tsv` (D17);
   - the health lines and the services row come from the module too
     (`WindowsHealth.ps1`, D10).
+
+## D27. Deploy-UsaBanner's flags
+
+**Built (M4, 2026-10-22), for your review.** Until the walk-through (M5),
+`Deploy-UsaBanner` takes the settings as flags, each setting one part of the
+configuration (D12):
+
+| Flag | Setting | Takes |
+|---|---|---|
+| `-Company` | `company` | the name, printable ASCII |
+| `-Environment` | `environment` | `UNSET`, `DEV-TEST`, `LAB`, `PROD` or `PUB` |
+| `-BannerImage` | `art.name` | a piece of the module's art, or `os`: §3.2's name for it |
+| `-Border` | `border.set` | a border set (D6) |
+| `-BorderChar` | `border.char` | the character `OneChar` draws with |
+| `-BorderCap` | `border.cap` | an ASCII face for the top line |
+| `-ColorPreset` | `color.preset` | a preset (D7) |
+| `-ColorMode` | `color.mode` | the host's colour mode (D7) |
+| `-Glyphs` | `glyphs` | `auto`, `unicode` or `ascii` (D6) |
+| `-Legal` | `legal.template` | `L1` to `L5` (D8) |
+| `-LegalText` | `legal.text` | your own lines; the template becomes `custom` |
+| `-Voice` | `voice` | `plain`, `uwu`, `random` or `leet` (D25) |
+| `-PreInit`, `-PreLogon` | `preInit`, `preLogon` | `HostName`, `Ip`, both, or `None` (D9) |
+| `-VlanFile` | `vlans` | a CSV or TSV file: `name`, `tag` and `cidr`, then `color` and `short` where wanted |
+| `-Services` | `services` | the names, or `default` (D10) |
+
+- **A deploy builds the whole configuration.** It starts from the defaults,
+  or from a file given with `-Path`, and puts the flags on top; what the
+  host held before is replaced. So the same command gives the same banner on
+  every host, and running it again changes nothing. A deploy that changes a
+  setting says which, old and new (`environment: "LAB" -> "PROD"`), so a run
+  that would drop a host's VLANs says so.
+- **The naming standard is a table of tables,** so it comes from a file
+  (`-Path`) alone.
+- **A value from a list is written as the schema spells it.** PowerShell
+  takes `-Environment prod` for `PROD`, whatever the case, and the
+  configuration gets `PROD`.
+- **A value the schema refuses names its flag:** `-Company: /company: ...`.
 
 ## Appendix A. Art mock-ups (rough)
 

@@ -182,6 +182,8 @@ function Resolve-UsaBannerGlyphs {
     +------------------------+--------------------------------------------+
     | -Requested             | itself, unless auto: the caller asked      |
     | USABANNER_GLYPHS       | itself: the user's own override            |
+    | -HostGlyphs            | itself, unless auto: what the admin found  |
+    |                        | the clients of this host show              |
     | Windows                | unicode, as today's Windows banner draws   |
     | LC_ALL, LC_CTYPE, LANG | the first one set: unicode when it names   |
     |                        | UTF-8, ascii for any other character set   |
@@ -197,6 +199,7 @@ function Resolve-UsaBannerGlyphs {
     [OutputType([string])]
     param(
         [ValidateSet('auto', 'unicode', 'ascii')][string]$Requested = 'auto',
+        [ValidateSet('auto', 'unicode', 'ascii')][string]$HostGlyphs = 'auto',
         [System.Collections.IDictionary]$Environment,
         [bool]$OnWindows = $IsWindows
     )
@@ -215,6 +218,7 @@ function Resolve-UsaBannerGlyphs {
         if ($user -in 'unicode', 'ascii') { return $user.ToLowerInvariant() }
         Write-Warning "UsaBanner: USABANNER_GLYPHS is '$user'. It takes unicode or ascii, so it is ignored."
     }
+    if ($HostGlyphs -ne 'auto') { return $HostGlyphs }
     if ($OnWindows) { return 'unicode' }
     foreach ($name in 'LC_ALL', 'LC_CTYPE', 'LANG') {
         $locale = & $readVariable $name $Environment

@@ -127,6 +127,18 @@ Describe 'Show-UsaBanner' {
         ($auto -join "`n") | Should -BeExactly (@(Show-UsaBanner -Path $path -Facts $facts -Os ubuntu -Glyphs unicode -ColorMode 16) -join "`n")
     }
 
+    It 'takes the glyphs the configuration sets for this host when asked for auto, under the user''s own override' -Skip:$IsWindows {
+        $path = New-ConfigFile 'glyphs.json' @{ glyphs = 'ascii' }
+        $hosts = Use-Environment @{ USABANNER_GLYPHS = $null; LC_ALL = $null; LC_CTYPE = $null; LANG = 'C.UTF-8' } {
+            @(Show-UsaBanner -Path $path -Facts $facts -Os ubuntu -ColorMode none)
+        }
+        ($hosts -join "`n") | Should -BeExactly (@(Show-UsaBanner -Path $path -Facts $facts -Os ubuntu -ColorMode none -Glyphs ascii) -join "`n")
+        $users = Use-Environment @{ USABANNER_GLYPHS = 'unicode'; LC_ALL = $null; LC_CTYPE = $null; LANG = 'C.UTF-8' } {
+            @(Show-UsaBanner -Path $path -Facts $facts -Os ubuntu -ColorMode none)
+        }
+        ($users -join "`n") | Should -Match ([string][char]0x2501)
+    }
+
     It 'draws ASCII for a client whose locale is not UTF-8, and Unicode for one that is' -Skip:$IsWindows {
         $ascii = Use-Environment @{ USABANNER_GLYPHS = $null; LC_ALL = $null; LC_CTYPE = $null; LANG = 'C' } {
             @(Show-UsaBanner -Path $lab -Facts $facts -Os ubuntu -ColorMode none)

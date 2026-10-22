@@ -9,6 +9,7 @@
     "mode": "auto",
     "preset": "UsagiTools"
   },
+  "glyphs": "auto",
   "border": {
     "set": "Classic"
   },
