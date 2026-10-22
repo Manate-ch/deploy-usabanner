@@ -34,7 +34,7 @@
 | D22 | later |
 | D23 | as proposed |
 | D25 | meme voices for a lab VM (uwu, random, leet): the banner's own words, never its facts; `voice` is plain unless set, on any tier (2026-10-21) |
-| D26 | the facts as records, one a line, tab-separated, kind first; on Linux from `linux/facts.sh`, which the login renderer and the module both read (2026-10-22) |
+| D26 | the facts as records, one a line, tab-separated, kind first; on Linux from `linux/facts.sh`, which the login renderer and the module both read; on Windows the module reads the same facts itself (2026-10-22) |
 
 ## Contents
 
@@ -1256,8 +1256,26 @@ its fields separated by tabs, its kind first:
   load D17 reads at login: a busy percentage needs two readings apart, a
   wait at every login. It can pass 100, when more work waits than there are
   CPUs to run it. Windows reads a busy percentage over 200 ms, as today.
-- **The Windows collector** reads the same facts inside the module, in M3's
-  next merge request.
+- **On Windows the module reads the same facts itself**
+  (`UsaBanner/Private/WindowsFacts.ps1`), from CIM, the registry and .NET,
+  through today's probes, each chosen by timing a fresh process, as a login
+  is. Where it differs from Linux, or from today's Windows banner:
+  - `cpu` is the processors' busy percentage over a quiet 200 ms window,
+    read after the other probes: across them an idle 4-core node read 24%,
+    and a quiet window 3% [measured for today's banner, 2026-10-03];
+  - the time carries its UTC offset (`-05:00`): .NET knows no zone
+    abbreviations;
+  - the name is the DNS host name in the case the host gives it, where
+    today's banner lower-cases it; a domain stays in lower case;
+  - every fixed drive gets a record, where today's panel shows the system
+    drive alone; a CD drive gets none;
+  - adapters are left out by type (loopback, tunnel, PPP), and by name only
+    the NAT adapters of WSL, the Default Switch and containers. Today's
+    banner leaves out every `vEthernet` adapter, and on a Hyper-V host that
+    is where the host's own addresses are;
+  - sessions count quser's lines and each user once, as Linux counts
+    `who`'s; no session is `0`, where today's banner said `0  ()`. quser
+    lists no SSH logon.
 
 ## Appendix A. Art mock-ups (rough)
 

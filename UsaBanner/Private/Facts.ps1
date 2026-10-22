@@ -63,8 +63,9 @@ function Get-UsaBannerHostFacts {
     This host's facts.
     .DESCRIPTION
     On Linux: the records linux/facts.sh prints, read by
-    ConvertFrom-UsaBannerFactRecord. On Windows: the host's name. Records
-    without a name take the host's own, so the panel always has a title.
+    ConvertFrom-UsaBannerFactRecord. On Windows: what
+    Get-UsaBannerWindowsFacts reads (WindowsFacts.ps1). Records without a
+    name take the host's own, so the panel always has a title.
     -OnWindows and -Collector replace what this host says, and -Environment
     adds variables to the collector's: for tests.
     #>
@@ -75,7 +76,7 @@ function Get-UsaBannerHostFacts {
         [string]$Collector = (Join-Path $script:UsaBannerRoot 'linux' 'facts.sh'),
         [System.Collections.IDictionary]$Environment = @{}
     )
-    if ($OnWindows) { return @{ Name = [Environment]::MachineName } }
+    if ($OnWindows) { return Get-UsaBannerWindowsFacts }
     $assignments = @(foreach ($key in $Environment.Keys) { "$key=$($Environment[$key])" })
     $facts = ConvertFrom-UsaBannerFactRecord -Line @(& env @assignments sh $Collector)
     if (-not $facts['Name']) { $facts['Name'] = [Environment]::MachineName }

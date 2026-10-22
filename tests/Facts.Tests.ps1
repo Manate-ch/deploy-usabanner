@@ -317,13 +317,15 @@ Describe 'Get-UsaBannerHostFacts' {
         $facts.Uptime | Should -BeExactly '1h 2m'
     }
 
-    It 'gives the host''s name alone on Windows, running no collector' {
+    It 'reads a Windows host''s facts in the module, running no collector' {
         $marker = Join-Path $TestDrive 'collector-ran'
         $marking = Join-Path $TestDrive 'marking.sh'
         [System.IO.File]::WriteAllText($marking, "touch '$marker'`n")
+        Mock -ModuleName UsaBanner Get-UsaBannerWindowsFacts { @{ Name = 'BEVSW-APP1'; Uptime = '13d 1h 59m' } }
         $facts = InModuleScope UsaBanner -Parameters @{ Path = $marking } { param($Path) Get-UsaBannerHostFacts -OnWindows $true -Collector $Path }
-        @($facts.Keys) | Should -BeExactly @('Name')
-        $facts.Name | Should -BeExactly ([Environment]::MachineName)
+        $facts.Name | Should -BeExactly 'BEVSW-APP1'
+        $facts.Uptime | Should -BeExactly '13d 1h 59m'
+        Should -Invoke Get-UsaBannerWindowsFacts -ModuleName UsaBanner -Times 1 -Exactly
         Test-Path -LiteralPath $marker | Should -BeFalse
     }
 }
