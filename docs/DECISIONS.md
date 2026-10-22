@@ -992,8 +992,53 @@ cpufreq. A reboot is read live, as decided above: pending, by
 `kernel 6.8.0-88`; scheduled, by `/run/systemd/shutdown/scheduled`, the file
 `shutdown --show` reads. Its `USEC=` is microseconds since 1970 and its
 `MODE=` is reboot, poweroff or the like [fetched: systemd v255,
-`src/login/logind-dbus.c`, `update_schedule_file`]. Windows gets its slow
-facts in the next merge request.
+`src/login/logind-dbus.c`, `update_schedule_file`].
+
+**The slow facts on Windows (M3, 2026-10-22).** `Update-UsaBannerSample`
+writes them anew at every run, after its sample, to
+`%ProgramData%\UsagiTools\Banner\slow.tsv`, in the same form with one kind
+more, `cpu-speed`: Linux reads its CPU's speed at login, where on Windows it
+would be one more CIM query for every login to wait on.
+
+- **the CPU's rated speed**, from `Win32_Processor`'s name (`@ 3.10GHz`),
+  else its `MaxClockSpeed`: a Hyper-V guest gave 2195 MHz for a CPU named
+  `@ 3.10GHz` [measured on two lab VMs];
+- **the memory's kind and speed**, from `Win32_PhysicalMemory`: the first
+  module whose SMBIOS type is a DDR one, named as dmidecode names it
+  [fetched: dmidecode, `dmi_memory_device_type`], at its configured speed,
+  else its rated one. Hyper-V gives type 2, Unknown, and no speed [measured];
+- **each fixed drive's kind**, from the physical disk under its partition
+  (`Get-Partition`, `Get-PhysicalDisk`): removable or NVMe by its bus, else
+  SSD or HDD by its media, Linux's order. A Hyper-V virtual disk is
+  `Unspecified` on a `SAS` bus [measured];
+- **the updates waiting**, from the Windows Update agent: the software
+  updates neither installed, hidden nor optional (`BrowseOnly=0`), and those
+  in the Security Updates classification, by its id [fetched:
+  `IUpdateSearcher::Search`; WSUS Classification GUIDs]. The searcher has
+  `Online` off, so it does not go online [fetched:
+  `IUpdateSearcher::Online`]: it answers from the agent's own last scan, as
+  `apt-check` answers from apt's lists, and the job adds no scan to an update
+  server's load. How long the search takes, and that its count is the one
+  Settings shows, are measured in the lab run (M3's last merge request).
+
+A virtual machine's memory and drives get no kind, as on Linux. Windows has
+no `systemd-detect-virt`, and `HypervisorPresent` cannot tell: it was true on
+both lab VMs [measured], and it is true on a Hyper-V host, or on any host
+running virtualization-based security [known]. So the job goes by the
+computer's maker and model: Hyper-V's guests are Microsoft Corporation's
+`Virtual Machine` [measured]; QEMU, KVM, Xen, VMware, VirtualBox and the
+large clouds name themselves in one or the other [known, not measured].
+
+A reboot pending is read live at login from the two registry keys today's
+banner reads: Component Based Servicing's `RebootPending`, shown as
+`servicing`, and Windows Update's `RebootRequired`. Pending file renames, in
+the table above, are left out for now, as today's banner leaves them: an
+installer replacing a file in use queues one, but so does one deleting a
+temporary file [known], and how often the key is set on a host where no
+restart is planned is counted in the lab run before they are added. A
+restart scheduled is not read yet either: event 1074 and Windows Update's
+own schedule are measured in the lab run first. Until then the row says
+`none pending`, never `none scheduled`.
 
 ## D18. Installing PowerShell 7 before the module can run
 
@@ -1324,7 +1369,11 @@ its fields separated by tabs, its kind first:
     is where the host's own addresses are;
   - sessions count quser's lines and each user once, as Linux counts
     `who`'s; no session is `0`, where today's banner said `0  ()`. quser
-    lists no SSH logon.
+    lists no SSH logon;
+  - a reboot pending is its own row, naming why (`servicing`,
+    `Windows Update`), where today's banner raised one problem for either;
+    the CPU's speed, the memory's and drives' kinds and the updates come
+    from the periodic job's `slow.tsv` (D17).
 
 ## Appendix A. Art mock-ups (rough)
 

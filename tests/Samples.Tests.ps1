@@ -127,11 +127,18 @@ Describe 'Get-UsaBannerDataPath' {
 }
 
 Describe 'Update-UsaBannerSample' {
-    It 'adds this Windows host''s sample to the samples file, its range read from the same file' {
+    It 'adds this Windows host''s sample to the samples file, its range read from the same file, then writes its slow facts' {
         Mock -ModuleName UsaBanner Get-UsaBannerWindowsFacts { New-Facts }
-        $path = Join-Path $TestDrive 'job' 'samples.tsv'
-        InModuleScope UsaBanner -Parameters @{ Path = $path; Now = $Now } { param($Path, $Now) Update-UsaBannerSample -Path $Path -Now $Now }
-        [System.IO.File]::ReadAllText($path) | Should -BeExactly ((@("$Epoch`tcpu`t12", "$Epoch`tmemory`t41", "$Epoch`tdisk`tC:`t63", "$Epoch`tdisk`tD:`t71") -join "`n") + "`n")
-        Should -Invoke Get-UsaBannerWindowsFacts -ModuleName UsaBanner -Times 1 -Exactly -ParameterFilter { $SamplePath -like '*job*samples.tsv' }
+        $samplesFile = Join-Path $TestDrive 'job' 'samples.tsv'
+        $sampledFirst = [System.Collections.Generic.List[bool]]::new()
+        Mock -ModuleName UsaBanner Write-UsaBannerSlowFacts { $sampledFirst.Add((Test-Path -LiteralPath $samplesFile)) }
+        InModuleScope UsaBanner -Parameters @{ Path = $samplesFile; SlowPath = (Join-Path $TestDrive 'job' 'slow.tsv'); Now = $Now } {
+            param($Path, $SlowPath, $Now)
+            Update-UsaBannerSample -Path $Path -SlowPath $SlowPath -Now $Now
+        }
+        [System.IO.File]::ReadAllText($samplesFile) | Should -BeExactly ((@("$Epoch`tcpu`t12", "$Epoch`tmemory`t41", "$Epoch`tdisk`tC:`t63", "$Epoch`tdisk`tD:`t71") -join "`n") + "`n")
+        Should -Invoke Get-UsaBannerWindowsFacts -ModuleName UsaBanner -Times 1 -Exactly -ParameterFilter { $SamplePath -like '*job*samples.tsv' -and $SlowPath -like '*job*slow.tsv' }
+        Should -Invoke Write-UsaBannerSlowFacts -ModuleName UsaBanner -Times 1 -Exactly -ParameterFilter { $Path -like '*job*slow.tsv' -and $Now.ToUnixTimeSeconds() -eq 1792635480 }
+        $sampledFirst | Should -BeExactly @($true)
     }
 }
