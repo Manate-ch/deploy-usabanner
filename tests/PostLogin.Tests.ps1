@@ -220,6 +220,28 @@ Describe 'the panel' {
         $row | Should -Not -Match '24h'
     }
 
+    It 'draws the 24-hour range only when the samples gave both ends: <Case>' -ForEach @(
+        @{ Case = 'both, the lowest 0'; Min = 0; Max = 71; Ranges = 4 }
+        @{ Case = 'neither'; Min = $null; Max = $null; Ranges = 0 }
+        @{ Case = 'the lowest alone'; Min = 3; Max = $null; Ranges = 0 }
+    ) {
+        $facts = Get-Facts web
+        foreach ($fact in @($facts.Cpu, $facts.Memory) + @($facts.Disks)) {
+            $fact.Min = $Min
+            $fact.Max = $Max
+        }
+        $rows = @(Invoke-PostLogin -Facts $facts | Where-Object { $_ -match '^\| +(cpu|memory|disk) ' })
+        $rows.Count | Should -Be 4
+        @($rows | Where-Object { $_ -match '24h' }).Count | Should -Be $Ranges
+        @($rows | Where-Object { $_ -match '24h 0-71%' }).Count | Should -Be $Ranges
+    }
+
+    It 'draws a cpu row without a model as its percentage alone' {
+        $facts = Get-Facts web
+        $facts.Cpu = @{ Now = 5; Min = $null; Max = $null; Text = $null }
+        @(Invoke-PostLogin -Facts $facts | Where-Object { $_ -match '^\| +cpu ' }) | Should -Match '^\| +cpu +5% +\|$'
+    }
+
     It 'shortens the badge before it drops it: <Case>' -ForEach @(
         @{ Case = 'site, VLAN tag and short name'; Site = 'HQ'; Vlan = @{ tag = 40; name = 'Servers' }; Expected = @('HQ - 40-Servers', '40-Servers', '40') }
         @{ Case = 'the short name over the name'; Site = 'HQ'; Vlan = @{ tag = 10; name = 'Management'; short = 'Mgmt' }; Expected = @('HQ - 10-Mgmt', '10-Mgmt', '10') }

@@ -1,7 +1,7 @@
 # UsaBanner: decisions
 
 > Companion to [SPEC.md](SPEC.md). Each decision has an ID, the question, the
-> options, the recommendation and why, and what was decided. All 25 are
+> options, the recommendation and why, and what was decided. All 26 are
 > decided; the table below sums them up. Facts are tagged **[measured]** (on a
 > test host), **[fetched]** (read at the cited source on 2026-10-09, unless a
 > date says otherwise) or **[known]** (from experience, not re-checked).
@@ -34,6 +34,7 @@
 | D22 | later |
 | D23 | as proposed |
 | D25 | meme voices for a lab VM (uwu, random, leet): the banner's own words, never its facts; `voice` is plain unless set, on any tier (2026-10-21) |
+| D26 | the facts as records, one a line, tab-separated, kind first; on Linux from `linux/facts.sh`, which the login renderer and the module both read (2026-10-22) |
 
 ## Contents
 
@@ -64,6 +65,7 @@
 | D23 | Names and paths without "Manatech" | decided |
 | D24 | A LICENSE | decided: MIT |
 | D25 | Meme voices | decided: plain unless set |
+| D26 | The facts record | decided |
 
 ## D1. Where the code lives, and its name
 
@@ -127,6 +129,12 @@ slow PowerShell's start. That is today's `-SshOnly` behaviour. One canonical con
 that `Deploy-UsaBanner` compiles into what each renderer reads fastest: flat
 `KEY=value` and TSV files for the shell, a `.psd1` for the Windows module.
 Today's code already splits this way.
+
+**Decided for M4 (2026-10-22): on Ubuntu, `pwsh` pre-draws and `awk` fills in
+the dynamic data.** `Deploy-UsaBanner` draws in PowerShell what only the
+configuration changes. At each login, `awk` fills in what changes between
+logins: the facts (D26) and the health. A login waits on `sh` and `awk`
+alone, and the banner keeps the module's look.
 
 ## D3. Default logos, and what may ship in a public repo
 
@@ -1192,6 +1200,57 @@ each drawn in the gallery and marked as right:
   to answer than the banner.
 - **When a voiced top line is full,** the cap gives way first, then the hint
   shortens: the same rule as for any box.
+
+## D26. The facts record
+
+M3 gathers what the banner after login shows about its host (SPEC §5.4). Two
+readers want it: Ubuntu's login renderer, in `sh` and `awk` (D2), and the
+module, for `Show-UsaBanner`.
+
+**Decided (2026-10-22):** one record for every reader. Each fact is a line,
+its fields separated by tabs, its kind first:
+
+| Kind | Fields after the kind |
+|---|---|
+| `name` | the host name, with its domain where the periodic job cached one |
+| `ip` | the primary IPv4 address: the source of the route out |
+| `os` | the OS and its kernel |
+| `uptime` | as `12d 6h 40m` |
+| `cpu` | now, min, max (percent), text |
+| `memory` | percent in use, min, max, text, kind |
+| `disk` | mount point, percent in use, min, max, text, kind |
+| `sessions` | how many, and whose |
+| `time` | the local time |
+| `ipv4` | an adapter, and its addresses |
+
+- **Tabs and lines,** because `awk -F '\t'` reads them as they are, and a
+  value with spaces (`6 of 121 GiB`, an OS name) stays one field. The
+  collector turns a tab inside a value into a space and drops control
+  characters, so no value can split its record or start another.
+- **An empty field is a fact not known at login.** Min and max come from the
+  24-hour samples (D17), and the kinds (`DDR4`, `SSD`) from the periodic
+  job's cache. The banner leaves out what is empty, so there is no `24h`
+  range until samples exist. A fact that cannot be read gets no record, and
+  so no row.
+- **A reader passes over a kind it does not know,** so an older module reads
+  a newer collector.
+- **On Linux the collector is `UsaBanner/linux/facts.sh`,** POSIX `sh`, for
+  the login renderer and the module alike. It reads only what is fast and
+  local (D17's first tier). Each command that could stall is cut off after
+  2 seconds, and the domain comes from the periodic job's cache, because
+  looking it up could wait on DNS. Its sources are today's banner's, with
+  four changes:
+  - `getconf _NPROCESSORS_ONLN` counts the CPUs: `nproc` follows
+    `OMP_NUM_THREADS`, which a user's shell may set;
+  - `df -k`, so `BLOCK_SIZE` cannot change the unit;
+  - the weekday in English, whatever the locale;
+  - os-release is read as text, never run.
+- **`cpu` on Linux is the 1-minute load as a share of the online CPUs**, the
+  load D17 reads at login: a busy percentage needs two readings apart, a
+  wait at every login. It can pass 100, when more work waits than there are
+  CPUs to run it. Windows reads a busy percentage over 200 ms, as today.
+- **The Windows collector** reads the same facts inside the module, in M3's
+  next merge request.
 
 ## Appendix A. Art mock-ups (rough)
 

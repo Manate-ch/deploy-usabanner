@@ -9,8 +9,8 @@
 #   +------------------------------+
 #   (ok) all clear   services ...       health: each problem, or all clear
 #
-# The facts come in as a hashtable, as M3 will gather them; a fact left out
-# gets no row.
+# The facts come in as a hashtable, as Get-UsaBannerHostFacts gathers them
+# (Facts.ps1); a fact left out gets no row.
 #
 #   +----------+--------------------------------------------------------+
 #   | Fact     | Shape                                                  |
@@ -33,8 +33,9 @@
 #   | Checked  | the checks that ran, named after all clear             |
 #   +----------+--------------------------------------------------------+
 #
-# Min and Max are the last 24 hours' (D17). Memory warns from 90% used, a
-# disk and the CPU from 85%, and each is bad from 95%: today's levels.
+# Min and Max are the last 24 hours' (D17); the range is drawn only when both
+# are known. Memory warns from 90% used, a disk and the CPU from 85%, and
+# each is bad from 95%: today's levels.
 
 # D7's presets: a style for each role the banner draws. Edge is the panel's
 # border where the preset fixes one; elsewhere the host's colours give it.
@@ -294,6 +295,13 @@ function New-UsaBannerPanel {
         param([int]$Percent, [int]$WarnFrom)
         if ($Percent -ge 95) { $Palette.Bad } elseif ($Percent -ge $WarnFrom) { $Palette.Warn } else { $Palette.Good }
     }
+    $range = {
+        # In:  a fact with Min and Max
+        # Out: the 24-hour range as a dim span, or nothing while either is unknown
+        # Why: the range comes from the samples (D17), and a new host has none yet
+        param([System.Collections.IDictionary]$Fact)
+        if ($null -ne $Fact.Min -and $null -ne $Fact.Max) { New-UsaBannerSpan -Text "  24h $($Fact.Min)-$($Fact.Max)%" -Style $Palette.Dim }
+    }
     $usage = {
         # In:  a row's label, a usage fact (Pct, Min, Max, Text, Kind), and the percentage it warns from
         # Out: nothing; the row joins the panel: a bar, the percentage, the size, and the 24-hour range as detail
@@ -309,7 +317,7 @@ function New-UsaBannerPanel {
             (New-UsaBannerSpan -Text "$($Fact.Pct)%" -Style (& $percentStyle $Fact.Pct $WarnFrom))
             (New-UsaBannerSpan -Text "  $size" -Style $Palette.Value)
         )
-        & $addRow $Label $value @(New-UsaBannerSpan -Text "  24h $($Fact.Min)-$($Fact.Max)%" -Style $Palette.Dim)
+        & $addRow $Label $value @(& $range $Fact)
     }
 
     if ($identity) { & $addRow 'schema' @(New-UsaBannerSpan -Text $identity.Decoded -Style $Palette.Value) }
@@ -320,7 +328,8 @@ function New-UsaBannerPanel {
     }
     $cpu = $Facts['Cpu']
     if ($cpu) {
-        & $addRow 'cpu' @((New-UsaBannerSpan -Text "$($cpu.Now)%" -Style (& $percentStyle $cpu.Now 85)), (New-UsaBannerSpan -Text "  24h $($cpu.Min)-$($cpu.Max)%" -Style $Palette.Dim)) @(New-UsaBannerSpan -Text "  $($cpu.Text)" -Style $Palette.Value)
+        $model = @(if ($cpu.Text) { New-UsaBannerSpan -Text "  $($cpu.Text)" -Style $Palette.Value })
+        & $addRow 'cpu' (@(New-UsaBannerSpan -Text "$($cpu.Now)%" -Style (& $percentStyle $cpu.Now 85)) + @(& $range $cpu)) $model
     }
     if ($Facts['Memory']) { & $usage 'memory' $Facts['Memory'] 90 }
     foreach ($disk in @($Facts['Disks'])) {
