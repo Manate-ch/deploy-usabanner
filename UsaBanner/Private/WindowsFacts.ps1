@@ -257,7 +257,8 @@ function Get-UsaBannerWindowsFacts {
     disks take their 24-hour range from the periodic job's samples, in
     -SamplePath (Samples.ps1); the CPU's speed, the memory's and disks'
     kinds and the updates waiting come from its slow facts, in -SlowPath
-    (WindowsSlowFacts.ps1); the reboot pending is read live. The health
+    (WindowsSlowFacts.ps1); a reboot pending and a restart set are read
+    live. The health
     lines and the services row come from WindowsHealth.ps1: -Services is
     the configuration's, default or the names, and -Ignore the services the
     sweep of automatic ones leaves out. -Hide is a regex of adapter names to
@@ -322,7 +323,19 @@ function Get-UsaBannerWindowsFacts {
 
     if ($adapters.Count) { $facts['Ipv4'] = $adapters }
     $facts['Time'] = $Now.ToString('ddd yyyy-MM-dd HH:mm zzz', [cultureinfo]::InvariantCulture)
-    $facts['Reboot'] = Format-UsaBannerReboot -Reason @(Get-UsaBannerWinRebootPending)
+    # A restart set, live: the newest of User32's events 1074 and 1075 since
+    # the boot (D17). A System log this account cannot read says nothing of
+    # a schedule, so the row does not either.
+    $restart = $null
+    $restartRead = $false
+    if ($system.BootTime) {
+        try {
+            $restart = Get-UsaBannerWinRestartEvent -Since $system.BootTime
+            $restartRead = $true
+        }
+        catch { $restart = $null }
+    }
+    $facts['Reboot'] = Format-UsaBannerReboot -Reason @(Get-UsaBannerWinRebootPending) -Restart $restart -RestartRead:$restartRead
     $serviceList = @(Get-UsaBannerWinServiceList)
     $timeSource = Get-UsaBannerWinTimeSource
 

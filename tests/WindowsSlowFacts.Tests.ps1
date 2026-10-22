@@ -291,6 +291,16 @@ Describe 'Format-UsaBannerReboot' {
         $row = InModuleScope UsaBanner -Parameters @{ Reason = $Reason } { param($Reason) Format-UsaBannerReboot -Reason $Reason }
         '{0}|{1}' -f $row.Text, $row.Level | Should -BeExactly $Expected
     }
+
+    It 'gives <Expected> for <Case>, the System log read' -ForEach @(
+        @{ Case = 'no restart event since the boot'; Reason = @(); Restart = $null; Expected = 'none pending, none scheduled|good' }
+        @{ Case = 'a restart called off (1075)'; Reason = @(); Restart = @{ Id = 1075; Time = [datetimeoffset]'2026-10-22T04:19:14-05:00'; User = 'BEVSW-APP1\Administrator' }; Expected = 'none pending, none scheduled|good' }
+        @{ Case = 'a restart set (1074)'; Reason = @(); Restart = @{ Id = 1074; Time = [datetimeoffset]'2026-10-22T04:19:10-05:00'; Type = 'restart'; User = 'BEVSW-APP1\Administrator' }; Expected = 'none pending; restart set Thu 04:19 by Administrator|warn' }
+        @{ Case = 'a power off set, servicing pending'; Reason = @('servicing'); Restart = @{ Id = 1074; Time = [datetimeoffset]'2026-10-22T23:05:00-05:00'; Type = 'power off'; User = 'NT AUTHORITY\SYSTEM' }; Expected = 'pending: servicing; power off set Thu 23:05 by SYSTEM|warn' }
+    ) {
+        $row = InModuleScope UsaBanner -Parameters @{ Reason = $Reason; Restart = $Restart } { param($Reason, $Restart) Format-UsaBannerReboot -Reason $Reason -Restart $Restart -RestartRead }
+        '{0}|{1}' -f $row.Text, $row.Level | Should -BeExactly $Expected
+    }
 }
 
 Describe 'the probes, run here' {
@@ -304,5 +314,9 @@ Describe 'the probes, run here' {
 
     It 'finds no reboot pending where there is no registry' -Skip:$IsWindows {
         @(InModuleScope UsaBanner { Get-UsaBannerWinRebootPending -ErrorAction Stop }).Count | Should -Be 0
+    }
+
+    It 'throws where there is no System log to read restart events from' -Skip:$IsWindows {
+        { InModuleScope UsaBanner { Get-UsaBannerWinRestartEvent -Since ([datetimeoffset]::Now) } } | Should -Throw -ExpectedMessage "*'Get-WinEvent'*"
     }
 }
