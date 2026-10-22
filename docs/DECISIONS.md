@@ -971,6 +971,30 @@ Windows, a PowerShell task every minute would be a lot of churn for one fact.
   hosts file's `localhost.localdomain` never shows; when the lookup gives
   the short name alone, the cache goes.
 
+**The slow facts on Linux (M3, 2026-10-22).** The job writes them anew at
+every run to `/var/lib/usabanner/slow.tsv`, a line each with its time, and a
+login takes those less than 24 hours old:
+
+- **the memory's kind and speed**, as `DDR4-3200`, from `dmidecode`: the
+  first module with a type, at its configured speed. A virtual machine's
+  firmware gives none: Hyper-V says Unknown for both [measured on a lab VM];
+- **each local filesystem's kind**, from the disk under it through LVM, RAID
+  and partitions: removable, NVMe, SSD or HDD. A virtual machine's disks get
+  none, because the storage behind them cannot be known: a Hyper-V virtual
+  disk says it is rotational [measured];
+- **the updates waiting**, from `apt-check`, which gives all of them, then
+  the security ones. The row warns only while security updates wait: other
+  updates are routine, and a row that is always amber stops being read.
+
+At login, the CPU's rated speed comes from the model name (`@ 3.10GHz`), else
+cpufreq. A reboot is read live, as decided above: pending, by
+`/run/reboot-required` and the packages that asked for it, a kernel shown as
+`kernel 6.8.0-88`; scheduled, by `/run/systemd/shutdown/scheduled`, the file
+`shutdown --show` reads. Its `USEC=` is microseconds since 1970 and its
+`MODE=` is reboot, poweroff or the like [fetched: systemd v255,
+`src/login/logind-dbus.c`, `update_schedule_file`]. Windows gets its slow
+facts in the next merge request.
+
 ## D18. Installing PowerShell 7 before the module can run
 
 R3 says to install PowerShell 7 when it is missing, but the cmdlets that
@@ -1242,6 +1266,8 @@ its fields separated by tabs, its kind first:
 | `cpu` | now, min, max (percent), text |
 | `memory` | percent in use, min, max, text, kind |
 | `disk` | mount point, percent in use, min, max, text, kind |
+| `updates` | the updates waiting, as text; a level, `good` or `warn` (D17) |
+| `reboot` | a reboot pending or scheduled, as text; a level |
 | `sessions` | how many, and whose |
 | `time` | the local time |
 | `ipv4` | an adapter, and its addresses |

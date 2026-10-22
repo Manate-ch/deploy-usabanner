@@ -18,10 +18,11 @@ BeforeAll {
         "ip`t10.20.40.80"
         "os`tUbuntu 24.04.5 LTS, kernel 6.8.0-147-generic"
         "uptime`t10h 32m"
-        "cpu`t0`t`t`t2 cores"
+        "cpu`t0`t`t`t2 cores @ 3.1 GHz"
         "memory`t14`t`t`t0.5 of 3.8 GiB`t"
         "disk`t/`t6`t`t`t6 of 121 GiB`t"
         "disk`t/var`t57`t`t`t21 of 39 GiB`t"
+        "reboot`tnone pending, none scheduled`tgood"
         "sessions`t3  (admin ops)"
         "time`tThu 2026-10-22 02:18 UTC"
         "ipv4`teth0`t10.20.40.80/22"
@@ -33,7 +34,9 @@ BeforeAll {
     # fails any other. hostname and date answer for themselves: the README
     # says why. hostname -f, which only the periodic job asks, answers from
     # hostname-f.txt when a test writes one, after 8 seconds when
-    # STUB_SLOW_FQDN is set; date +%s is 2026-10-22 02:18 UTC.
+    # STUB_SLOW_FQDN is set; date +%s is 2026-10-22 02:18 UTC, and date -d is
+    # the real one in UTC. lsblk answers for a device from lsblk<device>.txt,
+    # its slashes as underscores.
     $script:Bin = Join-Path $TestDrive 'bin'
     $null = New-Item -ItemType Directory -Path $Bin -Force
     $head = @'
@@ -48,7 +51,10 @@ case " ${STUB_SLOW-} " in *" NAME "*) sleep 5 ;; esac
         getconf  = '[ "$*" = _NPROCESSORS_ONLN ] || exit 1; cat "$STUB_DATA/getconf.txt"'
         df       = '[ "$*" = "-P -k -l -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs" ] || exit 1; cat "$STUB_DATA/df.txt"'
         who      = '[ $# -eq 0 ] || exit 1; cat "$STUB_DATA/who.txt"'
-        date     = 'case "$*" in "+%s") echo 1792635480 ;; "+%a %Y-%m-%d %H:%M %Z") if [ "${LC_ALL-}" = C ]; then echo "Thu 2026-10-22 02:18 UTC"; else echo "Do 2026-10-22 02:18 UTC"; fi ;; *) exit 1 ;; esac'
+        date     = 'case "$*" in "+%s") echo 1792635480 ;; "+%a %Y-%m-%d %H:%M %Z") if [ "${LC_ALL-}" = C ]; then echo "Thu 2026-10-22 02:18 UTC"; else echo "Do 2026-10-22 02:18 UTC"; fi ;; "-d @"*" +%a %H:%M") TZ=UTC exec /usr/bin/date "$@" ;; *) exit 1 ;; esac'
+        dmidecode = '[ "$*" = "-t memory" ] || exit 1; cat "$STUB_DATA/dmidecode-memory.txt"'
+        lsblk    = '[ "$1 $2 $3 $4 $5" = "-s -n -r -o TYPE,RM,ROTA,TRAN" ] || exit 1; for last; do :; done; cat "$STUB_DATA/lsblk$(printf "%s" "$last" | tr / _).txt"'
+        'systemd-detect-virt' = '[ "$*" = "--quiet --vm" ] || exit 1; virt=$(cat "$STUB_DATA/systemd-detect-virt.txt" 2>/dev/null); [ -n "$virt" ] && [ "$virt" != none ]'
     }
     foreach ($name in $stubs.Keys) {
         $path = Join-Path $Bin $name
@@ -94,10 +100,11 @@ case " ${STUB_SLOW-} " in *" NAME "*) sleep 5 ;; esac
     }
 
     function New-Variant {
-        # In:  files to change, as 'root/proc/loadavg' = text; $null removes one
+        # In:  files to change, as 'root/proc/loadavg' = text ($null removes
+        #      one), and -Executable, those of them to make programs
         # Out: the variant's Root and Data folders, for Invoke-Collector @variant
         # Why: each test changes only the part of the recording it is about
-        param([hashtable]$Change)
+        param([hashtable]$Change, [string[]]$Executable = @())
         $copy = Join-Path $TestDrive ([guid]::NewGuid().ToString())
         Copy-Item -LiteralPath $Fixture -Destination $copy -Recurse
         foreach ($file in $Change.Keys) {
@@ -109,6 +116,7 @@ case " ${STUB_SLOW-} " in *" NAME "*) sleep 5 ;; esac
             $null = New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force
             [System.IO.File]::WriteAllText($path, $Change[$file])
         }
+        foreach ($file in $Executable) { & chmod 755 (Join-Path $copy $file) }
         @{ Root = Join-Path $copy 'root'; Data = Join-Path $copy 'commands' }
     }
 
@@ -132,8 +140,8 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
     }
 
     It 'finds each stub first on PATH (else the tests below prove nothing)' {
-        $found = @(& env -i "PATH=$StubPath" sh -c 'for c in hostname ip uname getconf df who date; do command -v "$c"; done')
-        $found | Should -BeExactly @(foreach ($name in 'hostname', 'ip', 'uname', 'getconf', 'df', 'who', 'date') { Join-Path $Bin $name })
+        $found = @(& env -i "PATH=$StubPath" sh -c 'for c in hostname ip uname getconf df who date dmidecode lsblk systemd-detect-virt; do command -v "$c"; done')
+        $found | Should -BeExactly @(foreach ($name in 'hostname', 'ip', 'uname', 'getconf', 'df', 'who', 'date', 'dmidecode', 'lsblk', 'systemd-detect-virt') { Join-Path $Bin $name })
     }
 
     It 'gives the recorded Ubuntu 24.04.5 host''s records, in order' {
@@ -198,8 +206,8 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
     }
 
     It 'gives the 1-minute load as a share of the online CPUs: <Case>' -ForEach @(
-        @{ Case = 'two, rounded'; Cores = "2`n"; Load = "0.09 0.05 0.01 1/180 900`n"; Expected = "cpu`t5`t`t`t2 cores" }
-        @{ Case = 'one, past 100'; Cores = "1`n"; Load = "1.23 0.50 0.20 1/180 900`n"; Expected = "cpu`t123`t`t`t1 core" }
+        @{ Case = 'two, rounded'; Cores = "2`n"; Load = "0.09 0.05 0.01 1/180 900`n"; Expected = "cpu`t5`t`t`t2 cores @ 3.1 GHz" }
+        @{ Case = 'one, past 100'; Cores = "1`n"; Load = "1.23 0.50 0.20 1/180 900`n"; Expected = "cpu`t123`t`t`t1 core @ 3.1 GHz" }
         @{ Case = 'an unknown count, none'; Cores = $null; Load = "0.09 0.05 0.01 1/180 900`n"; Expected = '' }
     ) {
         $variant = New-Variant @{ 'commands/getconf.txt' = $Cores; 'root/proc/loadavg' = $Load }
@@ -207,7 +215,51 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
     }
 
     It 'counts the online CPUs with getconf, which OMP_NUM_THREADS does not change' {
-        Select-Record (Invoke-Collector -Variables @{ OMP_NUM_THREADS = '1' }) cpu | Should -BeExactly "cpu`t0`t`t`t2 cores"
+        Select-Record (Invoke-Collector -Variables @{ OMP_NUM_THREADS = '1' }) cpu | Should -BeExactly "cpu`t0`t`t`t2 cores @ 3.1 GHz"
+    }
+
+    It 'gives the CPUs'' rated speed <Case>' -ForEach @(
+        @{ Case = 'from cpufreq when the model name has none'; Change = @{ 'root/proc/cpuinfo' = "processor`t: 0`nmodel name`t: AMD EPYC 7763 64-Core Processor`n"; 'root/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq' = "3529052`n" }; Expected = "cpu`t0`t`t`t2 cores @ 3.5 GHz" }
+        @{ Case = 'not at all with neither'; Change = @{ 'root/proc/cpuinfo' = "processor`t: 0`nmodel name`t: AMD EPYC 7763 64-Core Processor`n" }; Expected = "cpu`t0`t`t`t2 cores" }
+    ) {
+        $variant = New-Variant $Change
+        Select-Record (Invoke-Collector @variant) cpu | Should -BeExactly $Expected
+    }
+
+    It 'fills the memory''s and disks'' kinds from the job''s cache, less than 24 hours old' {
+        $slow = @("$($Epoch - 900)`tmemory-kind`tDDR4-3200", "$($Epoch - 900)`tdisk-kind`t/`tNVMe", "$($Epoch - 86400)`tdisk-kind`t/var`tHDD")
+        $variant = New-Variant @{ 'root/var/lib/usabanner/slow.tsv' = ($slow -join "`n") + "`n" }
+        $records = Invoke-Collector @variant
+        @('memory', 'disk' | ForEach-Object { Select-Record $records $_ }) -join "`n" | Should -BeExactly (@(
+                "memory`t14`t`t`t0.5 of 3.8 GiB`tDDR4-3200"
+                "disk`t/`t6`t`t`t6 of 121 GiB`tNVMe"
+                "disk`t/var`t57`t`t`t21 of 39 GiB`t"
+            ) -join "`n")
+    }
+
+    It 'gives the updates the job counted: <Case>' -ForEach @(
+        @{ Case = 'none'; Counts = "0`t0"; Expected = "updates`tnone pending`tgood" }
+        @{ Case = 'some, none for security'; Counts = "12`t0"; Expected = "updates`t12 pending`tgood" }
+        @{ Case = 'some for security, a warning'; Counts = "64`t3"; Expected = "updates`t64 pending, 3 security`twarn" }
+    ) {
+        $variant = New-Variant @{ 'root/var/lib/usabanner/slow.tsv' = "$($Epoch - 900)`tupdates`t$Counts`n" }
+        Select-Record (Invoke-Collector @variant) updates | Should -BeExactly $Expected
+    }
+
+    It 'gives no updates from a count 24 hours old' {
+        $variant = New-Variant @{ 'root/var/lib/usabanner/slow.tsv' = "$($Epoch - 86400)`tupdates`t64`t3`n" }
+        Select-Record (Invoke-Collector @variant) updates | Should -BeExactly ''
+    }
+
+    It 'gives a reboot <Case>' -ForEach @(
+        @{ Case = 'pending, with the packages that asked for it'; Change = @{ 'root/run/reboot-required' = "*** System restart required ***`n"; 'root/run/reboot-required.pkgs' = "linux-image-6.8.0-88-generic`nlibc6`nlinux-image-6.8.0-88-generic`n" }; Expected = "reboot`tpending: libc6, kernel 6.8.0-88`twarn" }
+        @{ Case = 'pending, without its packages'; Change = @{ 'root/run/reboot-required' = "*** System restart required ***`n" }; Expected = "reboot`tpending`twarn" }
+        @{ Case = 'scheduled'; Change = @{ 'root/run/systemd/shutdown/scheduled' = "USEC=1792738800000000`nWARN_WALL=1`nMODE=reboot`nUID=0`n" }; Expected = "reboot`tnone pending; scheduled Fri 07:00`twarn" }
+        @{ Case = 'power-off scheduled'; Change = @{ 'root/run/systemd/shutdown/scheduled' = "USEC=1792738800000000`nWARN_WALL=1`nMODE=poweroff`nUID=0`n" }; Expected = "reboot`tnone pending; poweroff scheduled Fri 07:00`twarn" }
+        @{ Case = 'pending and scheduled'; Change = @{ 'root/run/reboot-required' = "*** System restart required ***`n"; 'root/run/reboot-required.pkgs' = "linux-image-6.8.0-88-generic`n"; 'root/run/systemd/shutdown/scheduled' = "USEC=1792738800000000`nWARN_WALL=1`nMODE=reboot`nUID=0`n" }; Expected = "reboot`tpending: kernel 6.8.0-88; scheduled Fri 07:00`twarn" }
+    ) {
+        $variant = New-Variant $Change
+        Select-Record (Invoke-Collector @variant) reboot | Should -BeExactly $Expected
     }
 
     It 'gives the memory in use as free counts it, the percentage cut: <Case>' -ForEach @(
@@ -270,14 +322,14 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
         $null = New-Item -ItemType Directory -Path $empty -Force
         $records = Invoke-Collector -Root $empty -Data $empty
         $LASTEXITCODE | Should -Be 0
-        $records -join "`n" | Should -BeExactly ("name`th-vsl-web1", "os`tLinux", "time`tThu 2026-10-22 02:18 UTC" -join "`n")
+        $records -join "`n" | Should -BeExactly ("name`th-vsl-web1", "os`tLinux", "reboot`tnone pending, none scheduled`tgood", "time`tThu 2026-10-22 02:18 UTC" -join "`n")
     }
 
     It 'fills min and max from the samples of the last 24 hours, the value now included' {
         $variant = New-Variant @{ 'root/var/lib/usabanner/samples.tsv' = ($RangeSamples -join "`n") + "`n" }
         $records = Invoke-Collector @variant
         @('cpu', 'memory', 'disk' | ForEach-Object { Select-Record $records $_ }) -join "`n" | Should -BeExactly (@(
-                "cpu`t0`t0`t71`t2 cores"
+                "cpu`t0`t0`t71`t2 cores @ 3.1 GHz"
                 "memory`t14`t10`t20`t0.5 of 3.8 GiB`t"
                 "disk`t/`t6`t5`t7`t6 of 121 GiB`t"
                 "disk`t/var`t57`t50`t60`t21 of 39 GiB`t"
@@ -287,7 +339,7 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
     It 'leaves min and max empty for a fact without a sample' {
         $variant = New-Variant @{ 'root/var/lib/usabanner/samples.tsv' = "$($Epoch - 900)`tcpu`t40`n" }
         $records = Invoke-Collector @variant
-        Select-Record $records cpu | Should -BeExactly "cpu`t0`t0`t40`t2 cores"
+        Select-Record $records cpu | Should -BeExactly "cpu`t0`t0`t40`t2 cores @ 3.1 GHz"
         Select-Record $records memory | Should -BeExactly "memory`t14`t`t`t0.5 of 3.8 GiB`t"
     }
 
@@ -296,7 +348,7 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
         $variant = New-Variant @{ 'root/var/lib/usabanner/samples.tsv' = ($lines -join "`n") + "`n" }
         $records = Invoke-Collector @variant
         @('cpu', 'memory', 'disk' | ForEach-Object { Select-Record $records $_ }) -join "`n" | Should -BeExactly (@(
-                "cpu`t0`t`t`t2 cores"
+                "cpu`t0`t`t`t2 cores @ 3.1 GHz"
                 "memory`t14`t`t`t0.5 of 3.8 GiB`t"
                 "disk`t/`t6`t`t`t6 of 121 GiB`t"
                 "disk`t/var`t57`t`t`t21 of 39 GiB`t"
@@ -379,22 +431,80 @@ Describe 'linux/sample.sh' -Skip:$IsWindows {
         $null = & env -i @assignments sh -c 'umask 077; exec sh "$1"' umask-077 $Sampler
         $folder = Join-Path $variant.Root 'var/lib/usabanner'
         (Get-Item -LiteralPath $folder).UnixFileMode | Should -Be ([System.IO.UnixFileMode]'UserRead, UserWrite, UserExecute, GroupRead, GroupExecute, OtherRead, OtherExecute')
-        foreach ($name in 'samples.tsv', 'fqdn') {
+        foreach ($name in 'samples.tsv', 'slow.tsv', 'fqdn') {
             (Get-Item -LiteralPath (Join-Path $folder $name)).UnixFileMode | Should -Be ([System.IO.UnixFileMode]'UserRead, UserWrite, GroupRead, OtherRead') -Because $name
         }
     }
 
-    It 'leaves no file behind but samples.tsv and fqdn' {
+    It 'leaves no file behind but samples.tsv, slow.tsv and fqdn' {
         $variant = New-Variant @{ 'commands/hostname-f.txt' = "h-vsl-web1.ad.example`n" }
         $null = Invoke-Collector @variant -Program $Sampler
-        @(Get-ChildItem -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner') -Force | ForEach-Object { $_.Name } | Sort-Object) | Should -BeExactly @('fqdn', 'samples.tsv')
+        @(Get-ChildItem -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner') -Force | ForEach-Object { $_.Name } | Sort-Object) | Should -BeExactly @('fqdn', 'samples.tsv', 'slow.tsv')
+    }
+
+    It 'keeps the memory''s kind and speed: <Case>' -ForEach @(
+        @{ Case = 'none from a virtual machine''s firmware'; Dmi = $null; Expected = '' }
+        @{ Case = 'the first module with a type, at its configured speed'; Dmi = (@(
+                    '# dmidecode 3.5', '', 'Handle 0x0010, DMI type 17, 92 bytes', 'Memory Device', "`tSize: No Module Installed", "`tType: Unknown", ''
+                    'Handle 0x0011, DMI type 17, 92 bytes', 'Memory Device', "`tSize: 32 GB", "`tType: DDR4", "`tSpeed: 3200 MT/s", "`tConfigured Memory Speed: 2933 MT/s", ''
+                    'Handle 0x0012, DMI type 17, 92 bytes', 'Memory Device', "`tSize: 32 GB", "`tType: DDR4", "`tSpeed: 3200 MT/s", "`tConfigured Memory Speed: 3200 MT/s"
+                ) -join "`n") + "`n"; Expected = 'DDR4-2933'
+        }
+    ) {
+        $change = @{}
+        if ($Dmi) { $change['commands/dmidecode-memory.txt'] = $Dmi }
+        $variant = New-Variant $change
+        $null = Invoke-Collector @variant -Program $Sampler
+        @(Get-Content -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner/slow.tsv') | Where-Object { $_ -like "*`tmemory-kind`t*" } | ForEach-Object { ($_ -split "`t")[2] }) -join ',' | Should -BeExactly $Expected
+    }
+
+    It 'keeps each disk''s kind on a physical host, from the disk under its filesystem' {
+        $variant = New-Variant @{
+            'commands/systemd-detect-virt.txt'                    = "none`n"
+            'commands/lsblk_dev_mapper_ubuntu--vg-ubuntu--lv.txt' = "lvm 0 0 `npart 0 0 `ndisk 0 0 nvme`n"
+            'commands/lsblk_dev_sda2.txt'                         = "part 1 0 `ndisk 1 0 usb`n"
+            'commands/lsblk_dev_sdb1.txt'                         = "part 0 1 `ndisk 0 1 sata`n"
+            'commands/lsblk_dev_sda1.txt'                         = "part 0 0 `ndisk 0 0 sata`n"
+        }
+        $null = Invoke-Collector @variant -Program $Sampler
+        @(Get-Content -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner/slow.tsv') | Where-Object { $_ -like "*`tdisk-kind`t*" } | ForEach-Object { ($_ -split "`t")[2..3] -join '=' }) -join ',' | Should -BeExactly '/=NVMe,/boot=removable,/var=HDD,/boot/efi=SSD'
+    }
+
+    It 'keeps no disk kind in a virtual machine, and asks lsblk nothing' {
+        $variant = New-Variant @{ 'commands/lsblk_dev_sdb1.txt' = "part 0 1 `ndisk 0 1 sata`n" }
+        $null = Invoke-Collector @variant -Program $Sampler
+        @(Get-Content -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner/slow.tsv') | Where-Object { $_ -like "*`tdisk-kind`t*" }).Count | Should -Be 0
+        @(Get-Content -LiteralPath $Log | Where-Object { $_ -like 'lsblk*' }).Count | Should -Be 0
+    }
+
+    It 'keeps the updates apt-check counts: <Case>' -ForEach @(
+        @{ Case = 'as it prints them'; Stub = "#!/bin/sh`necho '64;3' >&2`n"; Expected = '64,3' }
+        @{ Case = 'none when it prints something else'; Stub = "#!/bin/sh`necho 'E: Could not get lock' >&2`nexit 1`n"; Expected = '' }
+        @{ Case = 'none without it'; Stub = $null; Expected = '' }
+    ) {
+        $change = @{}
+        $programs = @()
+        if ($Stub) {
+            $change['root/usr/lib/update-notifier/apt-check'] = $Stub
+            $programs = @('root/usr/lib/update-notifier/apt-check')
+        }
+        $variant = New-Variant $change -Executable $programs
+        $null = Invoke-Collector @variant -Program $Sampler
+        @(Get-Content -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner/slow.tsv') | Where-Object { $_ -like "*`tupdates`t*" } | ForEach-Object { ($_ -split "`t")[2..3] -join ',' }) -join ';' | Should -BeExactly $Expected
+    }
+
+    It 'writes slow.tsv anew at every run' {
+        $variant = New-Variant @{ 'root/var/lib/usabanner/slow.tsv' = "$($Epoch - 900)`tmemory-kind`tDDR3-1600`n" }
+        $null = Invoke-Collector @variant -Program $Sampler
+        [System.IO.File]::ReadAllText((Join-Path $variant.Root 'var/lib/usabanner/slow.tsv')) | Should -BeExactly ''
     }
 }
 
 Describe 'ConvertFrom-UsaBannerFactRecord' {
     It 'reads the recorded host''s records as the facts the banner draws' {
         $facts = InModuleScope UsaBanner -Parameters @{ Lines = $Recorded } { param($Lines) ConvertFrom-UsaBannerFactRecord -Line $Lines }
-        @($facts.Keys | Sort-Object) | Should -BeExactly @('Cpu', 'Disks', 'Ip', 'Ipv4', 'Memory', 'Name', 'Os', 'Sessions', 'Time', 'Uptime')
+        @($facts.Keys | Sort-Object) | Should -BeExactly @('Cpu', 'Disks', 'Ip', 'Ipv4', 'Memory', 'Name', 'Os', 'Reboot', 'Sessions', 'Time', 'Uptime')
+        '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly 'none pending, none scheduled|good'
         $facts.Name | Should -BeExactly 'h-vsl-web1'
         $facts.Ip | Should -BeExactly '10.20.40.80'
         $facts.Os | Should -BeExactly 'Ubuntu 24.04.5 LTS, kernel 6.8.0-147-generic'
@@ -403,7 +513,7 @@ Describe 'ConvertFrom-UsaBannerFactRecord' {
         $facts.Cpu.Now | Should -Be 0
         $facts.Cpu.Min | Should -BeNullOrEmpty
         $facts.Cpu.Max | Should -BeNullOrEmpty
-        $facts.Cpu.Text | Should -BeExactly '2 cores'
+        $facts.Cpu.Text | Should -BeExactly '2 cores @ 3.1 GHz'
         $facts.Memory.Pct | Should -Be 14
         $facts.Memory.Text | Should -BeExactly '0.5 of 3.8 GiB'
         $facts.Memory.Kind | Should -BeNullOrEmpty
@@ -418,6 +528,12 @@ Describe 'ConvertFrom-UsaBannerFactRecord' {
         @($facts.Ipv4).Count | Should -Be 1
         $facts.Ipv4[0].Name | Should -BeExactly 'eth0'
         $facts.Ipv4[0].Address | Should -BeExactly '10.20.40.80/22'
+    }
+
+    It 'reads the updates and the reboot as their text and a level' {
+        $facts = InModuleScope UsaBanner { ConvertFrom-UsaBannerFactRecord -Line @("updates`t64 pending, 3 security`twarn", "reboot`tpending: kernel 6.8.0-88`twarn") }
+        '{0}|{1}' -f $facts.Updates.Text, $facts.Updates.Level | Should -BeExactly '64 pending, 3 security|warn'
+        '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly 'pending: kernel 6.8.0-88|warn'
     }
 
     It 'passes over an empty line and a kind it does not know' {
@@ -444,7 +560,7 @@ Describe 'Get-UsaBannerHostFacts' {
         $environment = @{ PATH = $StubPath; USABANNER_ROOT = (Join-Path $Fixture 'root'); STUB_DATA = (Join-Path $Fixture 'commands'); STUB_LOG = $Log }
         $facts = InModuleScope UsaBanner -Parameters @{ Variables = $environment } { param($Variables) Get-UsaBannerHostFacts -OnWindows $false -Environment $Variables }
         $facts.Name | Should -BeExactly 'h-vsl-web1'
-        $facts.Cpu.Text | Should -BeExactly '2 cores'
+        $facts.Cpu.Text | Should -BeExactly '2 cores @ 3.1 GHz'
         @($facts.Disks.Name) -join ',' | Should -BeExactly '/,/var'
         @($facts.Ipv4.Name) -join ',' | Should -BeExactly 'eth0'
     }

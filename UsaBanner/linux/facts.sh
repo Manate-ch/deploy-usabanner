@@ -14,19 +14,22 @@
 #   | cpu      | now, min, max (percent), text                          |
 #   | memory   | percent in use, min, max, text, kind                   |
 #   | disk     | mount point, percent in use, min, max, text, kind      |
+#   | updates  | the updates waiting, as text; a level, good or warn    |
+#   | reboot   | a reboot pending or scheduled, as text; a level        |
 #   | sessions | how many, and whose                                    |
 #   | time     | the local time                                         |
 #   | ipv4     | an adapter, and its addresses                          |
 #   +----------+--------------------------------------------------------+
 #
-# A field this script cannot know at login is empty: the memory's and disks'
-# kinds come from the periodic job's cache. min and max are the lowest and
-# highest of the periodic job's samples of the last 24 hours (sample.sh,
-# D17), the value now included; until there is a sample, they stay empty.
-# cpu is the 1-minute load as a share of the online CPUs, so it can pass
-# 100. A fact it cannot read gets no record. Nothing here waits on the
-# network, and each command that could stall is time-boxed: pam_motd runs
-# the renderer at every login.
+# What is slow to read comes from the periodic job (sample.sh, D17): min and
+# max are the lowest and highest of its samples of the last 24 hours, the
+# value now included; the memory's and disks' kinds and the updates come
+# from its cache, when that is less than 24 hours old. Until the job has
+# run, those fields are empty and there is no updates record. cpu is the
+# 1-minute load as a share of the online CPUs, so it can pass 100. A fact it
+# cannot read gets no record. Nothing here waits on the network, and each
+# command that could stall is time-boxed: pam_motd runs the renderer at
+# every login.
 #
 # USABANNER_ROOT (tests only) prefixes each file it reads.
 # USABANNER_NOW (tests only) is the time, in seconds since 1970.
@@ -54,11 +57,13 @@ out() {
 	printf '%s\n' "$_line"
 }
 
-# range - its input's cpu, memory and disk records with min and max filled
-# in: the lowest and highest of the samples of the last 24 hours and of the
-# value now. A record without a sample keeps them empty.
-range() {
-	awk -F '\t' -v OFS='\t' -v cut=$((now - 86400)) -v samples="$root/var/lib/usabanner/samples.tsv" '
+# fill - its input's cpu, memory and disk records with what the periodic job
+# keeps filled in: min and max, the lowest and highest of the samples of the
+# last 24 hours and of the value now; and the memory's and disks' kinds from
+# its cache, when that is less than 24 hours old. A record the job knows
+# nothing of keeps those fields empty.
+fill() {
+	awk -F '\t' -v OFS='\t' -v cut=$((now - 86400)) -v samples="$root/var/lib/usabanner/samples.tsv" -v slow="$root/var/lib/usabanner/slow.tsv" '
 	function widen(key, at) {
 		if (!(key in lo) || $at !~ /^[0-9]+$/) return
 		$(at + 1) = (lo[key] < $at + 0) ? lo[key] : $at + 0
@@ -74,9 +79,22 @@ range() {
 			if (!(key in lo) || v + 0 < lo[key]) lo[key] = v + 0
 			if (!(key in hi) || v + 0 > hi[key]) hi[key] = v + 0
 		}
+		while ((getline line < slow) > 0) {
+			n = split(line, f, "\t")
+			if (n < 3 || f[1] !~ /^[0-9]+$/ || f[1] + 0 <= cut) continue
+			if (f[2] == "memory-kind") kind["memory"] = f[3]
+			else if (f[2] == "disk-kind" && n >= 4) kind["disk" SUBSEP f[3]] = f[4]
+		}
 	}
-	$1 == "cpu" || $1 == "memory" { widen($1, 2) }
-	$1 == "disk" { widen("disk" SUBSEP $2, 3) }
+	$1 == "cpu" { widen("cpu", 2) }
+	$1 == "memory" {
+		widen("memory", 2)
+		if ("memory" in kind) $6 = kind["memory"]
+	}
+	$1 == "disk" {
+		widen("disk" SUBSEP $2, 3)
+		if (("disk" SUBSEP $2) in kind) $7 = kind["disk" SUBSEP $2]
+	}
 	{ print }'
 }
 
@@ -121,7 +139,7 @@ case $up in
 	;;
 esac
 
-# The CPU, the memory and the disks, each with its 24-hour range.
+# The CPU, the memory and the disks, each with its 24-hour range and kind.
 {
 	# The online CPUs: nproc would follow OMP_NUM_THREADS from a user's shell.
 	cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null)
@@ -131,7 +149,13 @@ esac
 		share=$(awk -v l="$load" -v c="$cores" 'BEGIN { printf "%d", l * 100 / c + 0.5 }')
 		unit=cores
 		[ "$cores" -eq 1 ] && unit=core
-		out cpu "$share" '' '' "$cores $unit"
+		# Their rated speed: the model name's "@ 3.10GHz" where it has one, as
+		# Intel's do, else the highest speed cpufreq knows.
+		ghz=
+		[ -r "$root/proc/cpuinfo" ] && ghz=$(awk -F '@' '/^model name/ && NF > 1 && match($NF, /[0-9.]+ *GHz/) { printf "%.1f", substr($NF, RSTART, RLENGTH) + 0; exit }' "$root/proc/cpuinfo")
+		max=$root/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq
+		[ -z "$ghz" ] && [ -r "$max" ] && ghz=$(awk '$1 ~ /^[0-9]+$/ && $1 > 0 { printf "%.1f", $1 / 1000000 }' "$max")
+		out cpu "$share" '' '' "$cores $unit${ghz:+ @ $ghz GHz}"
 	fi
 
 	# Memory in use: MemTotal less MemAvailable, as free(1) counts it, the
@@ -160,7 +184,48 @@ esac
 			else text = sprintf("%.1f of %.1f GiB", $3 / 1048576, $2 / 1048576)
 			print (m == "/" ? "" : m) tab "disk" tab m tab pct tab tab tab text tab
 		}' | LC_ALL=C sort | cut -f2-
-} | range
+} | fill
+
+# The updates waiting, as the job last counted them (apt-check is too slow
+# for a login): a warning while security updates wait.
+[ -r "$root/var/lib/usabanner/slow.tsv" ] && awk -F '\t' -v cut=$((now - 86400)) -v tab="$tab" '
+	$2 == "updates" && $1 ~ /^[0-9]+$/ && $1 + 0 > cut && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ { waiting = $3; security = $4 }
+	END {
+		if (waiting == "") exit
+		if (waiting == 0) print "updates" tab "none pending" tab "good"
+		else if (security == 0) print "updates" tab waiting " pending" tab "good"
+		else print "updates" tab waiting " pending, " security " security" tab "warn"
+	}' "$root/var/lib/usabanner/slow.tsv"
+
+# A reboot, read live (D17): pending, by Ubuntu's flag file and the packages
+# that asked for it, a kernel shortened to its version; scheduled, by the file
+# shutdown --show reads (systemd 255, logind-dbus.c: USEC= in microseconds,
+# MODE= reboot, poweroff and the like).
+pending=
+if [ -e "$root/run/reboot-required" ]; then
+	why=
+	[ -r "$root/run/reboot-required.pkgs" ] && why=$(LC_ALL=C sort -u "$root/run/reboot-required.pkgs" | sed 's/^linux-image-\(.*\)-generic$/kernel \1/' | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')
+	pending="pending${why:+: $why}"
+fi
+scheduled=
+if [ -r "$root/run/systemd/shutdown/scheduled" ]; then
+	set -- $(awk -F '=' '$1 == "USEC" && $2 ~ /^[0-9]+$/ { usec = $2 } $1 == "MODE" { mode = $2 } END { if (usec != "") print int(usec / 1000000), (mode == "" ? "reboot" : mode) }' "$root/run/systemd/shutdown/scheduled")
+	if [ $# -eq 2 ]; then
+		at=$(LC_ALL=C date -d "@$1" '+%a %H:%M' 2>/dev/null)
+		what=scheduled
+		[ "$2" = reboot ] || what="$2 scheduled"
+		[ -n "$at" ] && scheduled="$what $at"
+	fi
+fi
+if [ -z "$pending$scheduled" ]; then
+	out reboot 'none pending, none scheduled' good
+elif [ -z "$scheduled" ]; then
+	out reboot "$pending" warn
+elif [ -z "$pending" ]; then
+	out reboot "none pending; $scheduled" warn
+else
+	out reboot "$pending; $scheduled" warn
+fi
 
 if sessions=$(timeout 2 who 2>/dev/null); then
 	count=$(printf '%s\n' "$sessions" | awk 'NF { n++ } END { print n + 0 }')
