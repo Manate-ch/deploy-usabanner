@@ -88,6 +88,7 @@ Describe 'reading and writing a configuration' {
         @{ Case = 'a company name that is not ASCII'; Json = '{"version":1,"company":"Caf' + [char]0x00E9 + '"}'; Where = '/company' }
         @{ Case = 'a VLAN tag out of range'; Json = '{"version":1,"vlans":[{"name":"Servers","tag":5000,"cidr":"10.20.30.0/24"}]}'; Where = '/vlans/0/tag' }
         @{ Case = 'services that are neither default nor a list'; Json = '{"version":1,"services":"none"}'; Where = '/services' }
+        @{ Case = 'a service name with a space'; Json = '{"version":1,"services":["my service"]}'; Where = '/services/0' }
         @{ Case = 'a OneChar character that is two'; Json = '{"version":1,"border":{"set":"OneChar","char":"ab"}}'; Where = '/border/char' }
         @{ Case = 'legal text that is not ASCII'; Json = '{"version":1,"legal":{"template":"custom","text":["' + [char]0x00A7 + ' 1030"]}}'; Where = '/legal/text/0' }
         @{ Case = 'a voice it does not know'; Json = '{"version":1,"voice":"pirate"}'; Where = '/voice' }
@@ -102,6 +103,24 @@ Describe 'reading and writing a configuration' {
         $message | Should -BeLike '*is not a valid configuration*'
         $message | Should -BeLike "*${Where}: *"
         if ($What) { $message | Should -BeLike "*${Where}: $What*" }
+    }
+
+    It 'lists only what is wrong: a tier it does not know, with services <Services>' -ForEach @(
+        @{ Services = 'default' }
+        @{ Services = @('ssh') }
+    ) {
+        # Test-Json lists a branch the value did not take as a problem too: with services as a
+        # oneOf, a wrong tier came with "/services: Value is "string" but should be "array"".
+        $json = InModuleScope UsaBanner -Parameters @{ Services = $Services } {
+            param($Services)
+            $config = Get-UsaBannerConfigDefault
+            $config['environment'] = 'STAGING'
+            $config['services'] = $Services
+            ConvertTo-UsaBannerConfigJson -Config $config
+        }
+        $problems = @(InModuleScope UsaBanner -Parameters @{ Json = $json } { param($Json) Test-UsaBannerConfig -Json $Json })
+        $problems.Count | Should -Be 1 -Because ($problems -join '; ')
+        $problems[0] | Should -BeLike '/environment: *'
     }
 
     It 'writes nothing when the configuration is not valid' {

@@ -1558,6 +1558,13 @@ configuration (D12):
   takes `-Environment prod` for `PROD`, whatever the case, and the
   configuration gets `PROD`.
 - **A value the schema refuses names its flag:** `-Company: /company: ...`.
+- **Only what is wrong is listed.** `Test-Json` lists a branch that a value
+  did not take as one more problem whenever anything else in the file is
+  wrong. With `services` written as a `oneOf`, a wrong tier came with
+  `/services: Value is "string" but should be "array"`, and an `if` did the
+  same [measured: PowerShell 7.6.6, 2026-10-22]. So the schema gives
+  `services` no branches: a string must be `default`, and a list holds
+  names.
 
 ## Appendix A. Art mock-ups (rough)
 
