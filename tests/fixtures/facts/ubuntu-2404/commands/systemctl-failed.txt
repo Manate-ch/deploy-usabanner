@@ -1,0 +1,4 @@
+hv-fcopy-daemon.service      loaded failed failed Hyper-V File Copy Protocol Daemon
+hv-kvp-daemon.service        loaded failed failed Hyper-V KVP Protocol Daemon
+hv-vss-daemon.service        loaded failed failed Hyper-V VSS Protocol Daemon
+contoso-motd-update.service  loaded failed failed Install the Contoso login banner from the ADSys copy of SYSVOL

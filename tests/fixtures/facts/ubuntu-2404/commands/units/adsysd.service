@@ -1,0 +1,4 @@
+Id=adsysd.service
+TriggeredBy=adsysd.socket
+LoadState=loaded
+ActiveState=inactive

@@ -19,6 +19,9 @@
 #   | sessions | how many, and whose                                    |
 #   | time     | the local time                                         |
 #   | ipv4     | an adapter, and its addresses                          |
+#   | services | the services watched, as text; a level, good or bad    |
+#   | problem  | a level, warn or bad; what is wrong, as text           |
+#   | check    | the name of a check that ran                           |
 #   +----------+--------------------------------------------------------+
 #
 # What is slow to read comes from the periodic job (sample.sh, D17): min and
@@ -35,9 +38,12 @@
 # USABANNER_NOW (tests only) is the time, in seconds since 1970.
 # USABANNER_IFACE_HIDE replaces the adapters it leaves out: an ERE, matched
 # against the adapter's name; empty leaves none out.
+# USABANNER_SERVICES names the services it watches, space-separated; unset
+# or default watches D10's, and empty watches none.
 
 root=${USABANNER_ROOT:-}
 hide=${USABANNER_IFACE_HIDE-'^(docker|br-|veth|virbr|lxcbr|cni|flannel|tun|tap|wg|tailscale|zt)'}
+watch=${USABANNER_SERVICES-default}
 tab=$(printf '\t')
 now=${USABANNER_NOW:-$(date +%s)}
 case $now in '' | *[!0-9]*) now=0 ;; esac
@@ -139,8 +145,9 @@ case $up in
 	;;
 esac
 
-# The CPU, the memory and the disks, each with its 24-hour range and kind.
-{
+# The CPU, the memory and the disks, each with its 24-hour range and kind,
+# kept for the health checks at the end.
+usage=$({
 	# The online CPUs: nproc would follow OMP_NUM_THREADS from a user's shell.
 	cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null)
 	case $cores in '' | *[!0-9]* | 0) cores= ;; esac
@@ -184,7 +191,8 @@ esac
 			else text = sprintf("%.1f of %.1f GiB", $3 / 1048576, $2 / 1048576)
 			print (m == "/" ? "" : m) tab "disk" tab m tab pct tab tab tab text tab
 		}' | LC_ALL=C sort | cut -f2-
-} | fill
+} | fill)
+[ -n "$usage" ] && printf '%s\n' "$usage"
 
 # The updates waiting, as the job last counted them (apt-check is too slow
 # for a login): a warning while security updates wait.
@@ -245,5 +253,130 @@ timeout 2 ip -br -4 addr show scope global 2>/dev/null | awk -v hide="$hide" -v 
 		for (i = 4; i <= NF; i++) a = a " " $i
 		print "ipv4" tab $1 tab a
 	}'
+
+# The health lines (D10): a problem record for each thing wrong, and a check
+# record for each check that ran, so the all-clear line names only what was
+# checked. Today's banner's checks, worst kinds first.
+
+# The units that failed.
+if failed=$(timeout 2 systemctl list-units --state=failed --no-legend --plain 2>/dev/null); then
+	text=$(printf '%s\n' "$failed" | awk 'NF { names = names (n++ ? ", " : "") $1 } END { if (n) printf "%d failed unit%s: %s", n, (n == 1 ? "" : "s"), names }')
+	[ -n "$text" ] && out problem bad "$text"
+	out check units
+fi
+
+# The services watched: USABANNER_SERVICES, else D10's: ssh, cron, the time
+# sync daemon installed, and on a host joined to AD (it has sssd.conf), sssd
+# and adsysd. In the list asked of systemctl, ~ marks the time sync daemons,
+# of which the first installed is watched, and ? one watched only where it is
+# installed. One call reads them all: systemctl answers in the order asked, a
+# block each, whatever the unit's own name (ntp.service answers as
+# ntpsec.service). A service down whose socket listens is idle by design, on
+# demand: systemd starts it at the first connection (adsysd; ssh on 24.04).
+case $watch in
+default)
+	watch='ssh cron ~chrony ~ntpsec ~ntp ~openntpd ~systemd-timesyncd'
+	[ -e "$root/etc/sssd/sssd.conf" ] && watch="$watch sssd ?adsysd"
+	;;
+esac
+names= units=
+set -f
+for s in $watch; do
+	case ${s#[~?]} in
+	'' | *[!A-Za-z0-9_.@-]*) continue ;;
+	*.service | *.socket | *.timer | *.mount | *.path | *.target) units="$units ${s#[~?]}" ;;
+	*) units="$units ${s#[~?]}.service" ;;
+	esac
+	names="$names $s"
+done
+set +f
+if [ -n "$units" ] && shown=$(timeout 2 systemctl show -p Id,LoadState,ActiveState,TriggeredBy $units 2>/dev/null); then
+	printf '%s\n' "$shown" | awk -v names="$names" -v tab="$tab" '
+	# listening SOCKETS - whether any of these sockets, space-separated, is
+	# active. Asked only for a service down, and only about names as systemd
+	# writes them.
+	function listening(sockets,   ask, line, k, n, s, up) {
+		n = split(sockets, s, " ")
+		ask = "timeout 2 systemctl show -p ActiveState"
+		for (k = 1; k <= n; k++) {
+			if (s[k] !~ /^[A-Za-z0-9_.@:-]+$/) return 0
+			ask = ask " " s[k]
+		}
+		ask = ask " 2>/dev/null"
+		while ((ask | getline line) > 0) if (line == "ActiveState=active") up = 1
+		close(ask)
+		return up
+	}
+	BEGIN { RS = ""; FS = "\n" }
+	{
+		b++
+		for (k = 1; k <= NF; k++) {
+			eq = index($k, "=")
+			if (eq) value[b, substr($k, 1, eq - 1)] = substr($k, eq + 1)
+		}
+	}
+	END {
+		n = split(names, name, " ")
+		# An answer that does not line up with the question says nothing.
+		if (b != n) exit
+		for (k = 1; k <= n; k++) {
+			s = name[k]
+			loaded = value[k, "LoadState"] == "loaded"
+			if (s ~ /^~/) {
+				if (synced || !loaded) continue
+				synced = 1
+			}
+			if (s ~ /^\?/ && !loaded) continue
+			sub(/^[~?]/, "", s)
+			if (!loaded) state = (value[k, "LoadState"] == "not-found" ? "not found" : value[k, "LoadState"])
+			else if (value[k, "ActiveState"] == "active") state = "active"
+			else if (value[k, "TriggeredBy"] != "" && listening(value[k, "TriggeredBy"])) state = "on demand"
+			else state = value[k, "ActiveState"]
+			if (state == "active") up = up (up == "" ? "" : ", ") s
+			else if (state == "on demand") idle = idle (idle == "" ? "" : ", ") s
+			else {
+				down = down (down == "" ? "" : ", ") s " " state
+				print "problem" tab "bad" tab (state == "not found" ? "service " s " not found" : s " is " state)
+			}
+			watched++
+		}
+		if (!watched) exit
+		text = down
+		if (up != "") text = text (text == "" ? "" : "; ") up " active"
+		if (idle != "") text = text (text == "" ? "" : "; ") idle " on demand"
+		print "services" tab text tab (down == "" ? "good" : "bad")
+		print "check" tab "services"
+	}'
+fi
+
+# The disks from 85% full and the memory from 90% in use, each bad from 95%:
+# the panel's levels (PostLogin.ps1), read from the records above.
+printf '%s\n' "$usage" | awk -F '\t' -v tab="$tab" '
+	function level(pct, from) { return pct + 0 >= 95 ? "bad" : (pct + 0 >= from ? "warn" : "") }
+	$1 == "disk" && $3 ~ /^[0-9]+$/ {
+		disks = 1
+		if (level($3, 85) != "") print "problem" tab level($3, 85) tab $2 " is " $3 "% full"
+	}
+	$1 == "memory" && $2 ~ /^[0-9]+$/ {
+		memory = 1
+		if (level($2, 90) != "") print "problem" tab level($2, 90) tab "memory " $2 "% in use"
+	}
+	END {
+		if (disks) print "check" tab "disks <85%"
+		if (memory) print "check" tab "memory"
+	}'
+
+# The clock, as systemd sees it, named as checked only when it answered.
+case $(timeout 2 timedatectl show -p NTPSynchronized --value 2>/dev/null) in
+yes) out check clock ;;
+no)
+	out problem warn 'clock is not synchronised'
+	out check clock
+	;;
+esac
+
+# A reboot pending, as the reboot record found it.
+[ -n "$pending" ] && out problem warn "reboot $pending"
+out check reboot
 
 exit 0

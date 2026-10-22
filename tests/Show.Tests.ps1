@@ -96,11 +96,12 @@ Describe 'Show-UsaBanner' {
         foreach ($line in $lines) { $line.Length | Should -BeLessOrEqual 64 }
     }
 
-    It 'draws from the defaults without -Path, and names this host without -Facts' {
+    It 'draws from the defaults without -Path, and this host''s own facts and health without -Facts' {
         $lines = @(Show-UsaBanner -Os linux -ColorMode none -Glyphs ascii)
         ($lines -join "`n") | Should -Match ([regex]::Escape([Environment]::MachineName))
         ($lines -join "`n") | Should -Match 'U N S E T'
-        ($lines -join "`n") | Should -Not -Match 'all clear'
+        # The collector checks a reboot on any host: all clear, or a problem.
+        ($lines -join "`n") | Should -Match '\[ok\] all clear|\[!!\] |\[XX\] '
     }
 
     It 'collects this host''s facts without -Facts, and only then' {
@@ -110,6 +111,12 @@ Describe 'Show-UsaBanner' {
         ($lines -join "`n") | Should -Match '41d 2h 5m'
         $null = Show-UsaBanner -Path $lab -Facts $facts -Os ubuntu -ColorMode none
         Should -Invoke Get-UsaBannerHostFacts -ModuleName UsaBanner -Times 1 -Exactly
+    }
+
+    It 'collects the facts watching the services the configuration names' {
+        Mock -ModuleName UsaBanner Get-UsaBannerHostFacts { @{ Name = 'cwpql-db2.ad.example' } }
+        $null = Show-UsaBanner -Path (New-ConfigFile 'services.json' @{ services = @('ssh', 'postgresql') }) -Os linux -ColorMode none -Glyphs ascii
+        Should -Invoke Get-UsaBannerHostFacts -ModuleName UsaBanner -Times 1 -Exactly -ParameterFilter { (@($Services) -join ' ') -eq 'ssh postgresql' }
     }
 
     It 'takes the mode the configuration sets for this host when asked for auto' {

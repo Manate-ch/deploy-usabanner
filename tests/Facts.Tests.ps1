@@ -26,6 +26,14 @@ BeforeAll {
         "sessions`t3  (admin ops)"
         "time`tThu 2026-10-22 02:18 UTC"
         "ipv4`teth0`t10.20.40.80/22"
+        "problem`tbad`t4 failed units: hv-fcopy-daemon.service, hv-kvp-daemon.service, hv-vss-daemon.service, contoso-motd-update.service"
+        "check`tunits"
+        "services`tssh, cron, ntpsec, sssd active; adsysd on demand`tgood"
+        "check`tservices"
+        "check`tdisks <85%"
+        "check`tmemory"
+        "check`tclock"
+        "check`treboot"
     )
 
     # The stubs, first on PATH. Each logs its call to STUB_LOG and waits 5
@@ -36,7 +44,10 @@ BeforeAll {
     # hostname-f.txt when a test writes one, after 8 seconds when
     # STUB_SLOW_FQDN is set; date +%s is 2026-10-22 02:18 UTC, and date -d is
     # the real one in UTC. lsblk answers for a device from lsblk<device>.txt,
-    # its slashes as underscores.
+    # its slashes as underscores. systemctl answers show from units/<unit>, a
+    # block per unit asked, with only the properties asked, and for a unit not
+    # there as systemd does for one it cannot find; without a units folder it
+    # fails, as where there is no systemd.
     $script:Bin = Join-Path $TestDrive 'bin'
     $null = New-Item -ItemType Directory -Path $Bin -Force
     $head = @'
@@ -55,6 +66,27 @@ case " ${STUB_SLOW-} " in *" NAME "*) sleep 5 ;; esac
         dmidecode = '[ "$*" = "-t memory" ] || exit 1; cat "$STUB_DATA/dmidecode-memory.txt"'
         lsblk    = '[ "$1 $2 $3 $4 $5" = "-s -n -r -o TYPE,RM,ROTA,TRAN" ] || exit 1; for last; do :; done; cat "$STUB_DATA/lsblk$(printf "%s" "$last" | tr / _).txt"'
         'systemd-detect-virt' = '[ "$*" = "--quiet --vm" ] || exit 1; virt=$(cat "$STUB_DATA/systemd-detect-virt.txt" 2>/dev/null); [ -n "$virt" ] && [ "$virt" != none ]'
+        systemctl = @'
+[ -d "$STUB_DATA/units" ] || exit 1
+case "$1" in
+list-units)
+	[ "$*" = "list-units --state=failed --no-legend --plain" ] || exit 1
+	cat "$STUB_DATA/systemctl-failed.txt" ;;
+show)
+	[ "$2" = -p ] || exit 1
+	case $3 in Id,LoadState,ActiveState,TriggeredBy | ActiveState) ;; *) exit 1 ;; esac
+	keys=$(printf '%s' "$3" | tr , '|')
+	shift 3
+	first=1
+	for u; do
+		[ -n "$first" ] || echo
+		first=
+		if [ -r "$STUB_DATA/units/$u" ]; then cat "$STUB_DATA/units/$u"; else printf 'Id=%s\nTriggeredBy=\nLoadState=not-found\nActiveState=inactive\n' "$u"; fi | grep -E "^($keys)="
+	done ;;
+*) exit 1 ;;
+esac
+'@
+        timedatectl = '[ "$*" = "show -p NTPSynchronized --value" ] || exit 1; cat "$STUB_DATA/timedatectl-ntp.txt"'
     }
     foreach ($name in $stubs.Keys) {
         $path = Join-Path $Bin $name
@@ -140,8 +172,8 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
     }
 
     It 'finds each stub first on PATH (else the tests below prove nothing)' {
-        $found = @(& env -i "PATH=$StubPath" sh -c 'for c in hostname ip uname getconf df who date dmidecode lsblk systemd-detect-virt; do command -v "$c"; done')
-        $found | Should -BeExactly @(foreach ($name in 'hostname', 'ip', 'uname', 'getconf', 'df', 'who', 'date', 'dmidecode', 'lsblk', 'systemd-detect-virt') { Join-Path $Bin $name })
+        $found = @(& env -i "PATH=$StubPath" sh -c 'for c in hostname ip uname getconf df who date dmidecode lsblk systemd-detect-virt systemctl timedatectl; do command -v "$c"; done')
+        $found | Should -BeExactly @(foreach ($name in 'hostname', 'ip', 'uname', 'getconf', 'df', 'who', 'date', 'dmidecode', 'lsblk', 'systemd-detect-virt', 'systemctl', 'timedatectl') { Join-Path $Bin $name })
     }
 
     It 'gives the recorded Ubuntu 24.04.5 host''s records, in order' {
@@ -322,7 +354,7 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
         $null = New-Item -ItemType Directory -Path $empty -Force
         $records = Invoke-Collector -Root $empty -Data $empty
         $LASTEXITCODE | Should -Be 0
-        $records -join "`n" | Should -BeExactly ("name`th-vsl-web1", "os`tLinux", "reboot`tnone pending, none scheduled`tgood", "time`tThu 2026-10-22 02:18 UTC" -join "`n")
+        $records -join "`n" | Should -BeExactly ("name`th-vsl-web1", "os`tLinux", "reboot`tnone pending, none scheduled`tgood", "time`tThu 2026-10-22 02:18 UTC", "check`treboot" -join "`n")
     }
 
     It 'fills min and max from the samples of the last 24 hours, the value now included' {
@@ -411,6 +443,92 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
         }
         & $kinds $byShell | Should -BeExactly 'memory DDR5-4800, / NVMe, /var , updates 12 pending good'
         & $kinds $byModule | Should -BeExactly (& $kinds $byShell)
+    }
+
+    It 'names the units that failed: <Case>' -ForEach @(
+        @{ Case = 'none, and still names the check'; Failed = ''; Expected = '' }
+        @{ Case = 'one'; Failed = "cron.service loaded failed failed Regular background program processing daemon`n"; Expected = "problem`tbad`t1 failed unit: cron.service" }
+    ) {
+        $variant = New-Variant @{ 'commands/systemctl-failed.txt' = $Failed }
+        $records = Invoke-Collector @variant
+        Select-Record $records problem | Should -BeExactly $Expected
+        (Select-Record $records check) -split "`n" | Should -Contain "check`tunits"
+    }
+
+    It 'watches <Case>' -ForEach @(
+        @{ Case = 'D10''s services on a host joined to AD, one started by its socket as on demand'; Change = @{}; Variables = @{}; Expected = "services`tssh, cron, ntpsec, sssd active; adsysd on demand`tgood"; Problems = '' }
+        @{ Case = 'neither sssd nor adsysd on a host not joined'; Change = @{ 'root/etc/sssd/sssd.conf' = $null }; Variables = @{}; Expected = "services`tssh, cron, ntpsec active`tgood"; Problems = '' }
+        @{ Case = 'the time sync daemon that is installed'; Change = @{ 'commands/units/ntpsec.service' = $null; 'commands/units/ntp.service' = $null; 'commands/units/systemd-timesyncd.service' = "Id=systemd-timesyncd.service`nTriggeredBy=`nLoadState=loaded`nActiveState=active`n" }; Variables = @{}; Expected = "services`tssh, cron, systemd-timesyncd, sssd active; adsysd on demand`tgood"; Problems = '' }
+        @{ Case = 'adsysd only where it is installed'; Change = @{ 'commands/units/adsysd.service' = $null }; Variables = @{}; Expected = "services`tssh, cron, ntpsec, sssd active`tgood"; Problems = '' }
+        @{ Case = 'ssh on demand, as on Ubuntu 24.04 before its first connection'; Change = @{ 'commands/units/ssh.service' = "Id=ssh.service`nTriggeredBy=ssh.socket`nLoadState=loaded`nActiveState=inactive`n" }; Variables = @{}; Expected = "services`tcron, ntpsec, sssd active; ssh, adsysd on demand`tgood"; Problems = '' }
+        @{ Case = 'a service down, as bad'; Change = @{ 'commands/units/cron.service' = "Id=cron.service`nTriggeredBy=`nLoadState=loaded`nActiveState=inactive`n" }; Variables = @{}; Expected = "services`tcron inactive; ssh, ntpsec, sssd active; adsysd on demand`tbad"; Problems = "problem`tbad`tcron is inactive" }
+        @{ Case = 'a service down whose socket is down too, as bad'; Change = @{ 'commands/units/adsysd.socket' = "Id=adsysd.socket`nActiveState=inactive`n" }; Variables = @{}; Expected = "services`tadsysd inactive; ssh, cron, ntpsec, sssd active`tbad"; Problems = "problem`tbad`tadsysd is inactive" }
+        @{ Case = 'the services USABANNER_SERVICES names, one failed and one not found'; Change = @{ 'commands/units/postgresql.service' = "Id=postgresql.service`nTriggeredBy=`nLoadState=loaded`nActiveState=failed`n" }; Variables = @{ USABANNER_SERVICES = 'ssh postgresql nginx' }; Expected = "services`tpostgresql failed, nginx not found; ssh active`tbad"; Problems = "problem`tbad`tpostgresql is failed`nproblem`tbad`tservice nginx not found" }
+    ) {
+        $variant = New-Variant ($Change + @{ 'commands/systemctl-failed.txt' = '' })
+        $records = Invoke-Collector @variant -Variables $Variables
+        Select-Record $records services | Should -BeExactly $Expected
+        Select-Record $records problem | Should -BeExactly $Problems
+        (Select-Record $records check) -split "`n" | Should -Contain "check`tservices"
+    }
+
+    It 'says nothing of the services when systemctl''s answer does not line up with the question' {
+        # A systemctl first on PATH that answers one block, whatever it is asked.
+        $bin = Join-Path $TestDrive 'one-block'
+        $null = New-Item -ItemType Directory -Path $bin -Force
+        $oneBlock = Join-Path $bin 'systemctl'
+        [System.IO.File]::WriteAllText($oneBlock, "#!/bin/sh`ncase `"`$1`" in`nshow) printf 'Id=ssh.service\nTriggeredBy=\nLoadState=loaded\nActiveState=active\n' ;;`nesac`n")
+        & chmod 755 $oneBlock
+        $records = Invoke-Collector -Variables @{ PATH = "$($bin):$StubPath" }
+        Select-Record $records services | Should -BeNullOrEmpty
+        (Select-Record $records check) -split "`n" | Should -Not -Contain "check`tservices"
+    }
+
+    It 'watches none when USABANNER_SERVICES is empty, and names no services check' {
+        $records = Invoke-Collector -Variables @{ USABANNER_SERVICES = '' }
+        Select-Record $records services | Should -BeNullOrEmpty
+        (Select-Record $records check) -split "`n" | Should -Not -Contain "check`tservices"
+        @(Get-Content -LiteralPath $Log | Where-Object { $_ -like 'systemctl show*' }) | Should -BeNullOrEmpty
+    }
+
+    It 'asks systemctl about a service''s sockets only while the service is down' {
+        $null = Invoke-Collector
+        @(Get-Content -LiteralPath $Log | Where-Object { $_ -like 'systemctl show -p ActiveState*' }) | Should -BeExactly @('systemctl show -p ActiveState adsysd.socket')
+        $variant = New-Variant @{ 'commands/units/adsysd.service' = "Id=adsysd.service`nTriggeredBy=adsysd.socket`nLoadState=loaded`nActiveState=active`n" }
+        [System.IO.File]::WriteAllText($Log, '')
+        $null = Invoke-Collector @variant
+        @(Get-Content -LiteralPath $Log | Where-Object { $_ -like 'systemctl show -p ActiveState*' }) | Should -BeNullOrEmpty
+    }
+
+    It 'reports <Case>' -ForEach @(
+        @{ Case = 'a disk from 85% full, and bad from 95%'; Change = @{ 'commands/df.txt' = (@('Filesystem          1024-blocks       Used  Available Capacity Mounted on', '/dev/sda1             31457280   26738688    4718592      85% /', '/dev/sdb1             41943040   40265318    1677722      96% /var', '/dev/sdc1             10485760    8808038    1677722      84% /srv') -join "`n") + "`n" }; Expected = "problem`twarn`t/ is 85% full`nproblem`tbad`t/var is 96% full" }
+        @{ Case = 'the memory from 90% in use'; Change = @{ 'root/proc/meminfo' = "MemTotal:        1048576 kB`nMemFree:           50000 kB`nMemAvailable:     104857 kB`n" }; Expected = "problem`twarn`tmemory 90% in use" }
+        @{ Case = 'the memory from 95%, as bad'; Change = @{ 'root/proc/meminfo' = "MemTotal:        1048576 kB`nMemFree:           10000 kB`nMemAvailable:      52428 kB`n" }; Expected = "problem`tbad`tmemory 95% in use" }
+        @{ Case = 'the clock not synchronised'; Change = @{ 'commands/timedatectl-ntp.txt' = "no`n" }; Expected = "problem`twarn`tclock is not synchronised" }
+        @{ Case = 'a reboot pending, with what asked for it'; Change = @{ 'root/run/reboot-required' = "*** System restart required ***`n"; 'root/run/reboot-required.pkgs' = "linux-image-6.8.0-88-generic`nlibc6`n" }; Expected = "problem`twarn`treboot pending: libc6, kernel 6.8.0-88" }
+    ) {
+        $variant = New-Variant ($Change + @{ 'commands/systemctl-failed.txt' = '' })
+        $records = Invoke-Collector @variant
+        Select-Record $records problem | Should -BeExactly $Expected
+        (Select-Record $records check) -split "`n" | Should -BeExactly @("check`tunits", "check`tservices", "check`tdisks <85%", "check`tmemory", "check`tclock", "check`treboot")
+    }
+
+    It 'names no clock check when timedatectl gives no answer' {
+        $variant = New-Variant @{ 'commands/timedatectl-ntp.txt' = $null }
+        (Select-Record (Invoke-Collector @variant) check) -split "`n" | Should -Not -Contain "check`tclock"
+    }
+
+    It 'cuts <Command> off after 2 seconds, and names no <Check> check' -ForEach @(
+        @{ Command = 'systemctl'; Check = 'units or services'; Gone = @("check`tunits", "check`tservices"); Limit = 8.5 }
+        @{ Command = 'timedatectl'; Check = 'clock'; Gone = @("check`tclock"); Limit = 4.5 }
+    ) {
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+        $records = Invoke-Collector -Variables @{ STUB_SLOW = $Command }
+        $watch.Stop()
+        $checks = (Select-Record $records check) -split "`n"
+        foreach ($gone in $Gone) { $checks | Should -Not -Contain $gone }
+        $checks | Should -Contain "check`treboot"
+        $watch.Elapsed.TotalSeconds | Should -BeLessThan $Limit
     }
 }
 
@@ -539,8 +657,12 @@ Describe 'linux/sample.sh' -Skip:$IsWindows {
 Describe 'ConvertFrom-UsaBannerFactRecord' {
     It 'reads the recorded host''s records as the facts the banner draws' {
         $facts = InModuleScope UsaBanner -Parameters @{ Lines = $Recorded } { param($Lines) ConvertFrom-UsaBannerFactRecord -Line $Lines }
-        @($facts.Keys | Sort-Object) | Should -BeExactly @('Cpu', 'Disks', 'Ip', 'Ipv4', 'Memory', 'Name', 'Os', 'Reboot', 'Sessions', 'Time', 'Uptime')
+        @($facts.Keys | Sort-Object) | Should -BeExactly @('Checked', 'Cpu', 'Disks', 'Ip', 'Ipv4', 'Memory', 'Name', 'Os', 'Problems', 'Reboot', 'Services', 'Sessions', 'Time', 'Uptime')
         '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly 'none pending, none scheduled|good'
+        '{0}|{1}' -f $facts.Services.Text, $facts.Services.Level | Should -BeExactly 'ssh, cron, ntpsec, sssd active; adsysd on demand|good'
+        @($facts.Problems).Count | Should -Be 1
+        '{0}|{1}' -f $facts.Problems[0].Level, $facts.Problems[0].Text | Should -BeExactly 'bad|4 failed units: hv-fcopy-daemon.service, hv-kvp-daemon.service, hv-vss-daemon.service, contoso-motd-update.service'
+        $facts.Checked | Should -BeExactly @('units', 'services', 'disks <85%', 'memory', 'clock', 'reboot')
         $facts.Name | Should -BeExactly 'h-vsl-web1'
         $facts.Ip | Should -BeExactly '10.20.40.80'
         $facts.Os | Should -BeExactly 'Ubuntu 24.04.5 LTS, kernel 6.8.0-147-generic'
@@ -572,6 +694,13 @@ Describe 'ConvertFrom-UsaBannerFactRecord' {
         '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly 'pending: kernel 6.8.0-88|warn'
     }
 
+    It 'reads the services, each problem and each check, in order, passing over one without its text' {
+        $facts = InModuleScope UsaBanner { ConvertFrom-UsaBannerFactRecord -Line @("problem`tbad`tcron is inactive", "services`tcron inactive; ssh active`tbad", "check`tservices", "problem`twarn`t/var is 88% full", "problem`twarn", "check`tdisks <85%", "check`t", 'check') }
+        '{0}|{1}' -f $facts.Services.Text, $facts.Services.Level | Should -BeExactly 'cron inactive; ssh active|bad'
+        @($facts.Problems | ForEach-Object { '{0}|{1}' -f $_.Level, $_.Text }) -join ',' | Should -BeExactly 'bad|cron is inactive,warn|/var is 88% full'
+        $facts.Checked | Should -BeExactly @('services', 'disks <85%')
+    }
+
     It 'passes over an empty line and a kind it does not know' {
         $facts = InModuleScope UsaBanner { ConvertFrom-UsaBannerFactRecord -Line @("name`tcwpql-db2", '', "gpu`t3`tContoso X1") }
         @($facts.Keys) | Should -BeExactly @('Name')
@@ -599,6 +728,18 @@ Describe 'Get-UsaBannerHostFacts' {
         $facts.Cpu.Text | Should -BeExactly '2 cores @ 3.1 GHz'
         @($facts.Disks.Name) -join ',' | Should -BeExactly '/,/var'
         @($facts.Ipv4.Name) -join ',' | Should -BeExactly 'eth0'
+    }
+
+    It 'hands the collector the services to watch: <Case>' -Skip:$IsWindows -ForEach @(
+        @{ Case = 'the names'; Services = @('ssh', 'nginx'); Expected = 'ssh nginx' }
+        @{ Case = 'none'; Services = @(); Expected = '' }
+        @{ Case = 'default'; Services = 'default'; Expected = 'default' }
+        @{ Case = 'default, when the configuration has none'; Services = $null; Expected = 'default' }
+    ) {
+        $echo = Join-Path $TestDrive 'services.sh'
+        [System.IO.File]::WriteAllText($echo, "printf 'name\t[%s]\n' `"`$USABANNER_SERVICES`"`n")
+        $facts = InModuleScope UsaBanner -Parameters @{ Path = $echo; Services = $Services } { param($Path, $Services) Get-UsaBannerHostFacts -OnWindows $false -Collector $Path -Services $Services }
+        $facts.Name | Should -BeExactly "[$Expected]"
     }
 
     It 'names the host itself when the records give no name' -Skip:$IsWindows {
