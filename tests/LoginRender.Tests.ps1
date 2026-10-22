@@ -23,7 +23,7 @@ BeforeDiscovery {
             "services`tssh, cron, systemd-timesyncd active`tgood", "check`tunits", "check`tservices", "check`tdisks <85%", "check`tmemory", "check`tclock", "check`treboot", "check`ta-much-longer-check-name"
         )
         busy  = @(
-            "name`th-psw-db01", "ip`t10.20.60.5", "os`tUbuntu 24.04.5 LTS with a description far longer than the row has room for, kernel 6.8.0-147-generic", "uptime`t412d 3h 2m"
+            "name`th-psl-db01", "ip`t10.20.60.5", "os`tUbuntu 24.04.5 LTS with a description far longer than the row has room for, kernel 6.8.0-147-generic", "uptime`t412d 3h 2m"
             "cpu`t97`t12`t99`t64 cores @ 2.4 GHz with a model name long enough to go", "memory`t91`t40`t96`t115.2 of 125.6 GiB`tDDR5-4800"
             "disk`t/`t88`t80`t90`t96 of 109 GiB`tNVMe", "disk`t/var/lib/kubelet/pods/0c1e4a2b-1234-5678-9abc-def012345678/volumes/kubernetes.io~csi/pvc-1/mount`t99`t98`t99`t9.9 of 10.0 GiB`t"
             "updates`t12 pending, 4 security`twarn", "reboot`tpending: kernel 6.8.0-148`twarn", "services`tssh active; cron failed`tbad", "time`tThu 2026-10-22 23:59 UTC"
@@ -156,7 +156,7 @@ Describe 'linux/postlogin.sh' -Skip:(-not (Get-Command sh -ErrorAction SilentlyC
 
 Describe 'the panel, for a mount point longer than its row' {
     It 'cuts the label with ~ and keeps the value, where it once could not draw the panel at all' {
-        $lines = @("name`th-psw-db01", "disk`t/var/lib/kubelet/pods/0c1e4a2b-1234-5678-9abc-def012345678/volumes/kubernetes.io~csi/pvc-1/mount`t99`t98`t99`t9.9 of 10.0 GiB`t")
+        $lines = @("name`th-psl-db01", "disk`t/var/lib/kubelet/pods/0c1e4a2b-1234-5678-9abc-def012345678/volumes/kubernetes.io~csi/pvc-1/mount`t99`t98`t99`t9.9 of 10.0 GiB`t")
         $drawn = InModuleScope UsaBanner -Parameters @{ Lines = $lines } {
             param($Lines)
             @(Get-UsaBannerPostLogon -Config (Get-UsaBannerConfigDefault) -Os ubuntu -Facts (ConvertFrom-UsaBannerFactRecord -Line $Lines) -Mode none -AsciiOnly)
