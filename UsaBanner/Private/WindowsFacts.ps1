@@ -257,10 +257,12 @@ function Get-UsaBannerWindowsFacts {
     disks take their 24-hour range from the periodic job's samples, in
     -SamplePath (Samples.ps1); the CPU's speed, the memory's and disks'
     kinds and the updates waiting come from its slow facts, in -SlowPath
-    (WindowsSlowFacts.ps1); the reboot pending is read live. -Hide is a
-    regex of adapter names to leave out: by default the NAT adapters of WSL,
-    the Default Switch and containers. -Now is the moment the facts
-    describe, for tests.
+    (WindowsSlowFacts.ps1); the reboot pending is read live. The health
+    lines and the services row come from WindowsHealth.ps1: -Services is
+    the configuration's, default or the names, and -Ignore the services the
+    sweep of automatic ones leaves out. -Hide is a regex of adapter names to
+    leave out: by default the NAT adapters of WSL, the Default Switch and
+    containers. -Now is the moment the facts describe, for tests.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -269,7 +271,9 @@ function Get-UsaBannerWindowsFacts {
         [int]$CpuWindowMs = 200,
         [datetimeoffset]$Now = [datetimeoffset]::Now,
         [string]$SamplePath = (Get-UsaBannerDataPath -Name 'samples.tsv' -OnWindows $true),
-        [string]$SlowPath = (Get-UsaBannerDataPath -Name 'slow.tsv' -OnWindows $true)
+        [string]$SlowPath = (Get-UsaBannerDataPath -Name 'slow.tsv' -OnWindows $true),
+        [object]$Services = 'default',
+        [AllowEmptyCollection()][string[]]$Ignore = @()
     )
     $system = Get-UsaBannerWinSystem
     $facts = @{}
@@ -319,10 +323,12 @@ function Get-UsaBannerWindowsFacts {
     if ($adapters.Count) { $facts['Ipv4'] = $adapters }
     $facts['Time'] = $Now.ToString('ddd yyyy-MM-dd HH:mm zzz', [cultureinfo]::InvariantCulture)
     $facts['Reboot'] = Format-UsaBannerReboot -Reason @(Get-UsaBannerWinRebootPending)
+    $serviceList = @(Get-UsaBannerWinServiceList)
+    $timeSource = Get-UsaBannerWinTimeSource
 
     # The CPU last, over a quiet window: the probes above make WMI, the
-    # service manager and quser work in processes of their own, which the
-    # subtraction of this process's time cannot see. Across them an idle
+    # service manager, quser and w32tm work in processes of their own, which
+    # the subtraction of this process's time cannot see. Across them an idle
     # 4-core node read 24%; a quiet window read 3% (lab, 2026-10-03).
     $cpuFrom = Get-UsaBannerWinCpuSample
     if ($CpuWindowMs -gt 0) { Start-Sleep -Milliseconds $CpuWindowMs }
@@ -333,5 +339,6 @@ function Get-UsaBannerWindowsFacts {
     }
     Add-UsaBannerSampleRange -Facts $facts -Path $SamplePath -Now $Now
     Add-UsaBannerSlowFacts -Facts $facts -Path $SlowPath -Now $Now
+    Add-UsaBannerWinHealth -Facts $facts -ServiceList $serviceList -TimeSource $timeSource -Services $Services -PartOfDomain $system.PartOfDomain -Ignore $Ignore
     $facts
 }

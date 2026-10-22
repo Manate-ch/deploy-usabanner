@@ -742,6 +742,12 @@ Describe 'Get-UsaBannerHostFacts' {
         $facts.Name | Should -BeExactly "[$Expected]"
     }
 
+    It 'hands the Windows reader the services to watch' {
+        Mock -ModuleName UsaBanner Get-UsaBannerWindowsFacts { @{ Name = 'BEVSW-APP1' } }
+        $null = InModuleScope UsaBanner { Get-UsaBannerHostFacts -OnWindows $true -Services @('sshd', 'W32Time') }
+        Should -Invoke Get-UsaBannerWindowsFacts -ModuleName UsaBanner -Times 1 -Exactly -ParameterFilter { (@($Services) -join ' ') -eq 'sshd W32Time' }
+    }
+
     It 'names the host itself when the records give no name' -Skip:$IsWindows {
         $nameless = Join-Path $TestDrive 'nameless.sh'
         [System.IO.File]::WriteAllText($nameless, "printf 'uptime\t1h 2m\n'`n")
