@@ -31,9 +31,10 @@ BeforeDiscovery {
             "problem`twarn`t/var/lib/kubelet/pods/0c1e4a2b-1234-5678-9abc-def012345678/volumes/kubernetes.io~csi/pvc-1/mount is 99% full"
         )
         bare  = @("name`th-vsl-web1")
+        # Each record built with + is in parentheses: a comma binds tighter.
         utf8  = @(
-            "name`th-vsl-web1", "ip`t10.20.40.79", "os`tUbuntu 24.04.5 LTS, " + [char]0x00E9 + 'dition sp' + [char]0x00E9 + 'ciale ' + ([string][char]0x2014 * 30) + ', kernel 6.8'
-            "disk`t/mnt/donn" + [char]0x00E9 + "es`t50`t`t`t5 of 10 GiB`t", "check`tunits"
+            "name`th-vsl-web1", "ip`t10.20.40.79", ("os`tUbuntu 24.04.5 LTS, " + [char]0x00E9 + 'dition sp' + [char]0x00E9 + 'ciale ' + ([string][char]0x2014 * 30) + ', kernel 6.8')
+            ("disk`t/mnt/donn" + [char]0x00E9 + "es`t50`t`t`t5 of 10 GiB`t"), "check`tunits"
         )
     }
     $script:Vlan = @(@{ tag = 40; name = 'Servers'; cidr = '10.20.40.0/22'; short = 'Srv'; color = 'Teal' })

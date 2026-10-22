@@ -136,6 +136,23 @@ configuration changes. At each login, `awk` fills in what changes between
 logins: the facts (D26) and the health. A login waits on `sh` and `awk`
 alone, and the banner keeps the module's look.
 
+**Built (M4, 2026-10-22).** `New-UsaBannerLoginFrame` draws the banner
+after login once, at deploy, from the host's name and address alone: the
+lines above the facts' rows (the art, the welcome line, the tier strip, the
+panel's top line and its schema, VLAN and tier rows) and the panel's bottom
+line, in the host's colour mode, with what `awk` draws the rest in: each
+style's escape, the panel's glyphs, the box's sides, the voice's words.
+`linux/postlogin.sh` runs `linux/facts.sh`, and `linux/postlogin.awk`
+draws its records into that frame: a row per fact, then the health lines,
+as the module draws them. The tests hold the two to the same bytes in every
+colour mode, the presets, several border sets and voices, ASCII and
+Unicode, under mawk (Ubuntu's own) and gawk. The fill adds about 1 ms to
+`facts.sh` [measured: 155 against 156 ms, medians of 15 runs, on a 16-core
+VM]. pam_motd hands its scripts no terminal to ask, so the frame is drawn
+in the host's mode and glyphs, which the deploy sets. A row's label is cut
+at 24 columns, ending in `~`: a Kubernetes volume's mount point made the
+panel too wide to draw.
+
 **The login time, measured (M3, 2026-10-22).** On three lab VMs, each figure
 the median of five fresh processes, the banner drawn without colour;
 "added" is the time over the empty shell that a login starts anyway
