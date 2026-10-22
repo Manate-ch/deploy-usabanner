@@ -1238,13 +1238,18 @@ its fields separated by tabs, its kind first:
   the login renderer and the module alike. It reads only what is fast and
   local (D17's first tier). Each command that could stall is cut off after
   2 seconds, and the domain comes from the periodic job's cache, because
-  looking it up could wait on DNS. Its sources are today's banner's, with
-  four changes:
+  looking it up could wait on DNS. Its sources are today's banner's. What
+  differs:
   - `getconf _NPROCESSORS_ONLN` counts the CPUs: `nproc` follows
     `OMP_NUM_THREADS`, which a user's shell may set (with
     `OMP_NUM_THREADS=1`, `nproc` gave 1 on a 16-CPU host [measured,
     2026-10-22]);
-  - `df -k`, so `BLOCK_SIZE` cannot change the unit;
+  - a record for every local filesystem but `/boot` and below, where
+    today's panel shows `/` alone, read with `df -k` so `BLOCK_SIZE` cannot
+    change the unit;
+  - the adapters left out by default add tunnels and VPNs (`tun`, `tap`,
+    `wg`, `tailscale`, `zt`) to today's container bridges, as SPEC §5.4
+    asks;
   - the weekday in English, whatever the locale;
   - os-release is read as text, never run.
 - **`cpu` on Linux is the 1-minute load as a share of the online CPUs**, the
