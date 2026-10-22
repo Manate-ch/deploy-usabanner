@@ -68,9 +68,10 @@ BeforeAll {
 
     function Use-StockAnswers {
         # In:  answers that differ from a stock host's: 'program arguments' -> @{ ExitCode; Output }
-        # Out: nothing. Invoke-UsaBannerNative answers as a stock Ubuntu 24.04 host would; a call
-        #      that changes the host (a unit masked or enabled, a statoverride added, a first
-        #      sample) changes what later calls see; each call is logged in $global:UsaDeployCalls
+        # Out: nothing. Invoke-UsaBannerNative answers as a stock Ubuntu 24.04 host would, in the
+        #      words systemd 255 and dpkg used on an Ubuntu 24.04.5 VM (2026-10-22); a call that
+        #      changes the host (a unit masked or enabled, a statoverride added, a first sample)
+        #      changes what later calls see; each call is logged in $global:UsaDeployCalls
         param([hashtable]$Answers = @{})
         $global:UsaDeployCalls = [System.Collections.Generic.List[string]]::new()
         $global:UsaDeployAnswers = $Answers
@@ -85,7 +86,7 @@ BeforeAll {
                 '^systemctl is-enabled (\S+)$' {
                     if ($Matches[1] -in $units.Masked) { return @{ ExitCode = 1; Output = @('masked') } }
                     if ($Matches[1] -in $units.Enabled -or $Matches[1] -eq 'motd-news.timer') { return @{ ExitCode = 0; Output = @('enabled') } }
-                    return @{ ExitCode = 1; Output = @("Failed to get unit file state for $($Matches[1]): No such file or directory") }
+                    return @{ ExitCode = 4; Output = @('not-found') }
                 }
                 '^systemctl is-active motd-news\.timer$' { return @{ ExitCode = 0; Output = @('active') } }
                 '^systemctl mask --now (\S+)$' { $units.Masked += $Matches[1]; return $done }
@@ -98,7 +99,10 @@ BeforeAll {
                     return $done
                 }
                 '^dpkg -S (\S+)$' { return @{ ExitCode = 0; Output = @("landscape-common: $($Matches[1])") } }
-                '^dpkg-statoverride --list (\S+)$' { return @{ ExitCode = $(if ($Matches[1] -in $units.Overrides) { 0 } else { 1 }); Output = @() } }
+                '^dpkg-statoverride --list (\S+)$' {
+                    if ($Matches[1] -in $units.Overrides) { return @{ ExitCode = 0; Output = @("root root 644 $($Matches[1])") } }
+                    return @{ ExitCode = 1; Output = @() }
+                }
                 '^dpkg-statoverride --update --add root root 0644 (\S+)$' {
                     $units.Overrides += $Matches[1]
                     [System.IO.File]::SetUnixFileMode((Join-Path $global:UsaDeployRoot $Matches[1]), [System.IO.UnixFileMode]'UserRead, UserWrite, GroupRead, OtherRead')
