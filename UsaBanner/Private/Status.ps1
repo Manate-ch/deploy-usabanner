@@ -25,6 +25,11 @@
 
 $script:UsaFaultStates = @('invalid', 'missing', 'differs', 'stale')
 
+# The states from worst to best: a check that covers several files takes the
+# worst of their states. A list of its own, so the states that count against
+# a healthy host can change without changing it.
+$script:UsaStateOrder = @('invalid', 'missing', 'differs', 'stale', 'unknown', 'off', 'ok')
+
 function New-UsaBannerCheck {
     # In:  the check's name, its state, and what it found
     # Out: one row of Get-UsaBanner's checks
@@ -43,7 +48,8 @@ function Join-UsaBannerFinding {
     $bad = @($Found | Where-Object { $_ -and $_.State -ne 'ok' })
     if (-not $bad.Count) { return New-UsaBannerCheck -Check $Check -State 'ok' -Detail $Ok }
     $states = @($bad | ForEach-Object { $_.State })
-    $worst = @(@($script:UsaFaultStates) + 'unknown', 'off' | Where-Object { $_ -in $states })[0]
+    # A state the order lacks still reports: the first one found.
+    $worst = @(@($script:UsaStateOrder | Where-Object { $_ -in $states }) + $states)[0]
     New-UsaBannerCheck -Check $Check -State $worst -Detail (@($bad | ForEach-Object { $_.Text }) -join '; ')
 }
 

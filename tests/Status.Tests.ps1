@@ -391,6 +391,23 @@ Describe 'Get-UsaBanner on Windows Server' {
     }
 }
 
+Describe 'a check that covers several files' {
+    It 'takes the worst state among them, and lists each that is not ok' {
+        InModuleScope UsaBanner {
+            $check = Join-UsaBannerFinding -Check 'a check' -Ok 'all well' -Found @(
+                @{ State = 'ok'; Text = '' }, @{ State = 'stale'; Text = 'one is out of date' }, @{ State = 'missing'; Text = 'one is gone' })
+            $check.State | Should -BeExactly 'missing'
+            $check.Detail | Should -BeExactly 'one is out of date; one is gone'
+        }
+    }
+
+    It 'reports a state it does not rank, rather than failing' {
+        InModuleScope UsaBanner {
+            (Join-UsaBannerFinding -Check 'a check' -Ok 'all well' -Found @(@{ State = 'odd'; Text = 'something' })).State | Should -BeExactly 'odd'
+        }
+    }
+}
+
 Describe 'ConvertFrom-UsaBannerIssueText' {
     It 'prints what agetty prints from ConvertTo-UsaBannerIssueLine''s line: the escapes back, the name and address filled in' {
         InModuleScope UsaBanner {
