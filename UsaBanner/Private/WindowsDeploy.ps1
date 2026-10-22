@@ -66,6 +66,32 @@ function Get-UsaBannerWindowsSshd {
     if ($service -and $service.PathName -match '^"?([^"]+?\.exe)') { $Matches[1] }
 }
 
+function Get-UsaBannerServiceState {
+    # In:  a service's name
+    # Out: its state as the service manager words it (Running, Stopped);
+    #      '' when there is no such service
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Name)
+    $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if ($service) { [string]$service.Status } else { '' }
+}
+
+function Get-UsaBannerServiceStart {
+    # In:  a service's name
+    # Out: when its process started, in UTC; nothing when it does not run,
+    #      or that cannot be read
+    # Why: CIM, not Get-Process: a process SYSTEM runs refuses another
+    #      user's Get-Process its start time
+    [CmdletBinding()]
+    [OutputType([datetime])]
+    param([Parameter(Mandatory)][string]$Name)
+    $service = Get-CimInstance -ClassName Win32_Service -Filter "Name='$Name'" -ErrorAction SilentlyContinue
+    if (-not $service -or -not $service.ProcessId) { return }
+    $process = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$($service.ProcessId)" -ErrorAction SilentlyContinue
+    if ($process -and $process.CreationDate) { $process.CreationDate.ToUniversalTime() }
+}
+
 function Get-UsaBannerSshDefaultShell {
     # Out: OpenSSH's DefaultShell; '' when none is set, which is cmd.exe
     [CmdletBinding()]
@@ -73,6 +99,16 @@ function Get-UsaBannerSshDefaultShell {
     param()
     $key = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\OpenSSH' -Name 'DefaultShell' -ErrorAction SilentlyContinue
     if ($key) { [string]$key.DefaultShell } else { '' }
+}
+
+function Get-UsaBannerSshShellName {
+    # Out: the program sshd starts at a login, by its file name: pwsh.exe,
+    #      powershell.exe, or cmd.exe where no DefaultShell is set
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+    $shell = Get-UsaBannerSshDefaultShell
+    if ($shell) { @($shell.Trim().Trim('"') -split '[\\/]')[-1] } else { 'cmd.exe' }
 }
 
 function Read-UsaBannerLogonNoticeValue {
@@ -409,11 +445,20 @@ function Assert-UsaBannerWindowsHost {
         throw "UsaBanner: $Command works on Windows Server 2022 and later (build 20348 and up), and Ubuntu 24.04 and later."
     }
     if (-not $RefuseOldInstall) { return }
-    $found = @($Layout.Old | Where-Object { [System.IO.File]::Exists($_) -or [System.IO.Directory]::Exists($_) })
-    $found += @($Layout.Profiles | Where-Object { [System.IO.File]::Exists($_) -and (Read-UsaBannerWindowsText -Path $_).Text.Contains('# >>> Manatech banner') })
+    $found = @(Find-UsaBannerWindowsOldInstall -Layout $Layout)
     if ($found.Count) {
         throw "UsaBanner: this host has the banner of this repository's Install-ManatechBanner.ps1 ($($found -join ', ')). $Command does not install beside it: removing that banner and deploying this one in one step comes with V1's release (docs/V1-PLAN.md, M7)."
     }
+}
+
+function Find-UsaBannerWindowsOldInstall {
+    # In:  the layout (Get-UsaBannerWindowsLayout)
+    # Out: each file and folder of today's banner
+    #      (windows/Install-ManatechBanner.ps1) on the host, and each profile
+    #      that holds its block
+    param([Parameter(Mandatory)][hashtable]$Layout)
+    $Layout.Old | Where-Object { [System.IO.File]::Exists($_) -or [System.IO.Directory]::Exists($_) }
+    $Layout.Profiles | Where-Object { [System.IO.File]::Exists($_) -and (Read-UsaBannerWindowsText -Path $_).Text.Contains('# >>> Manatech banner') }
 }
 
 function Set-UsaBannerDataFolder {
@@ -462,6 +507,16 @@ function Set-UsaBannerWindowsProfiles {
     }
 }
 
+function Get-UsaBannerWindowsSshText {
+    # In:  the configuration
+    # Out: the SSH banner's text, as sshd-banner.txt holds it: plain ASCII,
+    #      LF line ends, a blank line after the box. The host's name is the
+    #      one Windows gives (no address: preLogon shows none on Windows)
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Config)
+    $names = @{ HostName = [System.Environment]::MachineName; Ip = '' }
+    (@(Get-UsaBannerPreLogon -Config $Config -Os windows -Facts $names) -join "`n") + "`n`n"
+}
+
 function Set-UsaBannerWindowsSsh {
     <#
     .SYNOPSIS
@@ -487,13 +542,11 @@ function Set-UsaBannerWindowsSsh {
         'no SSH banner, and no banner after login: OpenSSH''s server is not installed here (deploy-usawinssh installs it); run Deploy-UsaBanner again once it is'
         return
     }
-    $shell = Get-UsaBannerSshDefaultShell
-    $leaf = if ($shell) { @($shell.Trim().Trim('"') -split '[\\/]')[-1] } else { 'cmd.exe' }
+    $leaf = Get-UsaBannerSshShellName
     if ($leaf -notin 'pwsh.exe', 'powershell.exe') {
         Write-Warning "UsaBanner: sshd starts $leaf at a login, so no banner shows after an SSH login. The banner lives in PowerShell's profile: set the default shell to pwsh.exe (deploy-usawinssh does)."
     }
-    $names = @{ HostName = [System.Environment]::MachineName; Ip = '' }
-    $text = (@(Get-UsaBannerPreLogon -Config $Config -Os windows -Facts $names) -join "`n") + "`n`n"
+    $text = Get-UsaBannerWindowsSshText -Config $Config
     Set-UsaBannerHostFile -Root '' -Path ([System.IO.Path]::Combine($Layout.Data, 'sshd-banner.txt')) -Bytes ([System.Text.Encoding]::ASCII.GetBytes($text)) -Mode $null -What 'the SSH banner'
     if (-not [System.IO.File]::Exists($Layout.SshdConfig)) {
         Write-Warning "UsaBanner: there is no $($Layout.SshdConfig) yet: sshd writes it at its first start. Start sshd, then run Deploy-UsaBanner again for the SSH banner."

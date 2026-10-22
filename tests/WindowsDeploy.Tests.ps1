@@ -10,103 +10,7 @@ BeforeAll {
     $moduleRoot = Join-Path $repoRoot 'UsaBanner'
     Import-Module (Join-Path $moduleRoot 'UsaBanner.psd1') -Force
     $script:Pwsh = (Get-Process -Id $PID).Path
-
-    # Windows' own sshd_config, as the OpenSSH capability writes it (abridged; its end as written).
-    $script:StockSshd = @(
-        '# This is the sshd server system-wide configuration file.  See'
-        '# sshd_config(5) for more information.'
-        ''
-        '#Port 22'
-        '#PubkeyAuthentication yes'
-        ''
-        '# override default of no subsystems'
-        "Subsystem`tsftp`tsftp-server.exe"
-        ''
-        '# Example of overriding settings on a per-user basis'
-        '#Match User anoncvs'
-        "#`tAllowTcpForwarding no"
-        ''
-        'Match Group administrators'
-        '       AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys'
-        ''
-    ) -join "`r`n"
-
-    function New-WindowsHost {
-        # Out: the path of a new folder standing in for a Windows host: ProgramData with
-        #      sshd_config, Program Files with PowerShell 7 and the modules folder, and Windows
-        #      with Windows PowerShell's folder and an admin's own all-users profile (CRLF, UTF-8
-        #      with a byte order mark)
-        $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
-        foreach ($folder in 'ProgramData/ssh', 'ProgramFiles/PowerShell/7', 'ProgramFiles/WindowsPowerShell/Modules', 'Windows/System32/WindowsPowerShell/v1.0') {
-            $null = New-Item -ItemType Directory -Path (Join-Path $root $folder) -Force
-        }
-        [System.IO.File]::WriteAllText((Join-Path $root 'ProgramData/ssh/sshd_config'), $StockSshd)
-        [System.IO.File]::WriteAllText((Join-Path $root 'Windows/System32/WindowsPowerShell/v1.0/profile.ps1'), "# Contoso's own profile`r`nSet-Location C:\`r`n", [System.Text.UTF8Encoding]::new($true))
-        $root
-    }
-
-    function Get-HostState {
-        # In:  a host folder
-        # Out: a line for each file and folder in it, sorted, a file with its SHA-256; then the
-        #      logon notice and the task, as the stores hold them
-        param([string]$Root)
-        foreach ($item in @(Get-ChildItem -LiteralPath $Root -Recurse -Force | Sort-Object -Property FullName)) {
-            $relative = [System.IO.Path]::GetRelativePath($Root, $item.FullName)
-            if ($item.PSIsContainer) { "$relative/" }
-            else { "$relative $([System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.IO.File]::ReadAllBytes($item.FullName))))" }
-        }
-        "notice: $($global:UsaWinNotice.Exists) '$($global:UsaWinNotice.Caption)' '$($global:UsaWinNotice.Text)'"
-        "task: $(if ($global:UsaWinTask) { "$($global:UsaWinTask.Execute) $($global:UsaWinTask.Arguments)" } else { 'none' })"
-    }
-
-    function Use-WindowsHost {
-        # In:  the host folder, and answers that differ from the stock host's: 'program arguments'
-        #      -> @{ ExitCode; Output }
-        # Out: nothing; every Windows seam answers for that host, and each call that changes it is
-        #      logged in $global:UsaWinCalls
-        param([string]$Root, [hashtable]$Answers = @{})
-        $global:UsaWinRoot = $Root
-        $global:UsaWinCalls = [System.Collections.Generic.List[string]]::new()
-        $global:UsaWinAnswers = $Answers
-        $global:UsaWinNotice = @{ Caption = ''; Text = ''; Exists = $true }
-        $global:UsaWinTask = $null
-        $global:UsaWinAcl = $false
-        Mock -ModuleName UsaBanner Get-UsaBannerHostOs { 'windows' }
-        Mock -ModuleName UsaBanner Get-UsaBannerWindowsPaths { @{ ProgramData = "$global:UsaWinRoot/ProgramData"; ProgramFiles = "$global:UsaWinRoot/ProgramFiles"; Windir = "$global:UsaWinRoot/Windows" } }
-        Mock -ModuleName UsaBanner Get-UsaBannerWindowsBuild { 20348 }
-        Mock -ModuleName UsaBanner Test-UsaBannerPrivileged { $true }
-        Mock -ModuleName UsaBanner Get-UsaBannerWindowsSshd { 'C:\Windows\System32\OpenSSH\sshd.exe' }
-        Mock -ModuleName UsaBanner Get-UsaBannerSshDefaultShell { 'C:\Program Files\PowerShell\7\pwsh.exe' }
-        Mock -ModuleName UsaBanner Find-UsaBannerPwsh { 'C:\Program Files\PowerShell\7\pwsh.exe' }
-        Mock -ModuleName UsaBanner Read-UsaBannerLogonNoticeValue { @{ Caption = $global:UsaWinNotice.Caption; Text = $global:UsaWinNotice.Text; Exists = $global:UsaWinNotice.Exists } }
-        Mock -ModuleName UsaBanner Write-UsaBannerLogonNoticeValue {
-            $global:UsaWinCalls.Add($(if ($Remove) { 'notice removed' } else { "notice set: $Caption" }))
-            $global:UsaWinNotice = if ($Remove) { @{ Caption = ''; Text = ''; Exists = $false } } else { @{ Caption = $Caption; Text = $Text; Exists = $true } }
-        }
-        Mock -ModuleName UsaBanner Test-UsaBannerFolderAcl { $global:UsaWinAcl -and [System.IO.Directory]::Exists($Path) }
-        Mock -ModuleName UsaBanner Get-UsaBannerSampleTask { $global:UsaWinTask }
-        Mock -ModuleName UsaBanner Register-UsaBannerSampleTask {
-            $global:UsaWinCalls.Add("task registered: $($Spec.Path)$($Spec.Name)")
-            $global:UsaWinTask = @{ Execute = $Spec.Execute; Arguments = $Spec.Arguments }
-        }
-        Mock -ModuleName UsaBanner Unregister-UsaBannerSampleTask { $global:UsaWinCalls.Add('task unregistered'); $global:UsaWinTask = $null }
-        Mock -ModuleName UsaBanner Start-UsaBannerSampleTask {
-            $global:UsaWinCalls.Add('task started')
-            # As Update-UsaBannerSample does at its first run.
-            [System.IO.File]::WriteAllText("$global:UsaWinRoot/ProgramData/UsagiTools/Banner/samples.tsv", '')
-        }
-        Mock -ModuleName UsaBanner Invoke-UsaBannerNative {
-            $call = (@($FilePath) + @($ArgumentList)) -join ' '
-            $global:UsaWinCalls.Add($call)
-            if ($global:UsaWinAnswers.ContainsKey($call)) { return $global:UsaWinAnswers[$call] }
-            if ($FilePath -eq 'icacls.exe' -and $ArgumentList -contains '/inheritance:r') {
-                # The ACL comes before any file: nothing is in the folder yet.
-                if (@([System.IO.Directory]::GetFiles($ArgumentList[0])).Count) { $global:UsaWinCalls.Add('ACL SET AFTER A FILE') }
-                $global:UsaWinAcl = $true
-            }
-            @{ ExitCode = 0; Output = @() }
-        }
-    }
+    . (Join-Path $PSScriptRoot 'FakeHosts.ps1')
 }
 
 AfterAll {
@@ -140,7 +44,7 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         $global:UsaWinCalls | Should -Contain 'task started'
         $version = (Import-PowerShellDataFile -LiteralPath (Join-Path $moduleRoot 'UsaBanner.psd1')).ModuleVersion
         $copy = Join-Path $Root "ProgramFiles/WindowsPowerShell/Modules/UsaBanner/$version"
-        @(Get-HostState $copy | Select-Object -SkipLast 2) | Should -Be @(Get-HostState $moduleRoot | Select-Object -SkipLast 2)
+        @(Get-WindowsHostState $copy | Select-Object -SkipLast 2) | Should -Be @(Get-WindowsHostState $moduleRoot | Select-Object -SkipLast 2)
     }
 
     It 'writes the configuration as data that reads back as the same settings, and draws the same banner' {
@@ -300,17 +204,17 @@ Describe 'Deploy-UsaBanner on Windows Server' {
 
     It 'changes nothing on a second run with the same flags' {
         $null = Deploy-UsaBanner -Company Contoso -Environment LAB
-        $before = Get-HostState $Root
+        $before = Get-WindowsHostState $Root
         $global:UsaWinCalls.Clear()
         @(Deploy-UsaBanner -Company Contoso -Environment LAB) | Should -BeNullOrEmpty
-        Get-HostState $Root | Should -Be $before
+        Get-WindowsHostState $Root | Should -Be $before
         $global:UsaWinCalls | Should -BeNullOrEmpty
     }
 
     It 'changes nothing under -WhatIf' {
-        $before = Get-HostState $Root
+        $before = Get-WindowsHostState $Root
         @(Deploy-UsaBanner -Company Contoso -WhatIf) | Should -BeNullOrEmpty
-        Get-HostState $Root | Should -Be $before
+        Get-WindowsHostState $Root | Should -Be $before
         $global:UsaWinCalls | Should -BeNullOrEmpty
     }
 
@@ -328,9 +232,9 @@ Describe 'Deploy-UsaBanner on Windows Server' {
     It 'refuses a host with the banner of this repository''s Install-ManatechBanner.ps1, naming what it found' {
         $null = New-Item -ItemType Directory -Path (Join-Path $Root 'ProgramData/Manatech')
         [System.IO.File]::WriteAllText((Join-Path $Root 'ProgramFiles/PowerShell/7/profile.ps1'), "# >>> Manatech banner (Install-ManatechBanner.ps1) >>>`r`n# <<< Manatech banner <<<`r`n")
-        $before = Get-HostState $Root
+        $before = Get-WindowsHostState $Root
         { Deploy-UsaBanner -Company Contoso } | Should -Throw "*this host has the banner of this repository's Install-ManatechBanner.ps1 (*ProgramData/Manatech, *PowerShell/7/profile.ps1)*"
-        Get-HostState $Root | Should -Be $before
+        Get-WindowsHostState $Root | Should -Be $before
     }
 }
 
@@ -341,10 +245,10 @@ Describe 'Remove-UsaBanner on Windows Server' {
     }
 
     It 'leaves the host as it was before the deploy: files, profiles, sshd_config, the logon notice and the task' {
-        $before = Get-HostState $Root
+        $before = Get-WindowsHostState $Root
         $null = Deploy-UsaBanner -Company Contoso -Environment PROD
         $lines = @(Remove-UsaBanner)
-        Get-HostState $Root | Should -Be $before
+        Get-WindowsHostState $Root | Should -Be $before
         $lines | Should -Contain 'unregistered the task \UsagiTools\UsaBanner sample'
         $lines | Should -Contain 'put back the logon notice as it was before the deploy'
     }
@@ -358,10 +262,10 @@ Describe 'Remove-UsaBanner on Windows Server' {
 
     It 'changes nothing under -WhatIf' {
         $null = Deploy-UsaBanner -Company Contoso
-        $before = Get-HostState $Root
+        $before = Get-WindowsHostState $Root
         $global:UsaWinCalls.Clear()
         @(Remove-UsaBanner -WhatIf) | Should -BeNullOrEmpty
-        Get-HostState $Root | Should -Be $before
+        Get-WindowsHostState $Root | Should -Be $before
         $global:UsaWinCalls | Should -BeNullOrEmpty
     }
 }
