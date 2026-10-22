@@ -1,0 +1,4 @@
+Id=ntpsec.service
+TriggeredBy=
+LoadState=loaded
+ActiveState=active

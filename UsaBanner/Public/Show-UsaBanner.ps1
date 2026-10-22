@@ -91,7 +91,7 @@ function Show-UsaBanner {
         $hostOs = $Os
         if ($hostOs -eq 'auto') { $hostOs = Get-UsaBannerHostOs }
         $hostFacts = $Facts
-        if (-not $hostFacts) { $hostFacts = Get-UsaBannerHostFacts }
+        if (-not $hostFacts) { $hostFacts = Get-UsaBannerHostFacts -Services $config['services'] }
         $shortName = ([string]$hostFacts['Name'] -split '\.')[0]
         $ip = [string]$hostFacts['Ip']
         $mode = Resolve-UsaBannerColorMode -Requested $ColorMode -HostMode ([string]$config['color']['mode'])

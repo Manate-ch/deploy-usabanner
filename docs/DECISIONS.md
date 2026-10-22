@@ -648,6 +648,30 @@ running and not loopback, or else the address the host name resolves to
   trigger-start services, minus a built-in list of services that stop by
   design, plus the host's own ignore list. Keep that rule.
 
+**Watched on Ubuntu (M3, 2026-10-22).** The configuration's `services` is
+`default` or the names. `linux/facts.sh` asks systemd about all of them in
+one `systemctl show`, and gives the panel's services row and a problem line
+for each one down.
+
+- **The time sync daemon in use** is the first installed of chrony, ntpsec,
+  ntp, openntpd and systemd-timesyncd: the lab's Ubuntu 24.04 host keeps
+  time with ntpsec, neither of the two named above [measured].
+- **A host joined to AD** is one with `/etc/sssd/sssd.conf`. sssd is then
+  watched, and adsysd where it is installed: logins through AD need sssd,
+  not ADSys, so a host without ADSys is not broken. A host whose ADSys was
+  removed by mistake does not show.
+- **On demand:** a service that is not running while its socket listens is
+  idle by design, and counts as up; systemd starts it at the first
+  connection. adsysd is one [measured]; ssh is one on Ubuntu 24.04 until
+  its first connection [known].
+- **Not found** is bad, as decided above: `service nginx not found`.
+- **Today's banner's other checks** come along, each named on the all-clear
+  line only when it ran: the units that failed; the disks from 85% full and
+  the memory from 90% in use, each bad from 95%, the panel's levels (today's
+  memory line was never bad); the clock, when `timedatectl` answers; a
+  reboot pending. Today's note of setup changes waiting belongs to its
+  `install.sh`; V1's deploy (M4) brings its own.
+
 ## D11. The interactive UI: built in, or a module
 
 The frame-by-frame picker needs a checkbox list that scrolls, a text-entry
@@ -1316,6 +1340,9 @@ its fields separated by tabs, its kind first:
 | `sessions` | how many, and whose |
 | `time` | the local time |
 | `ipv4` | an adapter, and its addresses |
+| `services` | the services watched, as text; a level, `good` or `bad` (D10) |
+| `problem` | a level, `warn` or `bad`; what is wrong, as text (D10) |
+| `check` | the name of a check that ran, for the all-clear line |
 
 - **Tabs and lines,** because `awk -F '\t'` reads them as they are, and a
   value with spaces (`6 of 121 GiB`, an OS name) stays one field. The

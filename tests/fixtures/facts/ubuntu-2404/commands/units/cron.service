@@ -1,0 +1,4 @@
+Id=cron.service
+TriggeredBy=
+LoadState=loaded
+ActiveState=active
