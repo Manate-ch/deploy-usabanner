@@ -4,8 +4,11 @@
 # and addresses replaced. quser listed no one on either ("No User exists for
 # *"), so the sessions test writes lines in quser's format, and the CPU
 # samples are made up: the recording took none. Neither had a reboot pending
-# (both registry keys absent, read at about 03:50 UTC). The probes that need
-# CIM run on Windows only; the ones through .NET also run here, on any OS.
+# (both registry keys absent, read at about 03:50 UTC). The services are the
+# ones the health checks read, recorded at about 04:40 UTC: the three D10
+# watches, and every automatic service not running, with the ones a trigger
+# starts. The probes that need CIM run on Windows only; the ones through .NET
+# also run here, on any OS.
 
 BeforeAll {
     $repoRoot = Split-Path $PSScriptRoot -Parent
@@ -22,6 +25,18 @@ BeforeAll {
                 @{ Name = 'Loopback Pseudo-Interface 1'; Type = 'Loopback'; Up = $true; Addresses = @('127.0.0.1/8') }
             )
             PrimaryIp  = '10.20.40.79'
+            Services   = @(
+                @{ Name = 'sshd'; Status = 'Running'; StartType = '' }
+                @{ Name = 'W32Time'; Status = 'Running'; StartType = '' }
+                @{ Name = 'Netlogon'; Status = 'Stopped'; StartType = 'Manual' }
+                @{ Name = 'AppXSvc'; Status = 'Stopped'; StartType = 'Automatic' }
+                @{ Name = 'edgeupdate'; Status = 'Stopped'; StartType = 'Automatic' }
+                @{ Name = 'InventorySvc'; Status = 'Stopped'; StartType = 'Automatic' }
+                @{ Name = 'RemoteRegistry'; Status = 'Stopped'; StartType = 'Automatic' }
+                @{ Name = 'sppsvc'; Status = 'Stopped'; StartType = 'Automatic' }
+            )
+            Triggered  = @('AppXSvc', 'edgeupdate', 'RemoteRegistry', 'sppsvc', 'W32Time')
+            Time       = @{ Answered = $true; Source = 'VM IC Time Synchronization Provider' }
         }
         'Server 2022' = @{
             System     = @{ Caption = 'Microsoft Windows Server 2022 Standard'; Build = '20348'; Ubr = '5499'; BootTime = [datetimeoffset]'2026-10-08T19:42:13-05:00'; MemoryKiB = 16776128; FreeKiB = 11066928; DnsHostName = 'BEVSW-APP2'; Domain = 'WORKGROUP'; PartOfDomain = $false; Cores = 4; SystemDrive = 'C:' }
@@ -35,6 +50,16 @@ BeforeAll {
                 @{ Name = 'Loopback Pseudo-Interface 1'; Type = 'Loopback'; Up = $true; Addresses = @('127.0.0.1/8') }
             )
             PrimaryIp  = '10.20.40.78'
+            Services   = @(
+                @{ Name = 'sshd'; Status = 'Running'; StartType = '' }
+                @{ Name = 'W32Time'; Status = 'Running'; StartType = '' }
+                @{ Name = 'Netlogon'; Status = 'Stopped'; StartType = 'Manual' }
+                @{ Name = 'edgeupdate'; Status = 'Stopped'; StartType = 'Automatic' }
+                @{ Name = 'RemoteRegistry'; Status = 'Stopped'; StartType = 'Automatic' }
+                @{ Name = 'sppsvc'; Status = 'Stopped'; StartType = 'Automatic' }
+            )
+            Triggered  = @('edgeupdate', 'RemoteRegistry', 'sppsvc', 'W32Time')
+            Time       = @{ Answered = $true; Source = 'VM IC Time Synchronization Provider' }
         }
     }
 
@@ -59,6 +84,9 @@ BeforeAll {
         Mock -ModuleName UsaBanner Get-UsaBannerWinDrive { $calls.Add('drives'); $Probes.Drives }
         Mock -ModuleName UsaBanner Get-UsaBannerWinSession { $calls.Add('quser'); $Session }
         Mock -ModuleName UsaBanner Get-UsaBannerWinRebootPending { $calls.Add('reboot'); $Reboot }
+        Mock -ModuleName UsaBanner Get-UsaBannerWinServiceList { $calls.Add('services'); $Probes.Services }
+        Mock -ModuleName UsaBanner Get-UsaBannerWinTimeSource { $calls.Add('w32tm'); $Probes.Time }
+        Mock -ModuleName UsaBanner Test-UsaBannerWinTriggerStart { $Probes.Triggered -contains $Name }
         Mock -ModuleName UsaBanner Get-UsaBannerWinCpuSample { $calls.Add('cpu'); $samples.Dequeue() }
         Mock -ModuleName UsaBanner Start-Sleep { $calls.Add("sleep $Milliseconds") }
         $splat = @{ Now = $Probes.Now; SamplePath = (Join-Path $TestDrive 'no-samples.tsv'); SlowPath = (Join-Path $TestDrive 'no-slow.tsv') }
@@ -114,20 +142,30 @@ Describe 'Get-UsaBannerWindowsFacts' {
         }
     ) {
         $facts = (Invoke-WindowsFacts $Recorded[$Os]).Facts
-        @($facts.Keys | Sort-Object) | Should -BeExactly @('Cpu', 'Disks', 'Ip', 'Ipv4', 'Memory', 'Name', 'Os', 'Reboot', 'Sessions', 'Time', 'Uptime')
+        @($facts.Keys | Sort-Object) | Should -BeExactly @('Checked', 'Cpu', 'Disks', 'Ip', 'Ipv4', 'Memory', 'Name', 'Os', 'Reboot', 'Services', 'Sessions', 'Time', 'Uptime')
         foreach ($key in 'Name', 'Ip', 'Os', 'Uptime', 'Sessions', 'Time') { $facts[$key] | Should -BeExactly $Expected[$key] -Because $key }
         '{0}|{1}' -f $facts.Cpu.Now, $facts.Cpu.Text | Should -BeExactly $Expected.Cpu
         '{0}|{1}' -f $facts.Memory.Pct, $facts.Memory.Text | Should -BeExactly $Expected.Memory
         @($facts.Disks | ForEach-Object { '{0}|{1}|{2}' -f $_.Name, $_.Pct, $_.Text }) -join ',' | Should -BeExactly $Expected.Disks
         @($facts.Ipv4 | ForEach-Object { '{0}|{1}' -f $_.Name, $_.Address }) -join ',' | Should -BeExactly $Expected.Ipv4
         '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly 'none pending|good'
+        '{0}|{1}' -f $facts.Services.Text, $facts.Services.Level | Should -BeExactly 'sshd, W32Time running|good'
+        $facts.Checked | Should -BeExactly @('auto-start', 'services', 'disks <85%', 'memory', 'clock', 'reboot')
         @($facts.Cpu.Min, $facts.Cpu.Max, $facts.Memory.Min, $facts.Memory.Max, $facts.Memory.Kind, $facts.Disks[0].Kind).Where({ $null -ne $_ }).Count | Should -Be 0
     }
 
     It 'reads the CPU last, over a quiet window of 200 ms after every other probe' {
         $calls = (Invoke-WindowsFacts $Recorded['Server 2025']).Calls
         $calls[-3..-1] | Should -BeExactly @('cpu', 'sleep 200', 'cpu')
-        @($calls | Select-Object -SkipLast 3 | Sort-Object) | Should -BeExactly @('drives', 'interfaces', 'quser', 'reboot', 'route', 'system')
+        @($calls | Select-Object -SkipLast 3 | Sort-Object) | Should -BeExactly @('drives', 'interfaces', 'quser', 'reboot', 'route', 'services', 'system', 'w32tm')
+    }
+
+    It 'watches the services it is given, and leaves out of the sweep the ones it is told to' {
+        $probes = $Recorded['Server 2025'].Clone()
+        $probes.Services = @($probes.Services) + @(@{ Name = 'ContosoAgent'; Status = 'Stopped'; StartType = 'Automatic' }, @{ Name = 'ContosoSync'; Status = 'Stopped'; StartType = 'Automatic' })
+        $facts = (Invoke-WindowsFacts $probes -Arguments @{ Services = @('sshd'); Ignore = @('ContosoSync') }).Facts
+        '{0}|{1}' -f $facts.Services.Text, $facts.Services.Level | Should -BeExactly 'sshd running|good'
+        @($facts.Problems | ForEach-Object { '{0}|{1}' -f $_.Level, $_.Text }) | Should -BeExactly @('bad|1 automatic service stopped: ContosoAgent')
     }
 
     It 'reads a reboot pending live, naming why: <Expected>' -ForEach @(

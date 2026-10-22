@@ -672,6 +672,29 @@ for each one down.
   reboot pending. Today's note of setup changes waiting belongs to its
   `install.sh`; V1's deploy (M4) brings its own.
 
+**Watched on Windows (M3, 2026-10-22).** The module asks the service
+manager for every service in one call, before the CPU's quiet window
+(`WindowsHealth.ps1`), and gives the same records:
+
+- **auto-start**: the automatic services stopped, less those that stop by
+  design (today's list), those a trigger starts, and the host's own ignore
+  list. On both lab hosts every automatic service stopped is one of those
+  [measured: AppXSvc, edgeupdate, RemoteRegistry and sppsvc are started by
+  a trigger; InventorySvc is on the list]. The ignore list is a parameter,
+  `-Ignore`, until the configuration carries it (M4).
+- **services**: D10's sshd and W32Time, and Netlogon in a domain, else the
+  configuration's names. One stopped or not found is bad; one stopped that
+  a trigger starts is on demand, as on Ubuntu. On the workgroup lab hosts
+  sshd and W32Time run, automatic, and Netlogon is manual and stopped
+  [measured].
+- **clock**: today's check, the Windows Time service not answering `w32tm`,
+  or naming the CMOS clock or a free-running one as its source. The lab
+  hosts take the time from Hyper-V [measured].
+- the disks, the memory and a reboot pending, as on Ubuntu.
+
+A watched service that is automatic and stopped is named twice, by the
+sweep and by the services check, as both of today's banners name it.
+
 ## D11. The interactive UI: built in, or a module
 
 The frame-by-frame picker needs a checkbox list that scrolls, a text-entry
@@ -1400,7 +1423,9 @@ its fields separated by tabs, its kind first:
   - a reboot pending is its own row, naming why (`servicing`,
     `Windows Update`), where today's banner raised one problem for either;
     the CPU's speed, the memory's and drives' kinds and the updates come
-    from the periodic job's `slow.tsv` (D17).
+    from the periodic job's `slow.tsv` (D17);
+  - the health lines and the services row come from the module too
+    (`WindowsHealth.ps1`, D10).
 
 ## Appendix A. Art mock-ups (rough)
 

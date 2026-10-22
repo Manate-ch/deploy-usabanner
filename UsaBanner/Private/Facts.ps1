@@ -79,7 +79,8 @@ function Get-UsaBannerHostFacts {
     Get-UsaBannerWindowsFacts reads (WindowsFacts.ps1). Records without a
     name take the host's own, so the panel always has a title. -Services is
     the configuration's: default, or the names; the collector gets them as
-    USABANNER_SERVICES, so no names watches none.
+    USABANNER_SERVICES, so no names watches none, and on Windows
+    Get-UsaBannerWindowsFacts gets them as they are.
     -OnWindows and -Collector replace what this host says, and -Environment
     adds variables to the collector's: for tests.
     #>
@@ -91,7 +92,7 @@ function Get-UsaBannerHostFacts {
         [System.Collections.IDictionary]$Environment = @{},
         [object]$Services = 'default'
     )
-    if ($OnWindows) { return Get-UsaBannerWindowsFacts }
+    if ($OnWindows) { return Get-UsaBannerWindowsFacts -Services $Services }
     $watched = 'default'
     if ($Services -is [System.Collections.IEnumerable] -and $Services -isnot [string]) { $watched = @($Services) -join ' ' }
     elseif ($Services) { $watched = [string]$Services }
