@@ -55,7 +55,9 @@ function ConvertTo-UsaBannerHandoffScript {
     The parameters travel as CLIXML, PowerShell's own serialization, encoded
     as base64, so no value is ever read as code and no quote can break out.
     A switch goes as a boolean: a deserialized SwitchParameter would not
-    bind to a switch. Throws on a name that is not Verb-Usa<Noun>.
+    bind to a switch. pwsh writes its output in UTF-8, which
+    Invoke-UsaBannerHandoff reads it as. Throws on a name that is not
+    Verb-Usa<Noun>.
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -78,6 +80,7 @@ function ConvertTo-UsaBannerHandoffScript {
     $payload = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($clixml))
     $lines = @(
         '$ErrorActionPreference = ''Stop'''
+        '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)'
         ('$env:USABANNER_HANDOFF = ''{0}''' -f $Pwsh.Replace("'", "''"))
         ('Import-Module -Name ''{0}''' -f $Manifest.Replace("'", "''"))
         ('$parameters = [System.Management.Automation.PSSerializer]::Deserialize([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(''{0}'')))' -f $payload)
@@ -94,7 +97,12 @@ function Invoke-UsaBannerHandoff {
     .DESCRIPTION
     Called from a command's begin {} block when Test-UsaBannerHandoff is
     true. pwsh's output comes back as lines of text, through a pipe; at the
-    console they print as they arrive.
+    console they print as they arrive. Windows PowerShell decodes that pipe
+    in the console's encoding, the OEM code page, where a bar such as
+    U+2501 has no place and came back as ? (IBM437 on Server 2022 and 2025,
+    measured 2026-10-21); so the console reads UTF-8 for the call, as pwsh
+    writes it, and gets its own encoding back after. A process without a
+    console keeps its encoding.
     Throws when no pwsh is found, saying what to install, and when pwsh
     exits with an error. A command that reads keys would need pwsh on the
     console rather than behind a pipe; none does yet.
@@ -112,9 +120,20 @@ function Invoke-UsaBannerHandoff {
     }
     $script = ConvertTo-UsaBannerHandoffScript -Command $Command -Parameters $Parameters -Manifest $Manifest -Pwsh $Pwsh
     $encoded = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($script))   # -EncodedCommand takes UTF-16LE
-    # -OutputFormat Text: started with -EncodedCommand, pwsh writes its errors to stderr as CLIXML
-    # ('#< CLIXML <Objs ...'), which Windows PowerShell 5.1 prints raw.
-    & $Pwsh -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand $encoded
+    $consoleEncoding = $null
+    try {
+        $consoleEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+    }
+    catch { $consoleEncoding = $null }
+    try {
+        # -OutputFormat Text: started with -EncodedCommand, pwsh writes its errors to stderr as CLIXML
+        # ('#< CLIXML <Objs ...'), which Windows PowerShell 5.1 prints raw.
+        & $Pwsh -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand $encoded
+    }
+    finally {
+        if ($null -ne $consoleEncoding) { [Console]::OutputEncoding = $consoleEncoding }
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "UsaBanner: $Command failed in PowerShell 7 ($Pwsh), exit code $LASTEXITCODE."
     }

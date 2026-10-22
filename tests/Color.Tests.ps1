@@ -69,3 +69,37 @@ Describe 'choosing the colour mode' {
         finally { $env:USABANNER_COLOR = $saved }
     }
 }
+
+Describe 'choosing Unicode or ASCII' {
+    It '<Case>' -ForEach @(
+        @{ Case = 'glyphs asked for win over everything'; Requested = 'ascii'; Vars = @{ USABANNER_GLYPHS = 'unicode'; LANG = 'C.UTF-8' }; Expected = 'ascii' }
+        @{ Case = 'USABANNER_GLYPHS wins over the locale'; Vars = @{ USABANNER_GLYPHS = 'ascii'; LANG = 'en_US.UTF-8' }; Expected = 'ascii' }
+        @{ Case = 'USABANNER_GLYPHS in any case'; Vars = @{ USABANNER_GLYPHS = 'Unicode'; LANG = 'C' }; Expected = 'unicode' }
+        @{ Case = 'Windows, as today''s Windows banner draws'; Vars = @{}; Windows = $true; Expected = 'unicode' }
+        @{ Case = 'LANG=en_US.UTF-8'; Vars = @{ LANG = 'en_US.UTF-8' }; Expected = 'unicode' }
+        @{ Case = 'LANG=C.utf8, as some systems spell it'; Vars = @{ LANG = 'C.utf8' }; Expected = 'unicode' }
+        @{ Case = 'LC_ALL wins over LANG'; Vars = @{ LC_ALL = 'C'; LANG = 'en_US.UTF-8' }; Expected = 'ascii' }
+        @{ Case = 'LC_CTYPE wins over LANG'; Vars = @{ LC_CTYPE = 'en_US.UTF-8'; LANG = 'C' }; Expected = 'unicode' }
+        @{ Case = 'LANG=C, the C locale'; Vars = @{ LANG = 'C' }; Expected = 'ascii' }
+        @{ Case = 'no locale at all'; Vars = @{}; Expected = 'ascii' }
+    ) {
+        $arguments = @{
+            Requested   = $(if ($Requested) { $Requested } else { 'auto' })
+            Environment = $Vars
+            OnWindows   = [bool]$Windows
+        }
+        InModuleScope UsaBanner -Parameters $arguments {
+            param($Requested, $Environment, $OnWindows)
+            Resolve-UsaBannerGlyphs -Requested $Requested -Environment $Environment -OnWindows $OnWindows
+        } | Should -BeExactly $Expected
+    }
+
+    It 'ignores a USABANNER_GLYPHS it does not know, and says so' {
+        $result = InModuleScope UsaBanner {
+            $glyphs = Resolve-UsaBannerGlyphs -Environment @{ USABANNER_GLYPHS = 'emoji'; LANG = 'C.UTF-8' } -OnWindows $false -WarningVariable warned -WarningAction SilentlyContinue
+            @{ Glyphs = $glyphs; Warned = "$warned" }
+        }
+        $result.Glyphs | Should -BeExactly 'unicode'
+        $result.Warned | Should -BeLike "*USABANNER_GLYPHS is 'emoji'. It takes unicode or ascii*"
+    }
+}
