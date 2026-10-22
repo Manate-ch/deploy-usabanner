@@ -376,6 +376,42 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
         & $ranges $byShell | Should -BeExactly 'cpu 0-71, memory 10-20, / 5-7, /var 50-60'
         & $ranges $byModule | Should -BeExactly (& $ranges $byShell)
     }
+
+    It 'takes the kinds and the updates the module takes from the same slow facts' {
+        # The last line of a kind counts, one with a time too long for a 64-bit
+        # number too; one 24 hours old, short of a field or with a count that
+        # is not one does not.
+        $slow = @(
+            "$($Epoch - 86400)`tmemory-kind`tDDR3-1600"
+            "$($Epoch - 900)`tmemory-kind`tDDR4-2933"
+            "$($Epoch - 900)`tdisk-kind`t/`tSSD"
+            "$($Epoch - 600)`tdisk-kind`t/`tNVMe"
+            "$($Epoch - 600)`tdisk-kind`t/var"
+            "99999999999999999999999`tmemory-kind`tDDR5-4800"
+            "$($Epoch - 900)`tupdates`t64`t3"
+            "$($Epoch - 600)`tupdates`t12`t0"
+            "$($Epoch - 300)`tupdates`tmany`t0"
+        )
+        $file = Join-Path $TestDrive 'shared-slow.tsv'
+        [System.IO.File]::WriteAllText($file, ($slow -join "`n") + "`n")
+        $variant = New-Variant @{ 'root/var/lib/usabanner/slow.tsv' = ($slow -join "`n") + "`n" }
+        $byShell = InModuleScope UsaBanner -Parameters @{ Lines = @(Invoke-Collector @variant) } { param($Lines) ConvertFrom-UsaBannerFactRecord -Line $Lines }
+        $byModule = InModuleScope UsaBanner -Parameters @{ Lines = @(Invoke-Collector); File = $file; Epoch = $Epoch } {
+            param($Lines, $File, $Epoch)
+            $read = ConvertFrom-UsaBannerFactRecord -Line $Lines
+            Add-UsaBannerSlowFacts -Facts $read -Path $File -Now ([datetimeoffset]::FromUnixTimeSeconds($Epoch))
+            $read
+        }
+        $kinds = {
+            # In:  facts
+            # Out: their kinds and updates as one line
+            # Why: the two readers are compared whole
+            param($Facts)
+            (@("memory $($Facts.Memory.Kind)") + @($Facts.Disks | ForEach-Object { "$($_.Name) $($_.Kind)" }) + @("updates $($Facts.Updates.Text) $($Facts.Updates.Level)")) -join ', '
+        }
+        & $kinds $byShell | Should -BeExactly 'memory DDR5-4800, / NVMe, /var , updates 12 pending good'
+        & $kinds $byModule | Should -BeExactly (& $kinds $byShell)
+    }
 }
 
 Describe 'linux/sample.sh' -Skip:$IsWindows {

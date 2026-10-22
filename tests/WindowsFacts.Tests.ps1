@@ -3,8 +3,9 @@
 # Windows Server 2025 and 2022, on 2026-10-22 at about 02:42 UTC, their names
 # and addresses replaced. quser listed no one on either ("No User exists for
 # *"), so the sessions test writes lines in quser's format, and the CPU
-# samples are made up: the recording took none. The probes that need CIM run
-# on Windows only; the ones through .NET also run here, on any OS.
+# samples are made up: the recording took none. Neither had a reboot pending
+# (both registry keys absent, read at about 03:50 UTC). The probes that need
+# CIM run on Windows only; the ones through .NET also run here, on any OS.
 
 BeforeAll {
     $repoRoot = Split-Path $PSScriptRoot -Parent
@@ -39,11 +40,12 @@ BeforeAll {
 
     function Invoke-WindowsFacts {
         # In:  a host's probes as $Recorded holds them; -Session, a user per
-        #      session as quser lists them; -Change, keys of the system's
-        #      answer to replace; -Arguments, for Get-UsaBannerWindowsFacts
+        #      session as quser lists them; -Reboot, the reasons a reboot is
+        #      pending; -Change, keys of the system's answer to replace;
+        #      -Arguments, for Get-UsaBannerWindowsFacts
         # Out: @{ Facts; Calls }: the facts, and the probes in the order they ran
         # Why: the probes read Windows; what is under test is the assembly
-        param([hashtable]$Probes, [string[]]$Session = @(), [hashtable]$Change = @{}, [hashtable]$Arguments = @{})
+        param([hashtable]$Probes, [string[]]$Session = @(), [string[]]$Reboot = @(), [hashtable]$Change = @{}, [hashtable]$Arguments = @{})
         $calls = [System.Collections.Generic.List[string]]::new()
         $system = $Probes.System.Clone()
         foreach ($key in $Change.Keys) { $system[$key] = $Change[$key] }
@@ -56,9 +58,10 @@ BeforeAll {
         Mock -ModuleName UsaBanner Get-UsaBannerPrimaryIp { $calls.Add('route'); $Probes.PrimaryIp }
         Mock -ModuleName UsaBanner Get-UsaBannerWinDrive { $calls.Add('drives'); $Probes.Drives }
         Mock -ModuleName UsaBanner Get-UsaBannerWinSession { $calls.Add('quser'); $Session }
+        Mock -ModuleName UsaBanner Get-UsaBannerWinRebootPending { $calls.Add('reboot'); $Reboot }
         Mock -ModuleName UsaBanner Get-UsaBannerWinCpuSample { $calls.Add('cpu'); $samples.Dequeue() }
         Mock -ModuleName UsaBanner Start-Sleep { $calls.Add("sleep $Milliseconds") }
-        $splat = @{ Now = $Probes.Now; SamplePath = (Join-Path $TestDrive 'no-samples.tsv') }
+        $splat = @{ Now = $Probes.Now; SamplePath = (Join-Path $TestDrive 'no-samples.tsv'); SlowPath = (Join-Path $TestDrive 'no-slow.tsv') }
         foreach ($key in $Arguments.Keys) { $splat[$key] = $Arguments[$key] }
         $facts = InModuleScope UsaBanner -Parameters @{ Splat = $splat } { param($Splat) Get-UsaBannerWindowsFacts @Splat }
         @{ Facts = $facts; Calls = $calls.ToArray() }
@@ -111,19 +114,41 @@ Describe 'Get-UsaBannerWindowsFacts' {
         }
     ) {
         $facts = (Invoke-WindowsFacts $Recorded[$Os]).Facts
-        @($facts.Keys | Sort-Object) | Should -BeExactly @('Cpu', 'Disks', 'Ip', 'Ipv4', 'Memory', 'Name', 'Os', 'Sessions', 'Time', 'Uptime')
+        @($facts.Keys | Sort-Object) | Should -BeExactly @('Cpu', 'Disks', 'Ip', 'Ipv4', 'Memory', 'Name', 'Os', 'Reboot', 'Sessions', 'Time', 'Uptime')
         foreach ($key in 'Name', 'Ip', 'Os', 'Uptime', 'Sessions', 'Time') { $facts[$key] | Should -BeExactly $Expected[$key] -Because $key }
         '{0}|{1}' -f $facts.Cpu.Now, $facts.Cpu.Text | Should -BeExactly $Expected.Cpu
         '{0}|{1}' -f $facts.Memory.Pct, $facts.Memory.Text | Should -BeExactly $Expected.Memory
         @($facts.Disks | ForEach-Object { '{0}|{1}|{2}' -f $_.Name, $_.Pct, $_.Text }) -join ',' | Should -BeExactly $Expected.Disks
         @($facts.Ipv4 | ForEach-Object { '{0}|{1}' -f $_.Name, $_.Address }) -join ',' | Should -BeExactly $Expected.Ipv4
+        '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly 'none pending|good'
         @($facts.Cpu.Min, $facts.Cpu.Max, $facts.Memory.Min, $facts.Memory.Max, $facts.Memory.Kind, $facts.Disks[0].Kind).Where({ $null -ne $_ }).Count | Should -Be 0
     }
 
     It 'reads the CPU last, over a quiet window of 200 ms after every other probe' {
         $calls = (Invoke-WindowsFacts $Recorded['Server 2025']).Calls
         $calls[-3..-1] | Should -BeExactly @('cpu', 'sleep 200', 'cpu')
-        @($calls | Select-Object -SkipLast 3 | Sort-Object) | Should -BeExactly @('drives', 'interfaces', 'quser', 'route', 'system')
+        @($calls | Select-Object -SkipLast 3 | Sort-Object) | Should -BeExactly @('drives', 'interfaces', 'quser', 'reboot', 'route', 'system')
+    }
+
+    It 'reads a reboot pending live, naming why: <Expected>' -ForEach @(
+        @{ Reboot = @('servicing'); Expected = 'pending: servicing|warn' }
+        @{ Reboot = @('Windows Update'); Expected = 'pending: Windows Update|warn' }
+        @{ Reboot = @('servicing', 'Windows Update'); Expected = 'pending: servicing, Windows Update|warn' }
+    ) {
+        $facts = (Invoke-WindowsFacts $Recorded['Server 2025'] -Reboot $Reboot).Facts
+        '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly $Expected
+    }
+
+    It 'takes the CPU''s speed, the memory''s and each drive''s kind and the updates from the periodic job''s slow facts' {
+        # As a physical host's job writes them: a virtual machine's gets no kinds.
+        $file = Join-Path $TestDrive 'windows-slow.tsv'
+        $time = $Recorded['Server 2025'].Now.ToUnixTimeSeconds()
+        [System.IO.File]::WriteAllText($file, (@("$time`tcpu-speed`t3.1", "$time`tmemory-kind`tDDR4-3200", "$time`tdisk-kind`tC:`tSSD", "$time`tupdates`t3`t1") -join "`n") + "`n")
+        $facts = (Invoke-WindowsFacts $Recorded['Server 2025'] -Arguments @{ SlowPath = $file }).Facts
+        $facts.Cpu.Text | Should -BeExactly '4 cores @ 3.1 GHz'
+        $facts.Memory.Kind | Should -BeExactly 'DDR4-3200'
+        $facts.Disks[0].Kind | Should -BeExactly 'SSD'
+        '{0}|{1}' -f $facts.Updates.Text, $facts.Updates.Level | Should -BeExactly '3 pending, 1 security|warn'
     }
 
     It 'names a host in a domain with its domain in lower case, keeping its own name''s case' {

@@ -255,9 +255,12 @@ function Get-UsaBannerWindowsFacts {
     The name is the DNS host name in the case the host gives it, with its
     domain in lower case when it is in one. The CPU, the memory and the
     disks take their 24-hour range from the periodic job's samples, in
-    -SamplePath (Samples.ps1). -Hide is a regex of adapter names to leave
-    out: by default the NAT adapters of WSL, the Default Switch and
-    containers. -Now is the moment the facts describe, for tests.
+    -SamplePath (Samples.ps1); the CPU's speed, the memory's and disks'
+    kinds and the updates waiting come from its slow facts, in -SlowPath
+    (WindowsSlowFacts.ps1); the reboot pending is read live. -Hide is a
+    regex of adapter names to leave out: by default the NAT adapters of WSL,
+    the Default Switch and containers. -Now is the moment the facts
+    describe, for tests.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -265,7 +268,8 @@ function Get-UsaBannerWindowsFacts {
         [string]$Hide = '^vEthernet \((WSL|Default Switch|nat)\b',
         [int]$CpuWindowMs = 200,
         [datetimeoffset]$Now = [datetimeoffset]::Now,
-        [string]$SamplePath = (Get-UsaBannerDataPath -Name 'samples.tsv' -OnWindows $true)
+        [string]$SamplePath = (Get-UsaBannerDataPath -Name 'samples.tsv' -OnWindows $true),
+        [string]$SlowPath = (Get-UsaBannerDataPath -Name 'slow.tsv' -OnWindows $true)
     )
     $system = Get-UsaBannerWinSystem
     $facts = @{}
@@ -314,6 +318,7 @@ function Get-UsaBannerWindowsFacts {
 
     if ($adapters.Count) { $facts['Ipv4'] = $adapters }
     $facts['Time'] = $Now.ToString('ddd yyyy-MM-dd HH:mm zzz', [cultureinfo]::InvariantCulture)
+    $facts['Reboot'] = Format-UsaBannerReboot -Reason @(Get-UsaBannerWinRebootPending)
 
     # The CPU last, over a quiet window: the probes above make WMI, the
     # service manager and quser work in processes of their own, which the
@@ -327,5 +332,6 @@ function Get-UsaBannerWindowsFacts {
         $facts['Cpu'] = @{ Now = $busy; Min = $null; Max = $null; Text = '{0} {1}' -f $system.Cores, $unit }
     }
     Add-UsaBannerSampleRange -Facts $facts -Path $SamplePath -Now $Now
+    Add-UsaBannerSlowFacts -Facts $facts -Path $SlowPath -Now $Now
     $facts
 }
