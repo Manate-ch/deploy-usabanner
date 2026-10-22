@@ -66,12 +66,16 @@ BeforeAll {
     function Invoke-WindowsFacts {
         # In:  a host's probes as $Recorded holds them; -Session, a user per
         #      session as quser lists them; -Reboot, the reasons a reboot is
-        #      pending; -Change, keys of the system's answer to replace;
-        #      -Arguments, for Get-UsaBannerWindowsFacts
-        # Out: @{ Facts; Calls }: the facts, and the probes in the order they ran
+        #      pending; -Restart, the newest restart event since the boot, or
+        #      'unreadable' for a System log that cannot be read; -Change, keys
+        #      of the system's answer to replace; -Arguments, for
+        #      Get-UsaBannerWindowsFacts
+        # Out: @{ Facts; Calls; Since }: the facts, the probes in the order
+        #      they ran, and the boot each restart read was asked about
         # Why: the probes read Windows; what is under test is the assembly
-        param([hashtable]$Probes, [string[]]$Session = @(), [string[]]$Reboot = @(), [hashtable]$Change = @{}, [hashtable]$Arguments = @{})
+        param([hashtable]$Probes, [string[]]$Session = @(), [string[]]$Reboot = @(), [object]$Restart, [hashtable]$Change = @{}, [hashtable]$Arguments = @{})
         $calls = [System.Collections.Generic.List[string]]::new()
+        $sinces = [System.Collections.Generic.List[object]]::new()
         $system = $Probes.System.Clone()
         foreach ($key in $Change.Keys) { $system[$key] = $Change[$key] }
         $samples = [System.Collections.Generic.Queue[object]]::new([object[]]@(
@@ -84,6 +88,12 @@ BeforeAll {
         Mock -ModuleName UsaBanner Get-UsaBannerWinDrive { $calls.Add('drives'); $Probes.Drives }
         Mock -ModuleName UsaBanner Get-UsaBannerWinSession { $calls.Add('quser'); $Session }
         Mock -ModuleName UsaBanner Get-UsaBannerWinRebootPending { $calls.Add('reboot'); $Reboot }
+        Mock -ModuleName UsaBanner Get-UsaBannerWinRestartEvent {
+            $calls.Add('restart')
+            $sinces.Add($Since)
+            if ($Restart -is [string]) { throw 'Attempted to perform an unauthorized operation.' }
+            $Restart
+        }
         Mock -ModuleName UsaBanner Get-UsaBannerWinServiceList { $calls.Add('services'); $Probes.Services }
         Mock -ModuleName UsaBanner Get-UsaBannerWinTimeSource { $calls.Add('w32tm'); $Probes.Time }
         Mock -ModuleName UsaBanner Test-UsaBannerWinTriggerStart { $Probes.Triggered -contains $Name }
@@ -92,7 +102,7 @@ BeforeAll {
         $splat = @{ Now = $Probes.Now; SamplePath = (Join-Path $TestDrive 'no-samples.tsv'); SlowPath = (Join-Path $TestDrive 'no-slow.tsv') }
         foreach ($key in $Arguments.Keys) { $splat[$key] = $Arguments[$key] }
         $facts = InModuleScope UsaBanner -Parameters @{ Splat = $splat } { param($Splat) Get-UsaBannerWindowsFacts @Splat }
-        @{ Facts = $facts; Calls = $calls.ToArray() }
+        @{ Facts = $facts; Calls = $calls.ToArray(); Since = $sinces.ToArray() }
     }
 
     function Use-Culture {
@@ -148,7 +158,7 @@ Describe 'Get-UsaBannerWindowsFacts' {
         '{0}|{1}' -f $facts.Memory.Pct, $facts.Memory.Text | Should -BeExactly $Expected.Memory
         @($facts.Disks | ForEach-Object { '{0}|{1}|{2}' -f $_.Name, $_.Pct, $_.Text }) -join ',' | Should -BeExactly $Expected.Disks
         @($facts.Ipv4 | ForEach-Object { '{0}|{1}' -f $_.Name, $_.Address }) -join ',' | Should -BeExactly $Expected.Ipv4
-        '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly 'none pending|good'
+        '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly 'none pending, none scheduled|good'
         '{0}|{1}' -f $facts.Services.Text, $facts.Services.Level | Should -BeExactly 'sshd, W32Time running|good'
         $facts.Checked | Should -BeExactly @('auto-start', 'services', 'disks <85%', 'memory', 'clock', 'reboot')
         @($facts.Cpu.Min, $facts.Cpu.Max, $facts.Memory.Min, $facts.Memory.Max, $facts.Memory.Kind, $facts.Disks[0].Kind).Where({ $null -ne $_ }).Count | Should -Be 0
@@ -157,7 +167,7 @@ Describe 'Get-UsaBannerWindowsFacts' {
     It 'reads the CPU last, over a quiet window of 200 ms after every other probe' {
         $calls = (Invoke-WindowsFacts $Recorded['Server 2025']).Calls
         $calls[-3..-1] | Should -BeExactly @('cpu', 'sleep 200', 'cpu')
-        @($calls | Select-Object -SkipLast 3 | Sort-Object) | Should -BeExactly @('drives', 'interfaces', 'quser', 'reboot', 'route', 'services', 'system', 'w32tm')
+        @($calls | Select-Object -SkipLast 3 | Sort-Object) | Should -BeExactly @('drives', 'interfaces', 'quser', 'reboot', 'restart', 'route', 'services', 'system', 'w32tm')
     }
 
     It 'watches the services it is given, and leaves out of the sweep the ones it is told to' {
@@ -175,6 +185,17 @@ Describe 'Get-UsaBannerWindowsFacts' {
     ) {
         $facts = (Invoke-WindowsFacts $Recorded['Server 2025'] -Reboot $Reboot).Facts
         '{0}|{1}' -f $facts.Reboot.Text, $facts.Reboot.Level | Should -BeExactly $Expected
+    }
+
+    It 'reads a restart set live, from the System log since the boot: <Expected>' -ForEach @(
+        @{ Restart = @{ Id = 1074; Time = [datetimeoffset]'2026-10-21T21:30:00-05:00'; Type = 'restart'; User = 'BEVSW-APP1\Administrator' }; Reboot = @(); Expected = 'none pending; restart set Wed 21:30 by Administrator|warn' }
+        @{ Restart = @{ Id = 1074; Time = [datetimeoffset]'2026-10-21T21:30:00-05:00'; Type = 'restart'; User = 'BEVSW-APP1\Administrator' }; Reboot = @('servicing'); Expected = 'pending: servicing; restart set Wed 21:30 by Administrator|warn' }
+        @{ Restart = @{ Id = 1075; Time = [datetimeoffset]'2026-10-21T21:31:00-05:00'; User = 'BEVSW-APP1\Administrator' }; Reboot = @(); Expected = 'none pending, none scheduled|good' }
+        @{ Restart = 'unreadable'; Reboot = @(); Expected = 'none pending|good' }
+    ) {
+        $run = Invoke-WindowsFacts $Recorded['Server 2025'] -Reboot $Reboot -Restart $Restart
+        '{0}|{1}' -f $run.Facts.Reboot.Text, $run.Facts.Reboot.Level | Should -BeExactly $Expected
+        $run.Since | Should -BeExactly @($Recorded['Server 2025'].System.BootTime)
     }
 
     It 'takes the CPU''s speed, the memory''s and each drive''s kind and the updates from the periodic job''s slow facts' {

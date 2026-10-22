@@ -158,11 +158,12 @@ the median of five fresh processes, the banner drawn without colour;
   costliest probes are the CIM read of the system (0.16 to 0.18 s) and the
   two registry checks for a reboot pending (0.15 s cold, 0.07 s warm:
   PowerShell's registry provider).
-- **For M4:** the pre-drawn banner takes most of the drawing away; registry
-  reads through `[Microsoft.Win32.Registry]` instead of `Test-Path`, for the
-  reboot keys and the trigger-start check, and a module that loads only what
-  a login needs, take the rest. **Proposed for M4's "done when":** no slower
-  than today's banner, on either OS.
+- **Your budget (2026-10-22):** up to 3 s added to a login is fine for what
+  the banner gives; 10 s is where someone would notice. So M4 has no speed
+  target, and making it faster is optional. The cheap parts come anyway: the
+  pre-drawn banner takes most of the drawing away, and registry reads
+  through `[Microsoft.Win32.Registry]` instead of `Test-Path`, for the reboot
+  keys and the trigger-start check, take another 0.1 to 0.2 s.
 
 ## D3. Default logos, and what may ship in a public repo
 
@@ -714,7 +715,10 @@ manager for every service in one call, before the CPU's quiet window
   list. On both lab hosts every automatic service stopped is one of those
   [measured: AppXSvc, edgeupdate, RemoteRegistry and sppsvc are started by
   a trigger; InventorySvc is on the list]. The ignore list is a parameter,
-  `-Ignore`, until the configuration carries it (M4).
+  `-Ignore`, until the configuration carries it (M4). **Your call
+  (2026-10-22):** the sweep ships, and you judge it in day-to-day use on
+  your estates, whose software mix is broader than the lab's. In the lab run
+  it named nothing on either host.
 - **services**: D10's sshd and W32Time, and Netlogon in a domain, else the
   configuration's names. One stopped or not found is bad; one stopped that
   a trigger starts is on demand, as on Ubuntu. On the workgroup lab hosts
@@ -1015,7 +1019,7 @@ and disks.
 | Disk type | `lsblk -d -o NAME,ROTA,TRAN` (rotational, NVMe, USB) | `Get-PhysicalDisk` (MediaType, BusType) |
 | Pending updates | apt's update-notifier stamp (as `90-updates-available` reads it) | Windows Update agent COM API (slow: cache only) |
 | Reboot pending, and why | `/run/reboot-required(.pkgs)` | the usual registry keys (CBS, Windows Update); pending file renames left out, as measured below |
-| Reboot scheduled | **live at every login**: `/run/systemd/shutdown/scheduled`, the file `shutdown --show` reads (when and why) | **not read yet:** neither the last restart-initiated event (System log, event 1074) nor Windows Update's own restart task tells that a restart is coming, as measured below |
+| Reboot scheduled | **live at every login**: `/run/systemd/shutdown/scheduled`, the file `shutdown --show` reads (when and why) | **live at every login**: the newest of User32's events 1074 (a restart set) and 1075 (one called off) since the boot, as measured below. Windows Update's own restart task tells nothing |
 
 **Your call: min/max over what window?** Since boot, over the last 24 hours,
 or something else? Anything but "now" needs the job to sample between logins
@@ -1076,7 +1080,11 @@ cpufreq. A reboot is read live, as decided above: pending, by
 `kernel 6.8.0-88`; scheduled, by `/run/systemd/shutdown/scheduled`, the file
 `shutdown --show` reads. Its `USEC=` is microseconds since 1970 and its
 `MODE=` is reboot, poweroff or the like [fetched: systemd v255,
-`src/login/logind-dbus.c`, `update_schedule_file`].
+`src/login/logind-dbus.c`, `update_schedule_file`]. In the lab,
+`shutdown -r +60` wrote it with `USEC` an hour out and `MODE=reboot`, and
+`facts.sh` gave `none pending; scheduled Thu 05:54`; `shutdown -c` removed
+it, and `facts.sh` gave `none pending, none scheduled` [measured,
+2026-10-22, Ubuntu 24.04].
 
 **The slow facts on Windows (M3, 2026-10-22).** `Update-UsaBannerSample`
 writes them anew at every run, after its sample, to
@@ -1127,15 +1135,27 @@ the lab run (2026-10-22) both Windows hosts had six, every one queued by
 Edge's updater for its own files (eleven deletes and one move), with
 neither key set and no restart planned [measured]. Counted, they would have said `reboot pending` on both.
 
-**A restart scheduled is not read** [measured, the same run]: neither host
-had an event 1074 since its boot (reading the last five took 61 and 115 ms).
-Windows Update's `Reboot_AC` task was set for the next night on one host
-while neither key was set, and only shows a notification
-(`MusNotification.exe Display`); the other host has no such task. Neither
-tells that a restart is coming. Whether a 1074 marks a restart still to
-come, and whether one cancelled with `shutdown /a` leaves its 1074 behind,
-needs a lab host given a timed restart that is then cancelled: not measured.
-Until then the row says `none pending`, never `none scheduled`.
+**A restart set is read live, from events 1074 and 1075** [measured,
+2026-10-22, Server 2022 and 2025]. `shutdown /r /t 3600` wrote User32's
+event 1074 at once, with its shutdown type, its comment and who set it, but
+not when it was due; `shutdown /a` then wrote 1075, "The last
+restart/shutdown request ... was aborted", and a second `shutdown /a`
+found none in progress. So the newest of the two since the boot tells:
+1074, a restart is coming; 1075, it was called off. A restart that
+happened leaves its 1074 before the boot. The row then reads, as Linux's
+does, `none pending; restart set Thu 04:19 by Administrator`, a warning,
+or `none pending, none scheduled`. The fields come from the event's
+properties, not its message. In the lab the module's reader gave each of
+the three rows in turn, as a restart was set and called off; its first
+read in a fresh process took 307 to 372 ms [measured, Server 2025].
+
+An account that is not an administrator may be refused the System log
+over SSH [not measured]. Its row then says nothing of a schedule, `none
+pending`, rather than `none scheduled` on a guess; the periodic job's cache for it waits
+for M4, which installs the job. Windows Update's `Reboot_AC` task was set
+for the next night on one host while neither key was set, and only shows a
+notification (`MusNotification.exe Display`); the other host has no such
+task. Neither tells that a restart is coming.
 
 ## D18. Installing PowerShell 7 before the module can run
 
