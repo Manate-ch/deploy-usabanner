@@ -103,6 +103,15 @@ Describe 'Show-UsaBanner' {
         ($lines -join "`n") | Should -Not -Match 'all clear'
     }
 
+    It 'collects this host''s facts without -Facts, and only then' {
+        Mock -ModuleName UsaBanner Get-UsaBannerHostFacts { @{ Name = 'cwpql-db2.ad.example'; Ip = '10.20.60.15'; Uptime = '41d 2h 5m' } }
+        $lines = @(Show-UsaBanner -Path $lab -Os linux -ColorMode none -Glyphs ascii)
+        ($lines -join "`n") | Should -Match 'cwpql-db2\.ad\.example'
+        ($lines -join "`n") | Should -Match '41d 2h 5m'
+        $null = Show-UsaBanner -Path $lab -Facts $facts -Os ubuntu -ColorMode none
+        Should -Invoke Get-UsaBannerHostFacts -ModuleName UsaBanner -Times 1 -Exactly
+    }
+
     It 'takes the mode the configuration sets for this host when asked for auto' {
         $path = New-ConfigFile 'mode.json' @{ color = @{ mode = '16' } }
         $auto = Use-Environment @{ USABANNER_COLOR = $null; NO_COLOR = $null; COLORTERM = $null; WT_SESSION = $null; TERM = 'xterm-256color' } {
