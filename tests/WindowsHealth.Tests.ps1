@@ -154,6 +154,10 @@ Describe 'Add-UsaBannerWinHealth' {
         $filled.Checked | Should -BeExactly @('auto-start', 'services', 'disks <85%', 'memory', 'clock', 'reboot')
     }
 
+    It 'names no disks or memory check for facts without them' {
+        (Invoke-Health -Facts @{ Reboot = @{ Text = 'none pending'; Level = 'good' } }).Checked | Should -BeExactly @('auto-start', 'services', 'clock', 'reboot')
+    }
+
     It 'names no clock check when w32tm <Case>' -ForEach @(
         @{ Case = 'names no source it can read'; Time = @{ Answered = $true; Source = $null } }
         @{ Case = 'is not there'; Time = $null }
