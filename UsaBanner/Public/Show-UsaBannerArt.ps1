@@ -10,7 +10,7 @@ function Show-UsaBannerArt {
     +-----------+------------------------------------------------------+
     | ColorMode | Draws                                                |
     +-----------+------------------------------------------------------+
-    | auto      | the user's USABANNER_COLOR; else none when NO_COLOR  |
+    | auto      | the user's USABANNER_COLOR; else plain when NO_COLOR |
     |           | is set; else what the terminal says it supports      |
     | truecolor | 24-bit colour, with the gradients and the sheen      |
     | 256       | each cell in the nearest of the 256 xterm colours    |

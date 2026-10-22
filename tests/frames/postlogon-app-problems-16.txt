@@ -1,0 +1,38 @@
+                           ⎋[96m.-----------.⎋[0m
+                          ⎋[96m/           /⎋[34m|⎋[0m
+                         ⎋[96m/___________/ ⎋[34m|⎋[0m
+                         ⎋[94m| ⎋[37m[_______] ⎋[94m| ⎋[34m|⎋[0m
+                         ⎋[94m| ⎋[37m[_______] ⎋[94m| ⎋[34m|⎋[0m
+                         ⎋[94m|           | ⎋[34m|⎋[0m
+                         ⎋[94m| ⎋[90m::::::::: ⎋[94m| ⎋[34m|⎋[0m
+                         ⎋[94m| ⎋[90m::::::::: ⎋[94m| ⎋[34m|⎋[0m
+                         ⎋[94m| ⎋[90m::::::::: ⎋[94m| ⎋[34m|⎋[0m
+                         ⎋[94m|           | ⎋[34m|⎋[0m
+                         ⎋[94m|   ⎋[97m(O)  ⎋[92mo  ⎋[94m| ⎋[34m/⎋[0m
+                         ⎋[94m|___________|⎋[34m/ ⎋[0m
+
+  Welcome to ⎋[94mContoso⎋[0m
+
+⎋[1;97;44m                            P R O D                             ⎋[0m
+⎋[34m+-⎋[0m ⎋[1;35mBE⎋[0m⎋[1;34mVSW⎋[0m⎋[1m-APP1.ad.example⎋[0m ⎋[34m-----------⎋[0m⎋[1;97;46m Branch East - 40-Servers ⎋[0m⎋[34m-+⎋[0m
+⎋[34m|⎋[0m  ⎋[36mschema   ⎋[0m Branch East / Virtual / Server / Windows          ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mvlan     ⎋[0m 40  Servers  (10.20.40.0/22)                      ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mtier     ⎋[0m ⎋[1;97;44m PROD ⎋[0m⎋[90m  production⎋[0m                                ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mos       ⎋[0m Windows Server 2025 Standard, build 26100.4652    ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mrole     ⎋[0m Line-of-business apps                             ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36muptime   ⎋[0m 3d 4h 12m                                         ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mcpu      ⎋[0m ⎋[32m7%⎋[0m⎋[90m  24h 2-64%⎋[0m  8 cores @ 2.4 GHz                  ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mmemory   ⎋[0m ⎋[32m━━━━⎋[0m⎋[90m──────⎋[0m ⎋[32m41%⎋[0m  6.5 of 16.0 GiB  DDR4⎋[90m  24h 33-58%⎋[0m ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mdisk C:  ⎋[0m ⎋[32m━━━━━━⎋[0m⎋[90m────⎋[0m ⎋[32m63%⎋[0m  80 of 127 GiB  NVMe⎋[90m  24h 62-63%⎋[0m   ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mdisk D:  ⎋[0m ⎋[33m━━━━━━━━━⎋[0m⎋[90m─⎋[0m ⎋[33m91%⎋[0m  1.6 of 1.8 TiB  HDD⎋[90m  24h 90-91%⎋[0m   ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36msessions ⎋[0m 1  (administrator)                                ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mtime     ⎋[0m Tue 2026-10-20 09:30 -05:00                       ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mipv4     ⎋[0m Ethernet0  10.20.40.79/22                         ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mupdates  ⎋[0m ⎋[33m3 pending, 1 security⎋[0m                             ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mreboot   ⎋[0m ⎋[33mpending: Windows Update⎋[0m                           ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mservices ⎋[0m ⎋[1;31mW32Time stopped; sshd, Netlogon running⎋[0m           ⎋[34m|⎋[0m
+⎋[34m+--------------------------------------------------------------+⎋[0m
+
+  ⎋[1;31m✖⎋[0m W32Time is stopped
+  ⎋[33m▲⎋[0m D: is 91% full
+  ⎋[33m▲⎋[0m reboot pending: Windows Update
