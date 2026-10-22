@@ -541,6 +541,7 @@ the domain and ADSys has downloaded the `Ubuntu/` tree (the watcher fires when
     systemctl list-timers manatech-motd-update.timer
     systemctl status manatech-motd-publish.path  # the publish watcher
     cat /var/lib/manatech/ad-description         # the cached AD Description
+    cat /var/lib/manatech/ad-unreached           # there only when the last run reached no DC: when, and what it tried
     pro status                                   # ADSys scripts need Ubuntu Pro attached
 
 Install or re-run now, without a reboot (it prints every step):
@@ -638,7 +639,10 @@ shows it (with a triangle in a UTF-8 terminal):
 and changes nothing; it needs no sudo. The note covers only the parts this host
 has (stock scripts retired, our sshd drop-in, the timer), and carries `--ad`
 when the timer uses it.
-Add `--ad` on a domain-joined host to take ENV and role from its AD Description. The token lives
+Add `--ad` on a domain-joined host to take ENV and role from its AD Description. When no domain
+controller can be contacted at all, that step warns instead of failing: it keeps the last
+description, and the banner says so until a run reaches one. A DC that answers with an error
+still fails the run, and the journal says which DC said what. The token lives
 in `/opt/manatech-motd/.git/config`, which `install.sh` makes root-only. It is
 also visible in the process list for the few seconds the clone runs.
 
