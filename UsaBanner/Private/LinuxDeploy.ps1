@@ -451,7 +451,7 @@ function Write-UsaBannerLinuxDrawing {
         LoginEnv = @("$script:UsaLinuxState/login.env", 'the services the banner watches')
         Issue    = @($script:UsaLinuxIssue, 'the console''s banner')
         IssueNet = @("$script:UsaLinuxEtc/issue.net", 'the SSH banner')
-        Drawn    = @("$script:UsaLinuxState/drawn", 'the name, address and configuration the banners were drawn with')
+        Drawn    = @("$script:UsaLinuxState/drawn", 'the name, address, configuration and AD Description the banners were drawn with')
     }
     foreach ($key in $files.Keys) {
         Set-UsaBannerHostFile -Root $Root -Path $files[$key][0] -Bytes $utf8.GetBytes([string]$Drawing[$key]) -What $files[$key][1] -Created $Created

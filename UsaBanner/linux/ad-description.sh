@@ -96,10 +96,16 @@ if [ "$rc" -ne 0 ]; then
 fi
 
 # DCs from DNS SRV (resolvectl prints "<name> IN SRV prio weight port target");
-# the domain name itself (its A records are the DCs) is the fallback.
+# the domain name itself (its A records are the DCs) is the fallback. An SRV
+# target is the DC's own name, which its ldap/ principal holds, so ldapsearch
+# takes it as given (-N): canonicalized by reverse DNS, a DC whose address has
+# no PTR record is asked for as its address, and refuses ("Server not found in
+# Kerberos database"; lab, 2026-10-23). The domain's own name needs the
+# reverse lookup to find the DC's.
+nocanon=-N
 dcs=$(timeout 10 resolvectl query -t SRV "_ldap._tcp.dc._msdcs.$domain" </dev/null 2>/dev/null |
 	awk '$3 == "SRV" { sub(/\.$/, "", $7); print $7 }')
-[ -n "$dcs" ] || dcs=$domain
+[ -n "$dcs" ] || { dcs=$domain; nocanon=; }
 
 # Each DC in turn, until one answers. ldapsearch exits 255 when it cannot
 # contact the server (LDAP_SERVER_DOWN, -1), and timeout 124 when it hangs:
@@ -108,7 +114,7 @@ dcs=$(timeout 10 resolvectl query -t SRV "_ldap._tcp.dc._msdcs.$domain" </dev/nu
 # AD's own reason.
 found= desc= errors=
 for dc in $dcs; do
-	res=$(LC_ALL=C timeout 30 ldapsearch -LLL -Q -Y GSSAPI -o ldif-wrap=no -o nettimeout=5 -H "ldap://$dc" \
+	res=$(LC_ALL=C timeout 30 ldapsearch -LLL -Q -Y GSSAPI $nocanon -o ldif-wrap=no -o nettimeout=5 -H "ldap://$dc" \
 		-b "$base" "(sAMAccountName=$sam)" description </dev/null 2>"$work/err")
 	rc=$?
 	if [ "$rc" -eq 0 ]; then

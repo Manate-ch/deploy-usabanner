@@ -69,6 +69,8 @@ fi
 [ "$line" = NOENTRY ] && exit 0
 printf 'dn: CN=APP1,CN=Computers,DC=ad,DC=example\n'
 [ -z "$line" ] || printf '%s\n' "$line"
+# The continuation references a real DC prints after the entry, even with -LLL (lab, 2026-10-23).
+printf '\n# refldap://ForestDnsZones.ad.example/DC=ForestDnsZones,DC=ad,DC=example\n'
 '@
     }
 
@@ -198,7 +200,8 @@ Describe 'linux/ad-description.sh' -Skip:$IsWindows {
         $call.klist.Arguments | Should -BeExactly "-k $keytab"
         $call.kinit.Arguments | Should -BeExactly "-k -t $keytab APP1`$@AD.EXAMPLE"
         $call.resolvectl.Arguments | Should -BeExactly 'query -t SRV _ldap._tcp.dc._msdcs.ad.example'
-        foreach ($part in '-Y GSSAPI', '-o ldif-wrap=no', '-H ldap://dc1.ad.example', '-b DC=ad,DC=example', '(sAMAccountName=APP1$)') {
+        # -N: the DC's name from SRV as given, not canonicalized by reverse DNS.
+        foreach ($part in '-Y GSSAPI -N ', '-o ldif-wrap=no', '-H ldap://dc1.ad.example', '-b DC=ad,DC=example', '(sAMAccountName=APP1$)') {
             $call.ldapsearch.Arguments | Should -Match ([regex]::Escape($part)) -Because $part
         }
         $call.ldapsearch.Arguments | Should -Match ' description$'
@@ -220,11 +223,12 @@ Describe 'linux/ad-description.sh' -Skip:$IsWindows {
         Get-CallCount $run 'ldapsearch' | Should -Be 2
     }
 
-    It 'asks the domain''s own name when DNS gives no SRV record' {
+    It 'asks the domain''s own name when DNS gives no SRV record, letting reverse DNS find the DC''s name' {
         $run = Invoke-AdDescription -Ldap1 '0:description: LAB: test box' -Variables @{ STUB_SRV = 'none' }
         $run.Exit | Should -Be 0
         $run.Cache | Should -BeExactly "LAB: test box`n"
         $run.Output | Should -Match ([regex]::Escape('"LAB: test box" (from ad.example)'))
+        @($run.Calls | Where-Object { $_.Name -eq 'ldapsearch' })[0].Arguments | Should -Not -Match '(^| )-N( |$)'
     }
 
     It 'caches an empty Description as an empty line, replacing a cached one' {
