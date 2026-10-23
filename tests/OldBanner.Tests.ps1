@@ -262,6 +262,15 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Windows Server' {
         $global:UsaWinCalls | Should -BeNullOrEmpty
     }
 
+    It 'leaves the old banner as it was when a banner fails to draw' {
+        Add-OldWindowsBanner $Root
+        $before = Get-WindowsHostState $Root
+        Mock -ModuleName UsaBanner Get-UsaBannerPreLogon { throw 'the art broke' }
+        { Deploy-UsaBanner -Company Contoso -ReplaceOldBanner } | Should -Throw '*the art broke*'
+        Get-WindowsHostState $Root | Should -Be $before
+        $global:UsaWinCalls | Should -BeNullOrEmpty
+    }
+
     It 'puts sshd_config back when sshd -t refuses it without the old banner''s line, and says so' {
         Use-WindowsHost $Root @{ 'C:\Windows\System32\OpenSSH\sshd.exe -t' = @{ ExitCode = 1; Output = @('Bad configuration option') } }
         Add-OldWindowsBanner $Root
