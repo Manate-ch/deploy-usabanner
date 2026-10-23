@@ -151,11 +151,15 @@ Describe 'Write-UsaBannerSlowFacts' {
 
     It 'stops, and leaves nothing beside the file, when the file cannot be replaced' {
         # The lab (Server 2022, 2026-10-23): this file, with an ACL no one could read, was never replaced, a file
-        # beside it was left at each run, and the task still said it succeeded. A folder in its place stands in.
+        # beside it was left at each run, and the task still said it succeeded. A folder in its place stands in:
+        # the writer itself must fail (Invoke-SlowFacts reads the file back, which would throw for it), and leave
+        # nothing beside the file or in the folder (Move-Item moved the file into it).
         $folder = Join-Path $TestDrive 'locked'
         $null = New-Item -ItemType Directory -Path (Join-Path $folder 'slow.tsv') -Force
-        { Invoke-SlowFacts $Recorded -Updates $null -Path (Join-Path $folder 'slow.tsv') } | Should -Throw
-        @(Get-ChildItem -LiteralPath $folder -Force | ForEach-Object { $_.Name }) | Should -BeExactly @('slow.tsv')
+        Mock -ModuleName UsaBanner Get-UsaBannerWinHardware { $null }
+        Mock -ModuleName UsaBanner Get-UsaBannerWinUpdates { $null }
+        { InModuleScope UsaBanner -Parameters @{ Path = (Join-Path $folder 'slow.tsv'); Now = $Now } { param($Path, $Now) Write-UsaBannerSlowFacts -Path $Path -Now $Now } } | Should -Throw
+        @(Get-ChildItem -LiteralPath $folder -Recurse -Force | ForEach-Object { $_.Name }) | Should -BeExactly @('slow.tsv')
     }
 }
 

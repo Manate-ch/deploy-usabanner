@@ -61,7 +61,8 @@ Describe 'Add-UsaBannerSample' {
         $folder = Join-Path $TestDrive 'locked'
         $null = New-Item -ItemType Directory -Path (Join-Path $folder 'samples.tsv') -Force
         { InModuleScope UsaBanner -Parameters @{ Facts = (New-Facts); Path = (Join-Path $folder 'samples.tsv'); Now = $Now } { param($Facts, $Path, $Now) Add-UsaBannerSample -Facts $Facts -Path $Path -Now $Now } } | Should -Throw
-        @(Get-ChildItem -LiteralPath $folder -Force | ForEach-Object { $_.Name }) | Should -BeExactly @('samples.tsv')
+        # Recurse: Move-Item moved the file into the folder that stands in.
+        @(Get-ChildItem -LiteralPath $folder -Recurse -Force | ForEach-Object { $_.Name }) | Should -BeExactly @('samples.tsv')
     }
 
     It 'leaves out a fact without a percentage' {
