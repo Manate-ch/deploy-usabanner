@@ -64,6 +64,14 @@
         }
       }
     },
+    "glyphs": {
+      "description": "Whether the banner after login draws its lines, bars and marks in Unicode, or in ASCII for clients that are not UTF-8. auto reads the client's locale; anything else is what the admin found the clients of this host show. USABANNER_GLYPHS in a user's environment overrides it.",
+      "enum": [
+        "auto",
+        "unicode",
+        "ascii"
+      ]
+    },
     "border": {
       "type": "object",
       "additionalProperties": false,
@@ -217,18 +225,15 @@
     },
     "services": {
       "description": "The services the post-login banner watches: 'default' for the OS's own list, or the names.",
-      "oneOf": [
-        {
-          "const": "default"
-        },
-        {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_.@-]+$"
-          }
-        }
-      ]
+      "type": [
+        "string",
+        "array"
+      ],
+      "pattern": "^default$",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_.@-]+$"
+      }
     }
   },
   "$defs": {

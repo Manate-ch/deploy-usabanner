@@ -75,6 +75,11 @@ Describe 'choosing Unicode or ASCII' {
         @{ Case = 'glyphs asked for win over everything'; Requested = 'ascii'; Vars = @{ USABANNER_GLYPHS = 'unicode'; LANG = 'C.UTF-8' }; Expected = 'ascii' }
         @{ Case = 'USABANNER_GLYPHS wins over the locale'; Vars = @{ USABANNER_GLYPHS = 'ascii'; LANG = 'en_US.UTF-8' }; Expected = 'ascii' }
         @{ Case = 'USABANNER_GLYPHS in any case'; Vars = @{ USABANNER_GLYPHS = 'Unicode'; LANG = 'C' }; Expected = 'unicode' }
+        @{ Case = 'glyphs asked for win over the host''s'; Requested = 'unicode'; HostGlyphs = 'ascii'; Vars = @{}; Expected = 'unicode' }
+        @{ Case = 'USABANNER_GLYPHS wins over the host''s glyphs'; HostGlyphs = 'ascii'; Vars = @{ USABANNER_GLYPHS = 'unicode' }; Expected = 'unicode' }
+        @{ Case = 'the host''s glyphs win over the locale'; HostGlyphs = 'ascii'; Vars = @{ LANG = 'en_US.UTF-8' }; Expected = 'ascii' }
+        @{ Case = 'the host''s glyphs win over Windows'; HostGlyphs = 'ascii'; Vars = @{}; Windows = $true; Expected = 'ascii' }
+        @{ Case = 'the host''s unicode wins over the C locale'; HostGlyphs = 'unicode'; Vars = @{ LANG = 'C' }; Expected = 'unicode' }
         @{ Case = 'Windows, as today''s Windows banner draws'; Vars = @{}; Windows = $true; Expected = 'unicode' }
         @{ Case = 'LANG=en_US.UTF-8'; Vars = @{ LANG = 'en_US.UTF-8' }; Expected = 'unicode' }
         @{ Case = 'LANG=C.utf8, as some systems spell it'; Vars = @{ LANG = 'C.utf8' }; Expected = 'unicode' }
@@ -85,12 +90,13 @@ Describe 'choosing Unicode or ASCII' {
     ) {
         $arguments = @{
             Requested   = $(if ($Requested) { $Requested } else { 'auto' })
+            HostGlyphs  = $(if ($HostGlyphs) { $HostGlyphs } else { 'auto' })
             Environment = $Vars
             OnWindows   = [bool]$Windows
         }
         InModuleScope UsaBanner -Parameters $arguments {
-            param($Requested, $Environment, $OnWindows)
-            Resolve-UsaBannerGlyphs -Requested $Requested -Environment $Environment -OnWindows $OnWindows
+            param($Requested, $HostGlyphs, $Environment, $OnWindows)
+            Resolve-UsaBannerGlyphs -Requested $Requested -HostGlyphs $HostGlyphs -Environment $Environment -OnWindows $OnWindows
         } | Should -BeExactly $Expected
     }
 

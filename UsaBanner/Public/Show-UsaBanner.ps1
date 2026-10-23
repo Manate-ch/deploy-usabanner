@@ -31,9 +31,10 @@ function Show-UsaBanner {
 
     -ColorMode is as for Show-UsaBannerArt; auto also takes the mode the
     configuration sets for this host. -Glyphs auto reads USABANNER_GLYPHS,
-    then the locale (LC_ALL, LC_CTYPE, LANG): a client that is not UTF-8
-    gets ascii, which draws a Unicode border set as Classic. On Windows,
-    auto is unicode.
+    then the glyphs the configuration sets for this host, then the locale
+    (LC_ALL, LC_CTYPE, LANG): a client that is not UTF-8 gets ascii, which
+    draws a Unicode border set as Classic. On Windows, the locale is not
+    read: unicode.
 
     Under Windows PowerShell 5.1 the command runs itself in pwsh
     (PowerShell 7), and stops with what to install when there is none.
@@ -105,7 +106,7 @@ function Show-UsaBanner {
             if ($mode -eq 'none' -or $mode -eq 'mono') { $consoleMode = 'none' }
             return Get-UsaBannerConsoleBanner -Config $config -Os $hostOs -HostName $shortName -Ip $ip -Mode $consoleMode
         }
-        $ascii = (Resolve-UsaBannerGlyphs -Requested $Glyphs) -eq 'ascii'
+        $ascii = (Resolve-UsaBannerGlyphs -Requested $Glyphs -HostGlyphs ([string]$config['glyphs'])) -eq 'ascii'
         Get-UsaBannerPostLogon -Config $config -Os $hostOs -Facts $hostFacts -Mode $mode -AsciiOnly:$ascii
     }
 }
