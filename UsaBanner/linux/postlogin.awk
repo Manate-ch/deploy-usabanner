@@ -2,7 +2,8 @@
 # the frame Deploy-UsaBanner pre-drew (Private/LoginFrame.ps1), with the
 # facts linux/facts.sh gives (D26) drawn into it as the module draws them
 # (Private/PostLogin.ps1), byte for byte: a row per fact, a label nine
-# columns wide, a value cut to the room left, then the health lines.
+# columns wide, a value cut to the room left, then the health lines and the
+# notices.
 #
 #   USABANNER_FRAME=FRAME LC_ALL=C awk -F '\t' -f postlogin.awk [RECORDS]
 #
@@ -135,6 +136,51 @@ function wrap(text, n,   k, i, words, cur, word, count) {
 	return k
 }
 
+# health - each problem, wrapped under itself; else all clear with the
+# checks that ran; nothing when nothing was checked.
+function health(   p, bad, mark, indent, k, j, clear, room, cur, c, nxt) {
+	if (np == 0 && nc == 0) return
+	print ""
+	for (p = 1; p <= np; p++) {
+		bad = tolower(plevel[p]) == "bad"
+		mark = bad ? T["markbad"] : T["markwarn"]
+		indent = 3 + width(mark)
+		k = wrap(ptext[p], WIDTH - indent)
+		for (j = 1; j <= k; j++) {
+			if (j == 1) { span("  ", ""); span(mark, bad ? T["bad"] : T["warn"]); span(" ", "") }
+			else span(spaces(indent), "")
+			span(WL[j], T["value"])
+			emit()
+		}
+	}
+	if (np > 0) return
+	clear = T["ok"] " " T["allclear"]
+	indent = 2 + width(clear) + 3
+	room = WIDTH - indent
+	k = 0; cur = ""
+	for (c = 1; c <= nc; c++) {
+		nxt = (cur != "") ? cur " " T["sep"] " " check[c] : check[c]
+		if (width(nxt) > room && cur != "") { CL[++k] = cur; cur = check[c] }
+		else cur = nxt
+	}
+	if (cur != "") CL[++k] = cur
+	span("  ", ""); span(clear, T["good"])
+	if (k > 0) span("   " CL[1], T["dim"])
+	emit()
+	for (j = 2; j <= k; j++) { span(spaces(indent), ""); span(CL[j], T["dim"]); emit() }
+}
+
+# notices - each line about the banner itself, as the update channel's
+# (D14), wrapped two columns in, under a line of its own.
+function notices(   n, k, j) {
+	if (nn == 0) return
+	print ""
+	for (n = 1; n <= nn; n++) {
+		k = wrap(note[n], WIDTH - 2)
+		for (j = 1; j <= k; j++) { span("  ", ""); span(WL[j], T["label"]); emit() }
+	}
+}
+
 BEGIN {
 	CONT = "[" sprintf("%c", 128) "-" sprintf("%c", 191) "]"
 	frame = ENVIRON["USABANNER_FRAME"]
@@ -154,7 +200,7 @@ BEGIN {
 }
 
 # The records (D26): the last of a kind wins, as in the module; disks,
-# addresses, problems and checks are kept in order.
+# addresses, problems, checks and notices are kept in order.
 NF == 0 { next }
 $1 == "os" { os = $2; next }
 $1 == "uptime" { uptime = $2; next }
@@ -169,6 +215,7 @@ $1 == "reboot" { has_reb = 1; reb_text = $2; reb_level = $3; next }
 $1 == "services" { if (NF >= 3) { has_svc = 1; svc_text = $2; svc_level = $3 }; next }
 $1 == "problem" { if (NF >= 3 && $3 != "") { np++; plevel[np] = $2; ptext[np] = $3 }; next }
 $1 == "check" { if (NF >= 2 && $2 != "") check[++nc] = $2; next }
+$1 == "notice" { if (NF >= 2 && $2 != "") note[++nn] = $2; next }
 
 END {
 	if (frame == "" || nh == 0) exit
@@ -201,36 +248,6 @@ END {
 	if (has_reb) { value(reb_text, level_style(reb_level)); row(T["word.reboot"]) }
 	if (has_svc) { value(svc_text, level_style(svc_level)); row(T["word.services"]) }
 	print foot
-
-	# Health: each problem, wrapped under itself; else all clear with the
-	# checks that ran; nothing when nothing was checked.
-	if (np == 0 && nc == 0) exit
-	print ""
-	for (p = 1; p <= np; p++) {
-		bad = tolower(plevel[p]) == "bad"
-		mark = bad ? T["markbad"] : T["markwarn"]
-		indent = 3 + width(mark)
-		k = wrap(ptext[p], WIDTH - indent)
-		for (j = 1; j <= k; j++) {
-			if (j == 1) { span("  ", ""); span(mark, bad ? T["bad"] : T["warn"]); span(" ", "") }
-			else span(spaces(indent), "")
-			span(WL[j], T["value"])
-			emit()
-		}
-	}
-	if (np > 0) exit
-	clear = T["ok"] " " T["allclear"]
-	indent = 2 + width(clear) + 3
-	room = WIDTH - indent
-	k = 0; cur = ""
-	for (c = 1; c <= nc; c++) {
-		nxt = (cur != "") ? cur " " T["sep"] " " check[c] : check[c]
-		if (width(nxt) > room && cur != "") { CL[++k] = cur; cur = check[c] }
-		else cur = nxt
-	}
-	if (cur != "") CL[++k] = cur
-	span("  ", ""); span(clear, T["good"])
-	if (k > 0) span("   " CL[1], T["dim"])
-	emit()
-	for (j = 2; j <= k; j++) { span(spaces(indent), ""); span(CL[j], T["dim"]); emit() }
+	health()
+	notices()
 }

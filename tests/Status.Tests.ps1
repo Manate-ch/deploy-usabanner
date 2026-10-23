@@ -8,7 +8,8 @@ BeforeAll {
     $moduleRoot = Join-Path $repoRoot 'UsaBanner'
     Import-Module (Join-Path $moduleRoot 'UsaBanner.psd1') -Force
     . (Join-Path $PSScriptRoot 'FakeHosts.ps1')
-    $script:Version = (Import-PowerShellDataFile -LiteralPath (Join-Path $moduleRoot 'UsaBanner.psd1')).ModuleVersion
+    . (Join-Path $PSScriptRoot 'Golden.ps1')
+    $script:Version =(Import-PowerShellDataFile -LiteralPath (Join-Path $moduleRoot 'UsaBanner.psd1')).ModuleVersion
     $script:Vlans = Join-Path $TestDrive 'vlans.csv'
     Set-Content -LiteralPath $Vlans -Value @('name,tag,cidr,color,short', 'Servers,40,10.20.40.0/24,Teal,SRV', 'User Devices,10,10.20.10.0/24,Blue,USR')
 
@@ -227,7 +228,7 @@ Describe 'Get-UsaBanner on Ubuntu' -Skip:$IsWindows {
 
     It 'shows the console''s banner as agetty prints it: the same as Show-UsaBanner draws, where it holds no name to fill in' {
         $null = Deploy-UsaBanner -Company Contoso -Environment PROD -VlanFile $Vlans -PreInit None
-        @(Get-UsaBanner PreInit) | Should -Be @(Show-UsaBanner PreInit -Path $Json -Os ubuntu -ColorMode 16 -Facts @{ Name = 'h-vsl-web1.ad.example'; Ip = '10.20.40.80' })
+        Show-UsaBannerEscape @(Get-UsaBanner PreInit) | Should -BeExactly (Show-UsaBannerEscape @(Show-UsaBanner PreInit -Path $Json -Os ubuntu -ColorMode 16 -Facts @{ Name = 'h-vsl-web1.ad.example'; Ip = '10.20.40.80' }))
     }
 
     It 'shows the console''s banner as agetty prints it: this host''s name and address filled in' {
@@ -410,12 +411,15 @@ Describe 'a check that covers several files' {
 
 Describe 'ConvertFrom-UsaBannerIssueText' {
     It 'prints what agetty prints from ConvertTo-UsaBannerIssueLine''s line: the escapes back, the name and address filled in' {
-        InModuleScope UsaBanner {
+        $both = InModuleScope UsaBanner {
             $line = "a\b $([char]27)[31mred$([char]27)[0m $script:UsaIssueHost $script:UsaIssueAddress \n"
             $issue = ConvertTo-UsaBannerIssueLine -Line $line
-            @(ConvertFrom-UsaBannerIssueText -Text "$issue`n`n" -HostName 'h-vsl-web1' -Ip '10.20.40.80') | Should -Be @(
-                $line.Replace($script:UsaIssueHost, 'h-vsl-web1').Replace($script:UsaIssueAddress, '10.20.40.80'))
+            @{
+                Printed  = @(ConvertFrom-UsaBannerIssueText -Text "$issue`n`n" -HostName 'h-vsl-web1' -Ip '10.20.40.80')
+                Expected = @($line.Replace($script:UsaIssueHost, 'h-vsl-web1').Replace($script:UsaIssueAddress, '10.20.40.80'))
+            }
         }
+        Show-UsaBannerEscape $both.Printed | Should -BeExactly (Show-UsaBannerEscape $both.Expected)
     }
 
     It 'prints the character after a backslash agetty does not know, and drops the backslash, as agetty does' {

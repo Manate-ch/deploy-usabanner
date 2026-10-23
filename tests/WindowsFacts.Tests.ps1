@@ -99,7 +99,7 @@ BeforeAll {
         Mock -ModuleName UsaBanner Test-UsaBannerWinTriggerStart { $Probes.Triggered -contains $Name }
         Mock -ModuleName UsaBanner Get-UsaBannerWinCpuSample { $calls.Add('cpu'); $samples.Dequeue() }
         Mock -ModuleName UsaBanner Start-Sleep { $calls.Add("sleep $Milliseconds") }
-        $splat = @{ Now = $Probes.Now; SamplePath = (Join-Path $TestDrive 'no-samples.tsv'); SlowPath = (Join-Path $TestDrive 'no-slow.tsv') }
+        $splat = @{ Now = $Probes.Now; SamplePath = (Join-Path $TestDrive 'no-samples.tsv'); SlowPath = (Join-Path $TestDrive 'no-slow.tsv'); NoticePath = (Join-Path $TestDrive 'no-notice') }
         foreach ($key in $Arguments.Keys) { $splat[$key] = $Arguments[$key] }
         $facts = InModuleScope UsaBanner -Parameters @{ Splat = $splat } { param($Splat) Get-UsaBannerWindowsFacts @Splat }
         @{ Facts = $facts; Calls = $calls.ToArray(); Since = $sinces.ToArray() }
@@ -208,6 +208,16 @@ Describe 'Get-UsaBannerWindowsFacts' {
         $facts.Memory.Kind | Should -BeExactly 'DDR4-3200'
         $facts.Disks[0].Kind | Should -BeExactly 'SSD'
         '{0}|{1}' -f $facts.Updates.Text, $facts.Updates.Level | Should -BeExactly '3 pending, 1 security|warn'
+    }
+
+    It 'reads the update channel''s notice a line each, as linux/facts.sh gives them' {
+        $file = Join-Path $TestDrive 'windows-notice'
+        [System.IO.File]::WriteAllText($file, "This banner has an update available. See https://releases.example.com/usabanner for more info!`r`n`r`nan`tupdate$([char]27)[31m is out")
+        $facts = (Invoke-WindowsFacts $Recorded['Server 2025'] -Arguments @{ NoticePath = $file }).Facts
+        $facts.Notices | Should -BeExactly @('This banner has an update available. See https://releases.example.com/usabanner for more info!', 'an update[31m is out')
+        # -BeExactly cannot see the ESC: on Linux, -ceq compares as ICU
+        # does, which ignores it. A regex sees it.
+        @($facts.Notices | Where-Object { $_ -match '[\x00-\x1F\x7F]' }) | Should -BeNullOrEmpty
     }
 
     It 'names a host in a domain with its domain in lower case, keeping its own name''s case' {

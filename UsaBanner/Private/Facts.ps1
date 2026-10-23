@@ -14,9 +14,10 @@ function ConvertFrom-UsaBannerFactRecord {
          Os, Uptime, Sessions and Time as text; Cpu and Memory as
          @{ Now or Pct; Min; Max; Text; (Kind) }; Updates, Reboot and
          Services as @{ Text; Level }; Disks and Ipv4 as a row per record;
-         Problems as @{ Level; Text } and Checked as names, in the records'
-         order. An empty field is $null, so the banner leaves it out, and a
-         problem or a check without its text is passed over.
+         Problems as @{ Level; Text }, Checked as names and Notices as text,
+         in the records' order. An empty field is $null, so the banner
+         leaves it out, and a problem, a check or a notice without its text
+         is passed over.
          A kind it does not know is passed over: an older module reads a
          newer collector.
     #>
@@ -42,7 +43,8 @@ function ConvertFrom-UsaBannerFactRecord {
     $adapters = [System.Collections.Generic.List[object]]::new()
     $problems = [System.Collections.Generic.List[object]]::new()
     $checks = [System.Collections.Generic.List[string]]::new()
-    $textKinds = @{ name = 'Name'; ip = 'Ip'; os = 'Os'; uptime = 'Uptime'; sessions = 'Sessions'; time = 'Time' }
+    $notices = [System.Collections.Generic.List[string]]::new()
+    $textKinds =@{ name = 'Name'; ip = 'Ip'; os = 'Os'; uptime = 'Uptime'; sessions = 'Sessions'; time = 'Time' }
     foreach ($record in $Line) {
         if (-not $record) { continue }
         $f = $record -split "`t"
@@ -60,12 +62,14 @@ function ConvertFrom-UsaBannerFactRecord {
             'services' { if ($f.Count -ge 3) { $facts['Services'] = @{ Text = & $asText $f[1]; Level = & $asText $f[2] } } }
             'problem' { if ($f.Count -ge 3 -and $f[2]) { $problems.Add(@{ Level = $f[1]; Text = $f[2] }) } }
             'check' { if ($f.Count -ge 2 -and $f[1]) { $checks.Add($f[1]) } }
+            'notice' { if ($f.Count -ge 2 -and $f[1]) { $notices.Add($f[1]) } }
         }
     }
     if ($disks.Count) { $facts['Disks'] = $disks.ToArray() }
     if ($adapters.Count) { $facts['Ipv4'] = $adapters.ToArray() }
     if ($problems.Count) { $facts['Problems'] = $problems.ToArray() }
     if ($checks.Count) { $facts['Checked'] = $checks.ToArray() }
+    if ($notices.Count) { $facts['Notices'] = $notices.ToArray() }
     $facts
 }
 

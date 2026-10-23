@@ -22,6 +22,7 @@
 #   | services | the services watched, as text; a level, good or bad    |
 #   | problem  | a level, warn or bad; what is wrong, as text           |
 #   | check    | the name of a check that ran                           |
+#   | notice   | a line about the banner itself, as text (D14)          |
 #   +----------+--------------------------------------------------------+
 #
 # What is slow to read comes from the periodic job (sample.sh, D17): min and
@@ -378,5 +379,13 @@ esac
 # A reboot pending, as the reboot record found it.
 [ -n "$pending" ] && out problem warn "reboot $pending"
 out check reboot
+
+# The update channel's notice (D14), a record a line: the update job leaves
+# it where a newer release is out and the channel only says so.
+if [ -r "$root/var/lib/usabanner/notice" ]; then
+	while IFS= read -r _n || [ -n "$_n" ]; do
+		[ -n "$_n" ] && out notice "$_n"
+	done <"$root/var/lib/usabanner/notice"
+fi
 
 exit 0

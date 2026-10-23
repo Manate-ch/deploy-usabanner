@@ -207,6 +207,25 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
         (Get-Check (Get-UsaBanner) 'update channel').Detail | Should -BeExactly "notify, from ${Source}; UsaBanner 0.2.0 is out, and this host has ${Installed}: the banner after login says so"
     }
 
+    It 'notify: the collector the deploy installed gives the notice the job wrote, for the banner at login' {
+        $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
+        Use-Release (New-Release -Version '0.2.0')
+        $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
+        $collector = Join-Path $global:UsaDeployRoot 'usr/local/share/usabanner/facts.sh'
+        $records = @(& env -i 'PATH=/usr/bin:/bin' "USABANNER_ROOT=$global:UsaDeployRoot" 'USABANNER_SERVICES=' sh $collector)
+        @($records | Where-Object { $_.StartsWith("notice`t") }) | Should -BeExactly @("notice`tThis banner has an update available. See $Source for more info!")
+    }
+
+    It 'takes the notice away with the job where a flag turns the channel off: nothing else would' {
+        $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
+        Use-Release (New-Release -Version '0.2.0')
+        $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
+        Join-Path $State 'notice' | Should -Exist
+        $lines = @(Deploy-UsaBanner -Company Contoso -Update off)
+        $lines | Should -Contain "deleted /var/lib/usabanner/notice: the update job's notice"
+        Join-Path $State 'notice' | Should -Not -Exist
+    }
+
     It 'install: checks the archive, unpacks it, has the new version deploy this host''s configuration, and takes the old version away' {
         $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source -WarningAction SilentlyContinue
         Use-Release (New-Release -Version '0.2.0')
@@ -302,6 +321,23 @@ Describe 'the update channel on Windows Server' {
         $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
         [System.IO.File]::ReadAllText((Join-Path $Data 'notice')) | Should -BeExactly "This banner has an update available. See $Source for more info!`n"
         (Get-Check (Get-UsaBanner) 'update channel').State | Should -BeExactly 'ok'
+    }
+
+    It 'notify: the banner after login reads the notice the job wrote' {
+        $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
+        Use-Release (New-Release -Version '0.2.0')
+        $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
+        InModuleScope UsaBanner -Parameters @{ Path = (Join-Path $Data 'notice') } { param($Path) @(Read-UsaBannerNotice -Path $Path) } | Should -BeExactly @("This banner has an update available. See $Source for more info!")
+    }
+
+    It 'takes the notice away with the task where a flag turns the channel off: nothing else would' {
+        $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
+        Use-Release (New-Release -Version '0.2.0')
+        $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
+        Join-Path $Data 'notice' | Should -Exist
+        $lines = @(Deploy-UsaBanner -Company Contoso -Update off)
+        $lines | Should -Contain "deleted $(Join-Path $Data 'notice'): the update job's notice"
+        Join-Path $Data 'notice' | Should -Not -Exist
     }
 
     It 'goes with Remove-UsaBanner: both tasks unregistered' {

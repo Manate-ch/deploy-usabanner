@@ -116,21 +116,33 @@ esac
 
     function Invoke-Collector {
         # In:  the folder its files are read under, the folder its stubs
-        #      answer from, variables for the run, and -Program, the sampler
-        #      for the collector
-        # Out: what it prints, a line each
+        #      answer from, variables for the run, -Program, the sampler
+        #      for the collector, and -Raw
+        # Out: what it prints, a line each; with -Raw, all it prints as one
+        #      string, as written: PowerShell ends a command's line at a CR
+        #      too, so a CR at the end of a record never reaches a test
         # Why: pam_motd runs the login renderer with an empty environment,
         #      and systemd the periodic job
         param(
             [string]$Root = (Join-Path $Fixture 'root'),
             [string]$Data = (Join-Path $Fixture 'commands'),
             [hashtable]$Variables = @{},
-            [string]$Program = $Collector
+            [string]$Program = $Collector,
+            [switch]$Raw
         )
         $assignments = @("PATH=$StubPath", "USABANNER_ROOT=$Root", "STUB_DATA=$Data", "STUB_LOG=$Log")
         foreach ($key in $Variables.Keys) { $assignments += "$key=$($Variables[$key])" }
-        @(& env -i @assignments sh $Program)
+        if (-not $Raw) { return @(& env -i @assignments sh $Program) }
+        $out = Join-Path $TestDrive ([guid]::NewGuid().ToString())
+        & env -i @assignments sh -c 'exec sh "$1" >"$2"' collector $Program $out
+        [System.IO.File]::ReadAllText($out)
     }
+
+    # A control character other than the tab between fields and the line
+    # feed after each record. A regex sees one where Should -BeExactly does
+    # not: on Linux, -ceq compares as ICU does, which ignores ESC, DEL and
+    # NUL (measured, PowerShell 7.6).
+    $script:Control = '[\x00-\x08\x0B-\x1F\x7F]'
 
     function New-Variant {
         # In:  files to change, as 'root/proc/loadavg' = text ($null removes
@@ -323,6 +335,24 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
     It 'keeps a field from splitting its record: a tab becomes a space, a control character goes' {
         $variant = New-Variant @{ 'root/var/lib/usabanner/fqdn' = "h-vsl-web1`tad$([char]27).example$([char]127)`n" }
         Select-Record (Invoke-Collector @variant) name | Should -BeExactly "name`th-vsl-web1 ad.example"
+        Invoke-Collector @variant -Raw | Should -Not -Match $Control
+    }
+
+    It 'gives the update channel''s notice last, a record a line: <Case>' -ForEach @(
+        @{ Case = 'as the update job writes it'; Notice = "This banner has an update available. See https://releases.example.com/usabanner for more info!`n"; Expected = @("notice`tThis banner has an update available. See https://releases.example.com/usabanner for more info!") }
+        @{ Case = 'each line, an empty one passed over, the last without its newline'; Notice = "first`n`nsecond"; Expected = @("notice`tfirst", "notice`tsecond") }
+        @{ Case = 'a tab as a space, without a control character'; Notice = "an`tupdate$([char]27)[31m is out`r`n"; Expected = @("notice`tan update[31m is out") }
+        @{ Case = 'none without the file'; Notice = $null; Expected = @() }
+    ) {
+        $change = @{}
+        if ($null -ne $Notice) { $change['root/var/lib/usabanner/notice'] = $Notice }
+        $variant = New-Variant $change
+        $raw = Invoke-Collector @variant -Raw
+        $raw | Should -Not -Match $Control
+        $records = @($raw.TrimEnd("`n") -split "`n")
+        $notices = @($records | Where-Object { $_.StartsWith("notice`t") })
+        $notices | Should -BeExactly $Expected
+        if ($notices.Count) { $records[(-$notices.Count)..-1] | Should -BeExactly $notices }
     }
 
     It 'counts the sessions who lists: <Case>' -ForEach @(
@@ -703,6 +733,12 @@ Describe 'ConvertFrom-UsaBannerFactRecord' {
         '{0}|{1}' -f $facts.Services.Text, $facts.Services.Level | Should -BeExactly 'cron inactive; ssh active|bad'
         @($facts.Problems | ForEach-Object { '{0}|{1}' -f $_.Level, $_.Text }) -join ',' | Should -BeExactly 'bad|cron is inactive,warn|/var is 88% full'
         $facts.Checked | Should -BeExactly @('services', 'disks <85%')
+    }
+
+    It 'reads each notice as text, in order, passing over one without its text' {
+        $facts = InModuleScope UsaBanner { ConvertFrom-UsaBannerFactRecord -Line @("notice`tfirst", "notice`t", 'notice', "check`treboot", "notice`tsecond") }
+        $facts.Notices | Should -BeExactly @('first', 'second')
+        $facts.Checked | Should -BeExactly @('reboot')
     }
 
     It 'passes over an empty line and a kind it does not know' {

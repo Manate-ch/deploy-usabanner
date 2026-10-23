@@ -7,6 +7,20 @@
 # so the file stays readable text. With USABANNER_GOLDEN=write in the
 # environment, each frame file is written instead of checked: run the suite
 # that way after a deliberate change, then read the diff.
+#
+# The symbol does more than keep the file readable. Should -Be and
+# -BeExactly compare as -eq and -ceq do, and on Linux they compare as ICU
+# does, which ignores ESC, DEL and NUL (measured, PowerShell 7.6): "[0m"
+# with its ESC lost passes for a reset. So any test that compares drawn
+# lines compares them as Show-UsaBannerEscape gives them.
+
+function Show-UsaBannerEscape {
+    # In:  lines drawn
+    # Out: them as one string, LF between, each escape character as U+238B
+    # Why: Should -BeExactly cannot see an ESC on Linux; it sees U+238B
+    param([AllowEmptyString()][string[]]$Lines)
+    ($Lines -join "`n").Replace([string][char]27, [string][char]0x238B)
+}
 
 function Assert-UsaBannerGoldenFrame {
     # In:  the frame's name, the lines drawn, and the folder of frames (tests/frames by default)
@@ -14,7 +28,7 @@ function Assert-UsaBannerGoldenFrame {
     # Why: one check per frame shows the whole frame when it fails, and in a review
     param([Parameter(Mandatory)][string]$Name, [AllowEmptyString()][string[]]$Lines, [string]$Root = (Join-Path $PSScriptRoot 'frames'))
     $path = Join-Path $Root "$Name.txt"
-    $text = (@($Lines | ForEach-Object { $_.Replace([string][char]27, [string][char]0x238B) }) -join "`n") + "`n"
+    $text = (Show-UsaBannerEscape $Lines) + "`n"
     if ($env:USABANNER_GOLDEN -eq 'write') {
         $null = New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force
         [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))

@@ -31,6 +31,20 @@ BeforeDiscovery {
             "problem`twarn`t/var/lib/kubelet/pods/0c1e4a2b-1234-5678-9abc-def012345678/volumes/kubernetes.io~csi/pvc-1/mount is 99% full"
         )
         bare  = @("name`th-vsl-web1")
+        # The update channel's notice (D14): under all clear; alone, where
+        # nothing was checked; and two under problems, the first naming an
+        # address too long for a line.
+        noticed  = @(
+            "name`tBEVSW-APP1", "ip`t10.20.40.80", "os`tUbuntu 24.04.5 LTS, kernel 6.8.0-147-generic"
+            "services`tssh, cron active`tgood", "check`tservices", "check`treboot"
+            "notice`tThis banner has an update available. See https://releases.example.com/usabanner for more info!"
+        )
+        alone    = @("name`th-vsl-web1", "notice`tThis banner has an update available. See https://git.example.com/contoso/usabanner/-/releases for more info!")
+        troubled = @(
+            "name`th-psl-db01", "ip`t10.20.60.5", "problem`tbad`tcron is failed", "problem`twarn`t/srv is 91% full", "check`tservices"
+            "notice`tThis banner has an update available. See https://releases.example.com/contoso/a-path-long-enough-that-the-address-is-cut/usabanner for more info!"
+            "notice`tA second line, as a notice of more than one line gives."
+        )
         # Each record built with + is in parentheses: a comma binds tighter.
         utf8  = @(
             "name`th-vsl-web1", "ip`t10.20.40.79", ("os`tUbuntu 24.04.5 LTS, " + [char]0x00E9 + 'dition sp' + [char]0x00E9 + 'ciale ' + ([string][char]0x2014 * 30) + ', kernel 6.8')
@@ -58,6 +72,11 @@ BeforeDiscovery {
         @{ Case = 'a host with no facts yet'; Machine = 'bare'; Change = @{}; Mode = 'truecolor'; Ascii = $false }
         @{ Case = 'a host with no facts yet, in its VLAN'; Machine = 'bare'; Change = @{ vlans = $Vlan; company = 'Contoso' }; Mode = '256'; Ascii = $false }
         @{ Case = 'UTF-8 in the facts, cut by characters'; Machine = 'utf8'; Change = @{}; Mode = 'truecolor'; Ascii = $false }
+        @{ Case = 'an update notice under all clear'; Machine = 'noticed'; Change = @{}; Mode = 'truecolor'; Ascii = $false }
+        @{ Case = 'an update notice under all clear, mono'; Machine = 'noticed'; Change = @{}; Mode = 'mono'; Ascii = $false }
+        @{ Case = 'an update notice alone, nothing checked'; Machine = 'alone'; Change = @{}; Mode = '256'; Ascii = $true }
+        @{ Case = 'two notices under problems, an address cut, HighContrast'; Machine = 'troubled'; Change = @{ preset = 'HighContrast' }; Mode = '16'; Ascii = $false }
+        @{ Case = 'two notices under problems, no colour'; Machine = 'troubled'; Change = @{}; Mode = 'none'; Ascii = $false }
     )
     $script:Pairs = @(foreach ($awk in $Awks) { foreach ($case in $Cases) { $case + @{ Awk = $awk; Lines = $Records[$case.Machine] } } })
 }
@@ -65,6 +84,7 @@ BeforeDiscovery {
 BeforeAll {
     $repoRoot = Split-Path $PSScriptRoot -Parent
     Import-Module (Join-Path $repoRoot 'UsaBanner' 'UsaBanner.psd1') -Force
+    . (Join-Path $PSScriptRoot 'Golden.ps1')
     $script:PostLogin = Join-Path $repoRoot 'UsaBanner' 'linux' 'postlogin.sh'
 
     function New-TestConfig {
@@ -126,7 +146,7 @@ Describe 'linux/postlogin.sh' -Skip:(-not (Get-Command sh -ErrorAction SilentlyC
     It 'draws what the module draws: <Case>, under <Awk>' -ForEach $Pairs {
         $drawn = Invoke-BothWays -Config (New-TestConfig -Change $Change) -Lines $Lines -Mode $Mode -Ascii $Ascii -Awk $Awk
         $drawn.Module.Count | Should -BeGreaterThan 0
-        ($drawn.Login -join "`n") | Should -BeExactly ($drawn.Module -join "`n")
+        Show-UsaBannerEscape $drawn.Login | Should -BeExactly (Show-UsaBannerEscape $drawn.Module)
     }
 
     It 'prints nothing when there is no frame yet' {

@@ -789,7 +789,9 @@ function Set-UsaBannerUpdateTimer {
     In:  the host's root, the configuration, and the folders made so far.
     Out: a line for each change. On: the units written where they changed,
          systemd reloaded, the timer enabled and started unless it is
-         already. Off: the timer stopped and disabled, the units deleted.
+         already. Off: the timer stopped and disabled, the units deleted,
+         and the notice the job left with them: no job is left to take it
+         away, and the banner after login would show it for good.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -815,6 +817,7 @@ function Set-UsaBannerUpdateTimer {
                 $changed = $true
             }
         }
+        Remove-UsaBannerHostFile -Root $Root -Path "$script:UsaLinuxState/notice" -What "the update job's notice"
     }
     else {
         $utf8 = [System.Text.UTF8Encoding]::new($false)

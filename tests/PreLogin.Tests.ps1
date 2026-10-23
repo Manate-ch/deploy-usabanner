@@ -115,7 +115,7 @@ Describe 'the console''s issue file' {
     ) {
         $issue = @(Invoke-PreLogin -Moment init -Change $Change)
         $drawn = @(Invoke-PreLogin -Moment frame16 -Change $Change)
-        @($issue | ForEach-Object { ConvertFrom-AgettyIssue $_ }) | Should -BeExactly $drawn
+        Show-UsaBannerEscape @($issue | ForEach-Object { ConvertFrom-AgettyIssue $_ }) | Should -BeExactly (Show-UsaBannerEscape $drawn)
     }
 
     It 'is printable ASCII, and printed by agetty as the frame drawn, in every border set and every voice' {
@@ -125,7 +125,7 @@ Describe 'the console''s issue file' {
                 $issue = @(Invoke-PreLogin -Moment init -Change $change)
                 $drawn = @(Invoke-PreLogin -Moment frame16 -Change $change)
                 foreach ($line in $issue) { if ($line -cnotmatch '^[ -~]*$') { "${set} ${voice}: not ASCII: $line" } }
-                if ((@($issue | ForEach-Object { ConvertFrom-AgettyIssue $_ }) -join "`n") -cne ($drawn -join "`n")) { "${set} ${voice}: agetty prints another frame" }
+                if ((Show-UsaBannerEscape @($issue | ForEach-Object { ConvertFrom-AgettyIssue $_ })) -cne (Show-UsaBannerEscape $drawn)) { "${set} ${voice}: agetty prints another frame" }
             }
         }
         @($problems) | Should -BeNullOrEmpty

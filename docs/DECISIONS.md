@@ -997,6 +997,18 @@ files are downloaded from (`-UpdateSource`).
   maintainer's lab as an explicit `-Channel main`; releases are the only
   source for now.
 
+**The line, built (M4, 2026-10-23).** The notice is the file `notice` in
+the banner's own folder, and the banner after login draws it last: under
+the health lines, after a blank line, two columns in, in the labels'
+colour, wrapped within 64 columns. On Ubuntu, `facts.sh` gives each of its
+lines as a `notice` record (D26), so the renderer at login and the module
+draw it alike; on Windows the module reads the file itself. Either way its
+text loses its control characters, as every fact's does, so it cannot
+reach a terminal as an escape. A releases page longer than 62 characters
+is cut across lines, as a long word in a problem is. A deploy that turns
+the channel off deletes the notice with the job: nothing else would take
+it away, and every login would go on saying an update is out.
+
 ## D15. Windows Server 2019
 
 **Decided: Windows Server 2022 and later.** For the record, 2019 is not
@@ -1625,6 +1637,7 @@ its fields separated by tabs, its kind first:
 | `services` | the services watched, as text; a level, `good` or `bad` (D10) |
 | `problem` | a level, `warn` or `bad`; what is wrong, as text (D10) |
 | `check` | the name of a check that ran, for the all-clear line |
+| `notice` | a line about the banner itself, as text: the update channel's (D14) |
 
 - **Tabs and lines,** because `awk -F '\t'` reads them as they are, and a
   value with spaces (`6 of 121 GiB`, an OS name) stays one field. The
