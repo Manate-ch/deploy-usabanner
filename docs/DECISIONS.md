@@ -175,6 +175,15 @@ renamed, an address that moved, and a hand edit of
 `/etc/usabanner/usabanner.json`, within 15 minutes. PowerShell runs then
 only, never at a login.
 
+**On Windows, the configuration as data (M4, 2026-10-22).** The login runs
+the module, as decided; only how it reads its settings changed. A deploy
+writes `usabanner.psd1` beside `usabanner.json`, the same settings as a
+PowerShell data file, and the profile reads that. In a fresh `pwsh`, the JSON
+with its schema check added about 100 ms, and the data file nothing
+measurable [measured: medians of 7 fresh pwsh 7.6.6 each, on a 16-core VM].
+The deploy checked the configuration before writing it, so the login need
+not.
+
 **The login time, measured (M3, 2026-10-22).** On three lab VMs, each figure
 the median of five fresh processes, the banner drawn without colour;
 "added" is the time over the empty shell that a login starts anyway
@@ -463,6 +472,25 @@ at 64 columns, where today's all-clear line runs to 70 with six checks. A
 client that is not UTF-8 gets Classic and today's ASCII marks (`#`, `.`,
 `[ok]`, `[!!]`, `[XX]`). A fact the host does not give gets no row, so M3
 can add facts one at a time.
+
+**Deployed on Windows (M4, 2026-10-22).** `Deploy-UsaBanner` puts each
+moment where this table says:
+- **pre-logon:** `sshd-banner.txt` in the banner's own folder, and one
+  `Banner` line in `sshd_config`, as today's installer writes it. It goes
+  above the first `Match` block, any other `Banner` above it turned off
+  behind a note, and `sshd -t` checks the result, which is put back if
+  refused. sshd is not restarted, so an admin deploying over SSH keeps the
+  session; the deploy says to restart it.
+- **post-logon:** a marked block in each PowerShell's all-users profile.
+  It shows the banner once a session, at an interactive SSH login only, as
+  today's `-SshOnly` did: not at the console, and not for scp, sftp or a
+  command, which start PowerShell with `-Command`, `-File` or
+  `-NonInteractive`.
+- **pre-init, for your review:** the logon notice is set only where none
+  is set, or where the one set is the banner's own by its record. A notice
+  someone else set, by hand or by a Group Policy, stays, and the deploy says
+  so: a policy would set its own again at its next refresh anyway. Removal
+  puts back what was there before.
 
 ## D6. Border and corner sets
 
@@ -916,6 +944,13 @@ Type YES to turn updates on.
 ```
 
 The "not liable" part needs a LICENSE behind it to mean anything (D24).
+
+**The ACL, built (M4, 2026-10-22).** `Deploy-UsaBanner` gives
+`%ProgramData%\UsagiTools\Banner` that ACL before it writes anything there,
+with `icacls`, by SID. It also makes Administrators the folder's owner: a
+user who made the folder before the first deploy would otherwise keep, as
+its owner, the right to change its ACL. On Ubuntu, root owns every file the
+deploy writes, mode 644, and 755 for the login script.
 
 ## D15. Windows Server 2019
 
@@ -1392,6 +1427,13 @@ accounts cannot use key authentication at all [fetched].
 it the PowerShell 7 install (D18). This module calls it rather than carrying a
 second OpenSSH setup.
 
+**Built (M4, 2026-10-22).** `Deploy-UsaBanner` on Windows installs no
+OpenSSH and changes no default shell. It writes the `Banner` line, and says
+what is missing for the rest: with no sshd service, there is no SSH banner
+and no banner after login; with a default shell that is not a PowerShell,
+nothing shows after login. Calling deploy-usawinssh's host script, and the
+optional public key, come with the walk-through (M5).
+
 ## D22. Network devices (stretch)
 
 Most network OSes have a static banner command: Cisco IOS and NX-OS have
@@ -1429,7 +1471,10 @@ only in the private site fork.
 **Built on Ubuntu (M4, 2026-10-22).** The paths are as proposed, except
 the configuration's: `/etc/usabanner/usabanner.json`, since D12 made it
 JSON. The periodic job is `usabanner-sample.timer`; `usabanner-update.timer`
-stays the update channel's name (D14).
+stays the update channel's name (D14). On Windows (M4, 2026-10-22):
+`C:\ProgramData\UsagiTools\Banner`, as proposed; the module in Windows
+PowerShell's modules folder under Program Files; the periodic job, the task
+`\UsagiTools\UsaBanner sample`.
 
 **Decided (2026-10-22): until M7, a host with today's banner is refused,**
 and `Deploy-UsaBanner` names what of it it found. The step that moves such a

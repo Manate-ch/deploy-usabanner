@@ -26,6 +26,23 @@ function Deploy-UsaBanner {
     them. The stock MOTD scripts the banner replaces are turned off, and
     Remove-UsaBanner turns them back on.
 
+    On Windows Server (2022 and later) it runs as an administrator, and
+    puts in place:
+    - the module, in Windows PowerShell's modules folder, which PowerShell 7
+      reads too;
+    - %ProgramData%\UsagiTools\Banner, which only Administrators and SYSTEM
+      may change: the configuration, as JSON and as the data file each
+      login reads, the SSH banner, and the record of the deploy;
+    - a block in each PowerShell's all-users profile, which shows the
+      banner after an interactive SSH login, never at the console;
+    - sshd_config's Banner line, checked with sshd -t; sshd is not
+      restarted, so a session over SSH stays up: restart it yourself;
+    - the logon notice before a console or RDP sign-in, where no other is
+      set;
+    - the periodic job, a task that runs as SYSTEM every 15 minutes.
+    OpenSSH, PowerShell 7 and the SSH default shell belong to
+    deploy-usawinssh: the deploy checks them, and says what is missing.
+
     The banner after login is drawn alike for every login: pam_motd gives it
     no terminal to ask. -ColorMode and -Glyphs say what the clients of this
     host show; auto draws 256 colours and ASCII, which nearly every client
@@ -150,7 +167,7 @@ function Deploy-UsaBanner {
         }
         if ($Path) { $config = New-UsaBannerDeployConfig -Flags $flags -Path $Path }
         else { $config = New-UsaBannerDeployConfig -Flags $flags }
-        if ($IsWindows) { throw 'UsaBanner: Deploy-UsaBanner deploys to Ubuntu in this version; Windows Server comes next.' }
-        Invoke-UsaBannerLinuxDeploy -Config $config
+        if ((Get-UsaBannerHostOs) -eq 'windows') { Invoke-UsaBannerWindowsDeploy -Config $config }
+        else { Invoke-UsaBannerLinuxDeploy -Config $config }
     }
 }

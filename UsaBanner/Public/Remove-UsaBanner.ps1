@@ -13,6 +13,13 @@ function Remove-UsaBanner {
     the module's copy the deploy made. It returns a line for each change;
     -WhatIf says what it would change, and changes nothing.
 
+    On Windows Server, as an administrator: unregisters the periodic job's
+    task; takes the block out of each all-users profile, and the Banner
+    line out of sshd_config, turning back on any Banner the deploy turned
+    off (sshd -t checks it; restart sshd yourself); puts the logon notice
+    back as it was, where it still holds the banner's text; deletes
+    %ProgramData%\UsagiTools\Banner and the module's copy the deploy made.
+
     PowerShell itself stays: it may serve more than the banner.
 
     Under Windows PowerShell 5.1 the command runs itself in pwsh (PowerShell
@@ -34,7 +41,7 @@ function Remove-UsaBanner {
         # A -WhatIf or -Confirm given to a script that calls this command reaches it too.
         if (-not $PSBoundParameters.ContainsKey('WhatIf')) { $WhatIfPreference = $PSCmdlet.GetVariableValue('WhatIfPreference') }
         if (-not $PSBoundParameters.ContainsKey('Confirm')) { $ConfirmPreference = $PSCmdlet.GetVariableValue('ConfirmPreference') }
-        if ($IsWindows) { throw 'UsaBanner: Remove-UsaBanner removes the banner from Ubuntu in this version; Windows Server comes next.' }
-        Invoke-UsaBannerLinuxRemove
+        if ((Get-UsaBannerHostOs) -eq 'windows') { Invoke-UsaBannerWindowsRemove }
+        else { Invoke-UsaBannerLinuxRemove }
     }
 }

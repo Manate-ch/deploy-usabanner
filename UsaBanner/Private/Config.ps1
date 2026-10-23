@@ -88,6 +88,53 @@ function Test-UsaBannerConfig {
     }
 }
 
+function ConvertTo-UsaBannerDataFile {
+    <#
+    .SYNOPSIS
+    A configuration as a PowerShell data file, for the banner after a login
+    on Windows to read fast (D2).
+    .DESCRIPTION
+    In:  a whole configuration, checked (Read-UsaBannerConfig, or
+         New-UsaBannerDeployConfig).
+    Out: the text of a .psd1: a comment saying where it comes from, then one
+         hashtable literal, its keys in the configuration's order, each
+         string in single quotes. Only what Import-PowerShellDataFile reads
+         as data: strings, whole numbers, $true and $false, @() and @{}. LF
+         line ends and a final newline, so the same configuration always
+         gives the same bytes.
+    Reading it takes no measurable time in a fresh pwsh, where the JSON and
+    its schema check take about 100 ms [measured: 7 fresh pwsh 7.6.6 each,
+    on a 16-core VM, 2026-10-22].
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Config)
+    $literal = {
+        # In:  a value of the configuration, and the indent of its line
+        # Out: the value as a data-file literal
+        # Why: objects and lists nest, to any depth the schema allows
+        param($Value, [string]$Indent)
+        if ($Value -is [System.Collections.IDictionary]) {
+            if ($Value.Count -eq 0) { return '@{}' }
+            $inner = "$Indent    "
+            $lines = foreach ($key in $Value.Keys) { "$inner'$(([string]$key).Replace("'", "''"))' = $(& $literal $Value[$key] $inner)" }
+            return "@{`n$($lines -join "`n")`n$Indent}"
+        }
+        if ($Value -is [System.Collections.IList]) {
+            if ($Value.Count -eq 0) { return '@()' }
+            $inner = "$Indent    "
+            $lines = foreach ($item in $Value) { "$inner$(& $literal $item $inner)" }
+            return "@(`n$($lines -join "`n")`n$Indent)"
+        }
+        if ($Value -is [bool]) { if ($Value) { return '$true' } else { return '$false' } }
+        if ($Value -is [int] -or $Value -is [long]) { return [string]$Value }
+        "'$(([string]$Value).Replace("'", "''"))'"
+    }
+    "# UsaBanner: this host's configuration, read at each login. Deploy-UsaBanner writes it`n" +
+    "# from usabanner.json beside it, and writes it anew at each run: change that one.`n" +
+    (& $literal $Config '') + "`n"
+}
+
 function Read-UsaBannerConfig {
     <#
     .SYNOPSIS
@@ -98,12 +145,17 @@ function Read-UsaBannerConfig {
     Throws when the file is missing, is not JSON, holds no JSON object, or
     when the merged configuration breaks the schema; the message lists every
     problem.
+    A .psd1 is one Deploy-UsaBanner wrote (ConvertTo-UsaBannerDataFile) from
+    a configuration it had checked: it is read as data, as it is, without
+    the defaults or the schema check, for speed at a login. Its keys come
+    back in no set order.
     #>
     [CmdletBinding()]
-    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    [OutputType([System.Collections.IDictionary])]
     param([Parameter(Mandatory)][string]$Path)
     $full = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($Path)
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "UsaBanner: there is no configuration file at $full." }
+    if ([System.IO.Path]::GetExtension($full) -eq '.psd1') { return Import-PowerShellDataFile -LiteralPath $full }
     try { $value = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json -AsHashtable }
     catch { throw "UsaBanner: $full is not JSON: $($_.Exception.Message)" }
     if ($value -isnot [System.Collections.IDictionary]) { throw "UsaBanner: $full holds no JSON object." }
