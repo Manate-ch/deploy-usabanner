@@ -30,6 +30,7 @@ logon.
 | Cmdlet | Purpose |
 |---|---|
 | `Deploy-UsaBanner` | the main entry point: an interactive walk-through, or flags |
+| `Remove-UsaBanner` | take the banners off, and leave the host as it was (§3.10) |
 | `Set-UsaBanner` | change an existing deployment |
 | `Get-UsaBanner` | show what is deployed, and how |
 | `Export-UsaBanner` | package the current setup for `Deploy-UsaBannerGPO` |
@@ -183,6 +184,13 @@ Turns an image into banner art; named in the walk-through, §3.1 step 2.3
   the art as a file, which `Show-UsaBannerArt -Path` draws.
 
 How it works, step by step, for anyone reading its code: [IMAGE-ART.md](IMAGE-ART.md).
+
+### 3.10 Remove-UsaBanner
+
+Added on 2026-10-22 (D23). Takes the banners off a host and leaves it as it
+was before `Deploy-UsaBanner`: only what a deploy changed is changed back,
+so a stock MOTD script someone else turned off stays off (D16). `-WhatIf`
+says what it would change, and changes nothing.
 
 ## 4. Rules for every banner
 

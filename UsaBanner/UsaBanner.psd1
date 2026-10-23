@@ -11,7 +11,7 @@
     Description          = 'Login banners for Windows Server and Ubuntu: at the console before login, before SSH authentication, and after login.'
     PowerShellVersion    = '5.1'
     CompatiblePSEditions = @('Desktop', 'Core')
-    FunctionsToExport    = @('New-UsaBannerArt', 'Show-UsaBanner', 'Show-UsaBannerArt')
+    FunctionsToExport    = @('Deploy-UsaBanner', 'New-UsaBannerArt', 'Remove-UsaBanner', 'Show-UsaBanner', 'Show-UsaBannerArt')
     CmdletsToExport      = @()
     VariablesToExport    = @()
     AliasesToExport      = @()

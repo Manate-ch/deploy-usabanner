@@ -44,6 +44,20 @@ $script:UsaDeployFlags = [ordered]@{
     Services    = 'services'
 }
 
+function Get-UsaBannerDeployFlagName {
+    <#
+    .SYNOPSIS
+    The names of the flags that set a setting, as the table above has them.
+    .DESCRIPTION
+    Deploy-UsaBanner takes these from its bound parameters and leaves the
+    rest (-Path, -WhatIf and the common ones) to itself.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+    @($script:UsaDeployFlags.Keys)
+}
+
 # The columns a VLAN file may have; the first three it must.
 $script:UsaVlanColumns = @('name', 'tag', 'cidr', 'color', 'short')
 

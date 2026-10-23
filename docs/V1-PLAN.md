@@ -110,6 +110,8 @@ real values, and the login time is measured before and after (R2).
 - **The update timer or task** (D14), and the Ubuntu `sh` bootstrap that
   installs PowerShell from Microsoft's repository, not the snap (D18).
 - **`Get-UsaBanner`** (§3.3).
+- **`Remove-UsaBanner`** (§3.10): it takes the banners off and leaves the
+  host as it was, which is how "removing it" below is done.
 
 **Done when:** a fresh Ubuntu 24.04, and fresh Windows Server 2022 and 2025
 hosts, install from flags alone; `apt upgrade` asks nothing afterwards; and
