@@ -521,15 +521,18 @@ function Install-UsaBannerModuleCopy {
     Copies the module to where every user's PowerShell finds it.
     .DESCRIPTION
     In:  the host's root, the record, the folders made so far; the modules
-         folder for all users, and the mode of each file copied and of each
-         folder made, none on Windows.
-    Out: a line when files were copied or removed.
+         folder for all users, the mode of each file copied and of each
+         folder made, none on Windows, and the OS whose remover deletes.
+    Out: a line when files were copied or removed, and one when the copy
+         an earlier deploy recorded, of another version, was deleted.
     The module goes to <modules folder>/UsaBanner/<version>: on Linux
     /usr/local/share/powershell/Modules, where any user's Show-UsaBanner
     and the periodic job's redraw import it from; on Windows, Windows
     PowerShell's, which PowerShell 7 reads too. A module that runs from
     there already is not copied onto itself. Files the copy holds and the
-    module does not are removed: the folder is the module's own.
+    module does not are removed: the folder is the module's own. The copy
+    the record named before, where it is another version, goes once this
+    one is in place; a version folder no deploy recorded stays.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -539,12 +542,14 @@ function Install-UsaBannerModuleCopy {
         [AllowNull()][System.Collections.Generic.List[string]]$Created,
         [string]$Modules = $script:UsaLinuxModules,
         [AllowNull()][Nullable[System.IO.UnixFileMode]]$FileMode = $script:UsaMode644,
-        [AllowNull()][Nullable[System.IO.UnixFileMode]]$FolderMode = $script:UsaMode755
+        [AllowNull()][Nullable[System.IO.UnixFileMode]]$FolderMode = $script:UsaMode755,
+        [ValidateSet('linux', 'windows')][string]$Os = 'linux'
     )
     $version = [string](Import-PowerShellDataFile -LiteralPath $script:UsaBannerManifest).ModuleVersion
     $target = [System.IO.Path]::Combine($Modules, 'UsaBanner', $version)
     $source = [System.IO.Path]::GetFullPath($script:UsaBannerRoot).TrimEnd('/', '\')
     if ($source -eq [System.IO.Path]::GetFullPath("$Root$target").TrimEnd('/', '\')) { return }
+    $previous = [string]$Record['module']
     $copy = [System.Collections.Generic.List[string]]::new()
     $wanted = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($file in [System.IO.Directory]::GetFiles($source, '*', [System.IO.SearchOption]::AllDirectories)) {
@@ -561,19 +566,34 @@ function Install-UsaBannerModuleCopy {
                 ForEach-Object { [System.IO.Path]::GetRelativePath("$Root$target", $_).Replace('\', '/') } |
                 Where-Object { -not $wanted.Contains($_) })
     }
-    if ($copy.Count -eq 0 -and $extra.Count -eq 0) { return }
-    if (-not $PSCmdlet.ShouldProcess($target, "Install the module UsaBanner $version for every user: $($copy.Count) file(s) to copy, $($extra.Count) to remove")) { return }
-    foreach ($relative in $copy) {
-        $there = "$Root$target/$relative"
-        New-UsaBannerHostFolder -Root $Root -Path ([System.IO.Path]::GetDirectoryName("$target/$relative")) -Created $Created -Mode $FolderMode
-        $temp = "$there.usabanner-tmp"
-        [System.IO.File]::Copy((Join-Path $source $relative), $temp, $true)
-        if ($null -ne $FileMode) { [System.IO.File]::SetUnixFileMode($temp, [System.IO.UnixFileMode]$FileMode) }
-        [System.IO.File]::Move($temp, $there, $true)
+    $installed = $true
+    if ($copy.Count -or $extra.Count) {
+        $installed = $PSCmdlet.ShouldProcess($target, "Install the module UsaBanner $version for every user: $($copy.Count) file(s) to copy, $($extra.Count) to remove")
+        if ($installed) {
+            foreach ($relative in $copy) {
+                $there = "$Root$target/$relative"
+                New-UsaBannerHostFolder -Root $Root -Path ([System.IO.Path]::GetDirectoryName("$target/$relative")) -Created $Created -Mode $FolderMode
+                $temp = "$there.usabanner-tmp"
+                [System.IO.File]::Copy((Join-Path $source $relative), $temp, $true)
+                if ($null -ne $FileMode) { [System.IO.File]::SetUnixFileMode($temp, [System.IO.UnixFileMode]$FileMode) }
+                [System.IO.File]::Move($temp, $there, $true)
+            }
+            foreach ($relative in $extra) { [System.IO.File]::Delete("$Root$target/$relative") }
+            "installed the module UsaBanner ${version} for every user: $target ($($copy.Count) file(s) copied, $($extra.Count) removed)"
+        }
     }
-    foreach ($relative in $extra) { [System.IO.File]::Delete("$Root$target/$relative") }
-    $Record['module'] = $target
-    "installed the module UsaBanner ${version} for every user: $target ($($copy.Count) file(s) copied, $($extra.Count) removed)"
+    if ($installed) { $Record['module'] = $target }
+    # The copy an earlier deploy recorded, of another version: Import-Module
+    # loads the newest version there, so a downgrade would not take, and
+    # Remove-UsaBanner, which reads the record, would never delete it (lab,
+    # 2026-10-23). Said under -WhatIf; kept where this install was declined.
+    # One separator and -ne's ignoring of case: the copy just installed,
+    # recorded with a / by a deploy before 0.1.1, is never taken for it.
+    if (($installed -or $WhatIfPreference) -and $previous -and $previous.Replace('\', '/') -ne $target.Replace('\', '/')) {
+        $what = "UsaBanner $([System.IO.Path]::GetFileName($previous.Replace('\', '/'))), the copy an earlier deploy installed"
+        if ($Os -eq 'windows') { Remove-UsaBannerWindowsFolder -Path $previous -Allowed $previous -What $what }
+        else { Remove-UsaBannerHostFolder -Root $Root -Path $previous -What $what }
+    }
 }
 
 function Disable-UsaBannerExecutable {

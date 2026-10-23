@@ -205,6 +205,33 @@ Describe 'Deploy-UsaBanner on a stock Ubuntu host' -Skip:$IsWindows {
         (Get-Record)['module'] | Should -BeExactly "/usr/local/share/powershell/Modules/UsaBanner/$version"
     }
 
+    It 'deletes the copy an earlier deploy recorded, of another version, and leaves one no deploy recorded' {
+        # The lab (2026-10-23): a deploy of another version left the earlier copy, so Import-Module loaded the
+        # newer of the two and Remove-UsaBanner, which reads the record, never took the older.
+        $null = Deploy-UsaBanner -Company Contoso
+        $version = (Import-PowerShellDataFile -LiteralPath (Join-Path $moduleRoot 'UsaBanner.psd1')).ModuleVersion
+        foreach ($old in '0.0.9', '0.0.5') { Write-TestFile $global:UsaDeployRoot "usr/local/share/powershell/Modules/UsaBanner/$old/UsaBanner.psd1" "@{ ModuleVersion = '$old' }`n" }
+        $record = Get-Record
+        $record['module'] = '/usr/local/share/powershell/Modules/UsaBanner/0.0.9'
+        Write-TestFile $global:UsaDeployRoot 'var/lib/usabanner/deploy.json' ($record | ConvertTo-Json -Depth 8)
+        $lines = @(Deploy-UsaBanner -Company Contoso)
+        $lines | Should -Contain 'deleted /usr/local/share/powershell/Modules/UsaBanner/0.0.9 and the 1 file(s) in it: UsaBanner 0.0.9, the copy an earlier deploy installed'
+        Join-Path $global:UsaDeployRoot 'usr/local/share/powershell/Modules/UsaBanner/0.0.9' | Should -Not -Exist
+        Join-Path $global:UsaDeployRoot 'usr/local/share/powershell/Modules/UsaBanner/0.0.5' | Should -Exist
+        (Get-Record)['module'] | Should -BeExactly "/usr/local/share/powershell/Modules/UsaBanner/$version"
+    }
+
+    It 'deletes no earlier copy under -WhatIf' {
+        $null = Deploy-UsaBanner -Company Contoso
+        Write-TestFile $global:UsaDeployRoot 'usr/local/share/powershell/Modules/UsaBanner/0.0.9/UsaBanner.psd1' "@{ ModuleVersion = '0.0.9' }`n"
+        $record = Get-Record
+        $record['module'] = '/usr/local/share/powershell/Modules/UsaBanner/0.0.9'
+        Write-TestFile $global:UsaDeployRoot 'var/lib/usabanner/deploy.json' ($record | ConvertTo-Json -Depth 8)
+        $null = Deploy-UsaBanner -Company Contoso -WhatIf
+        Join-Path $global:UsaDeployRoot 'usr/local/share/powershell/Modules/UsaBanner/0.0.9/UsaBanner.psd1' | Should -Exist
+        (Get-Record)['module'] | Should -BeExactly '/usr/local/share/powershell/Modules/UsaBanner/0.0.9'
+    }
+
     It 'changes nothing on a second run with the same flags, and runs only what reads the host' {
         $null = Deploy-UsaBanner -Company Contoso -Environment LAB
         $before = Get-HostState $global:UsaDeployRoot
