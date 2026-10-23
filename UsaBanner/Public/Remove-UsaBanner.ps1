@@ -4,7 +4,8 @@ function Remove-UsaBanner {
     Takes this host's banners off, and leaves the host as it was before
     Deploy-UsaBanner.
     .DESCRIPTION
-    On Ubuntu, as root, in this order: stops and removes the periodic job;
+    On Ubuntu, as root, in this order: stops and removes the periodic job
+    and the update job;
     turns back on the stock MOTD scripts the deploy turned off, and only
     those, so a script someone else turned off stays off; takes out the
     banner after login, the SSH banner (ssh reloads, and sessions already
@@ -14,7 +15,8 @@ function Remove-UsaBanner {
     -WhatIf says what it would change, and changes nothing.
 
     On Windows Server, as an administrator: unregisters the periodic job's
-    task; takes the block out of each all-users profile, and the Banner
+    task and the update job's; takes the block out of each all-users
+    profile, and the Banner
     line out of sshd_config, turning back on any Banner the deploy turned
     off (sshd -t checks it; restart sshd yourself); puts the logon notice
     back as it was, where it still holds the banner's text; deletes

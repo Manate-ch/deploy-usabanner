@@ -14,7 +14,7 @@ BeforeAll {
 }
 
 AfterAll {
-    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinTask, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
     Remove-Module UsaBanner -ErrorAction SilentlyContinue
 }
 
@@ -39,12 +39,15 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         $global:UsaWinCalls | Should -Contain 'C:\Windows\System32\OpenSSH\sshd.exe -t'
         $global:UsaWinNotice.Caption | Should -BeExactly 'WARNING'
         $global:UsaWinNotice.Text | Should -BeLike 'This system is for authorized use only.*'
-        $global:UsaWinTask.Execute | Should -BeExactly 'C:\Program Files\PowerShell\7\pwsh.exe'
-        $global:UsaWinTask.Arguments | Should -BeExactly '-NoProfile -NonInteractive -Command "& (Import-Module UsaBanner -PassThru) { Update-UsaBannerSample }"'
-        $global:UsaWinCalls | Should -Contain 'task started'
+        $global:UsaWinTasks['UsaBanner sample'].Execute | Should -BeExactly 'C:\Program Files\PowerShell\7\pwsh.exe'
+        $global:UsaWinTasks['UsaBanner sample'].Arguments | Should -BeExactly '-NoProfile -NonInteractive -Command "& (Import-Module UsaBanner -PassThru) { Update-UsaBannerSample }"'
+        $global:UsaWinCalls | Should -Contain 'task started: UsaBanner sample'
+        # The update channel is off unless a flag turns it on: no update task.
+        @($global:UsaWinTasks.Keys) | Should -Be @('UsaBanner sample')
         $version = (Import-PowerShellDataFile -LiteralPath (Join-Path $moduleRoot 'UsaBanner.psd1')).ModuleVersion
         $copy = Join-Path $Root "ProgramFiles/WindowsPowerShell/Modules/UsaBanner/$version"
-        @(Get-WindowsHostState $copy | Select-Object -SkipLast 2) | Should -Be @(Get-WindowsHostState $moduleRoot | Select-Object -SkipLast 2)
+        $files = { param($Folder) @(Get-WindowsHostState $Folder | Where-Object { $_ -notmatch '^(notice: |task )' }) }
+        (& $files $copy) | Should -Be (& $files $moduleRoot)
     }
 
     It 'writes the configuration as data that reads back as the same settings, and draws the same banner' {

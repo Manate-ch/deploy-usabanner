@@ -177,7 +177,7 @@ function New-WindowsHost {
 function Get-WindowsHostState {
     # In:  a host folder
     # Out: a line for each file and folder in it, sorted, a file with its SHA-256; then the
-    #      logon notice and the task, as the stores hold them
+    #      logon notice and each task, as the stores hold them
     param([string]$Root)
     foreach ($item in @(Get-ChildItem -LiteralPath $Root -Recurse -Force | Sort-Object -Property FullName)) {
         $relative = [System.IO.Path]::GetRelativePath($Root, $item.FullName)
@@ -185,7 +185,7 @@ function Get-WindowsHostState {
         else { "$relative $([System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.IO.File]::ReadAllBytes($item.FullName))))" }
     }
     "notice: $($global:UsaWinNotice.Exists) '$($global:UsaWinNotice.Caption)' '$($global:UsaWinNotice.Text)'"
-    "task: $(if ($global:UsaWinTask) { "$($global:UsaWinTask.Execute) $($global:UsaWinTask.Arguments)" } else { 'none' })"
+    foreach ($name in @($global:UsaWinTasks.Keys | Sort-Object)) { "task ${name}: $($global:UsaWinTasks[$name].Execute) $($global:UsaWinTasks[$name].Arguments)" }
 }
 
 function Use-WindowsHost {
@@ -198,7 +198,8 @@ function Use-WindowsHost {
     $global:UsaWinCalls = [System.Collections.Generic.List[string]]::new()
     $global:UsaWinAnswers = $Answers
     $global:UsaWinNotice = @{ Caption = ''; Text = ''; Exists = $true }
-    $global:UsaWinTask = $null
+    # The banner's tasks, by name: @{ Execute; Arguments; Schedule }.
+    $global:UsaWinTasks = @{}
     $global:UsaWinAcl = $false
     Mock -ModuleName UsaBanner Get-UsaBannerHostOs { 'windows' }
     Mock -ModuleName UsaBanner Get-UsaBannerWindowsPaths { @{ ProgramData = "$global:UsaWinRoot/ProgramData"; ProgramFiles = "$global:UsaWinRoot/ProgramFiles"; Windir = "$global:UsaWinRoot/Windows" } }
@@ -217,16 +218,16 @@ function Use-WindowsHost {
         $global:UsaWinNotice = if ($Remove) { @{ Caption = ''; Text = ''; Exists = $false } } else { @{ Caption = $Caption; Text = $Text; Exists = $true } }
     }
     Mock -ModuleName UsaBanner Test-UsaBannerFolderAcl { $global:UsaWinAcl -and [System.IO.Directory]::Exists($Path) }
-    Mock -ModuleName UsaBanner Get-UsaBannerSampleTask { $global:UsaWinTask }
-    Mock -ModuleName UsaBanner Register-UsaBannerSampleTask {
+    Mock -ModuleName UsaBanner Get-UsaBannerTask { $global:UsaWinTasks[$Name] }
+    Mock -ModuleName UsaBanner Register-UsaBannerTask {
         $global:UsaWinCalls.Add("task registered: $($Spec.Path)$($Spec.Name)")
-        $global:UsaWinTask = @{ Execute = $Spec.Execute; Arguments = $Spec.Arguments }
+        $global:UsaWinTasks[$Spec.Name] = @{ Execute = $Spec.Execute; Arguments = $Spec.Arguments; Schedule = $Spec.Schedule }
     }
-    Mock -ModuleName UsaBanner Unregister-UsaBannerSampleTask { $global:UsaWinCalls.Add('task unregistered'); $global:UsaWinTask = $null }
-    Mock -ModuleName UsaBanner Start-UsaBannerSampleTask {
-        $global:UsaWinCalls.Add('task started')
+    Mock -ModuleName UsaBanner Unregister-UsaBannerTask { $global:UsaWinCalls.Add("task unregistered: $Name"); $global:UsaWinTasks.Remove($Name) }
+    Mock -ModuleName UsaBanner Start-UsaBannerTask {
+        $global:UsaWinCalls.Add("task started: $Name")
         # As Update-UsaBannerSample does at its first run.
-        [System.IO.File]::WriteAllText("$global:UsaWinRoot/ProgramData/UsagiTools/Banner/samples.tsv", '')
+        if ($Name -eq 'UsaBanner sample') { [System.IO.File]::WriteAllText("$global:UsaWinRoot/ProgramData/UsagiTools/Banner/samples.tsv", '') }
     }
     Mock -ModuleName UsaBanner Invoke-UsaBannerNative {
         $call = (@($FilePath) + @($ArgumentList)) -join ' '

@@ -20,6 +20,9 @@
 #   |                                          | record of the deploy       |
 #   | /etc/systemd/system/usabanner-sample.*   | the periodic job, every 15 |
 #   |                                          | minutes (D17)              |
+#   | /etc/systemd/system/usabanner-update.*   | the update job, once a     |
+#   |                                          | day, where the update      |
+#   |                                          | channel is on (D14)        |
 #   | /usr/local/share/powershell/Modules/     | the module, for every user |
 #   |   UsaBanner/<version>/                   | and the periodic job       |
 #   +------------------------------------------+----------------------------+
@@ -34,7 +37,7 @@ $script:UsaLinuxEtc = '/etc/usabanner'
 $script:UsaLinuxShare = '/usr/local/share/usabanner'
 $script:UsaLinuxState = '/var/lib/usabanner'
 $script:UsaLinuxModules = '/usr/local/share/powershell/Modules'
-$script:UsaLinuxScripts = @('facts.sh', 'postlogin.awk', 'postlogin.sh', 'redraw.sh', 'sample.sh')
+$script:UsaLinuxScripts = @('facts.sh', 'postlogin.awk', 'postlogin.sh', 'redraw.sh', 'sample.sh', 'update.sh')
 $script:UsaLinuxMotd = '/etc/update-motd.d/05-usabanner'
 $script:UsaLinuxIssue = '/etc/issue.d/50-usabanner.issue'
 $script:UsaLinuxDropIn = '/etc/ssh/sshd_config.d/00-usabanner.conf'
@@ -469,6 +472,46 @@ function Get-UsaBannerSystemdUnits {
     }
 }
 
+function Get-UsaBannerUpdateUnits {
+    <#
+    .SYNOPSIS
+    The update job's units: each file's name and text.
+    .DESCRIPTION
+    The service runs linux/update.sh, which has the module look for a newer
+    release (Update-UsaBannerRelease, D14), once the network is up. The
+    timer runs it 10 minutes after boot, then once a day, each host at its
+    own time within the hour, so the hosts of a site do not all ask at once.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param()
+    [ordered]@{
+        'usabanner-update.service' = (@(
+                '[Unit]'
+                'Description=UsaBanner: look for a newer release of the banner, and say so or install it'
+                'Wants=network-online.target'
+                'After=network-online.target'
+                ''
+                '[Service]'
+                'Type=oneshot'
+                "ExecStart=/bin/sh $script:UsaLinuxShare/update.sh"
+                'SyslogIdentifier=usabanner'
+            ) -join "`n") + "`n"
+        'usabanner-update.timer'   = (@(
+                '[Unit]'
+                'Description=UsaBanner: look for a newer release of the banner once a day'
+                ''
+                '[Timer]'
+                'OnBootSec=10min'
+                'OnUnitActiveSec=1d'
+                'RandomizedDelaySec=1h'
+                ''
+                '[Install]'
+                'WantedBy=timers.target'
+            ) -join "`n") + "`n"
+    }
+}
+
 function Install-UsaBannerModuleCopy {
     <#
     .SYNOPSIS
@@ -737,6 +780,65 @@ function Set-UsaBannerSampleTimer {
     }
 }
 
+function Set-UsaBannerUpdateTimer {
+    <#
+    .SYNOPSIS
+    Installs the update job where the configuration turns the update channel
+    on, and takes it away where it is off.
+    .DESCRIPTION
+    In:  the host's root, the configuration, and the folders made so far.
+    Out: a line for each change. On: the units written where they changed,
+         systemd reloaded, the timer enabled and started unless it is
+         already. Off: the timer stopped and disabled, the units deleted.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([string])]
+    param(
+        [AllowEmptyString()][string]$Root = '',
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Config,
+        [AllowNull()][System.Collections.Generic.List[string]]$Created
+    )
+    $units = Get-UsaBannerUpdateUnits
+    $mode = [string]$Config['update']['mode']
+    $changed = $false
+    if ($mode -eq 'off') {
+        if ([System.IO.File]::Exists("$Root/etc/systemd/system/usabanner-update.timer") -and
+            $PSCmdlet.ShouldProcess('usabanner-update.timer', 'Stop and disable the update job: the update channel is off (systemctl disable --now)')) {
+            $disable = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'disable', '--now', 'usabanner-update.timer'
+            if ($disable.ExitCode -eq 0) { 'stopped usabanner-update.timer: the update channel is off' }
+            else { Write-Warning "UsaBanner: systemctl could not disable usabanner-update.timer: $($disable.Output -join ' ')" }
+        }
+        foreach ($unit in $units.Keys) {
+            $line = Remove-UsaBannerHostFile -Root $Root -Path "/etc/systemd/system/$unit" -What 'a unit of the update job'
+            if ($line) {
+                $line
+                $changed = $true
+            }
+        }
+    }
+    else {
+        $utf8 = [System.Text.UTF8Encoding]::new($false)
+        foreach ($unit in $units.Keys) {
+            $line = Set-UsaBannerHostFile -Root $Root -Path "/etc/systemd/system/$unit" -Bytes $utf8.GetBytes([string]$units[$unit]) -What 'a unit of the update job' -Created $Created
+            if ($line) {
+                $line
+                $changed = $true
+            }
+        }
+    }
+    if ($changed) {
+        $reload = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'daemon-reload'
+        if ($reload.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl daemon-reload failed: $($reload.Output -join ' ')" }
+    }
+    if ($mode -eq 'off') { return }
+    $state = [string](@((Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'is-enabled', 'usabanner-update.timer').Output) + '')[0]
+    if (($changed -or $state -ne 'enabled') -and $PSCmdlet.ShouldProcess('usabanner-update.timer', "Enable and start the update job ($mode): once a day (systemctl enable --now)")) {
+        $enable = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'enable', '--now', 'usabanner-update.timer'
+        if ($enable.ExitCode -eq 0) { "started usabanner-update.timer: the update channel ($mode), once a day" }
+        else { Write-Warning "UsaBanner: systemctl could not enable usabanner-update.timer: $($enable.Output -join ' ')" }
+    }
+}
+
 function Invoke-UsaBannerLinuxDeploy {
     <#
     .SYNOPSIS
@@ -785,6 +887,7 @@ function Invoke-UsaBannerLinuxDeploy {
     Disable-UsaBannerStockMotd -Root $root -Record $record -Created $created
     Set-UsaBannerSshBanner -Root $root -Created $created
     Set-UsaBannerSampleTimer -Root $root -Created $created
+    Set-UsaBannerUpdateTimer -Root $root -Config $Config -Created $created
     Save-UsaBannerDeployRecord -Root $root -Record $record -Created $created
 }
 
@@ -822,7 +925,8 @@ function Invoke-UsaBannerLinuxRemove {
     Out: a line for each change, in the order made; nothing when there is
          no banner here. Under -WhatIf, PowerShell says each change
          instead, and nothing changes.
-    The periodic job stops first, so it draws nothing more. The stock MOTD
+    The periodic job and the update job stop first, so they draw and install
+    nothing more. The stock MOTD
     scripts come back on before the banner goes, so a login meets one or
     both, never neither. Then the SSH drop-in (ssh reloads), the console's
     file, the banner's own folders, the module's copy, and the folders the
@@ -836,14 +940,21 @@ function Invoke-UsaBannerLinuxRemove {
     Assert-UsaBannerLinuxHost -Root $root -Command 'Remove-UsaBanner'
     $record = Read-UsaBannerDeployRecord -Root $root
 
-    $units = @((Get-UsaBannerSystemdUnits).Keys)
-    if ([System.IO.File]::Exists("$root/etc/systemd/system/usabanner-sample.timer") -and
-        $PSCmdlet.ShouldProcess('usabanner-sample.timer', 'Stop and disable the periodic job (systemctl disable --now)')) {
-        $disable = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'disable', '--now', 'usabanner-sample.timer'
-        if ($disable.ExitCode -eq 0) { 'stopped usabanner-sample.timer' }
-        else { Write-Warning "UsaBanner: systemctl could not disable usabanner-sample.timer: $($disable.Output -join ' ')" }
+    $jobs = [ordered]@{
+        'usabanner-sample' = @{ What = 'the periodic job'; Units = Get-UsaBannerSystemdUnits }
+        'usabanner-update' = @{ What = 'the update job'; Units = Get-UsaBannerUpdateUnits }
     }
-    $gone = @(foreach ($unit in $units) { Remove-UsaBannerHostFile -Root $root -Path "/etc/systemd/system/$unit" -What 'a unit of the periodic job' })
+    foreach ($job in $jobs.Keys) {
+        if ([System.IO.File]::Exists("$root/etc/systemd/system/$job.timer") -and
+            $PSCmdlet.ShouldProcess("$job.timer", "Stop and disable $($jobs[$job].What) (systemctl disable --now)")) {
+            $disable = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'disable', '--now', "$job.timer"
+            if ($disable.ExitCode -eq 0) { "stopped $job.timer" }
+            else { Write-Warning "UsaBanner: systemctl could not disable $job.timer: $($disable.Output -join ' ')" }
+        }
+    }
+    $gone = @(foreach ($job in $jobs.Keys) {
+            foreach ($unit in $jobs[$job].Units.Keys) { Remove-UsaBannerHostFile -Root $root -Path "/etc/systemd/system/$unit" -What "a unit of $($jobs[$job].What)" }
+        })
     $gone
     if ($gone.Count) {
         $reload = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'daemon-reload'

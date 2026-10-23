@@ -2,46 +2,51 @@
 # file over them, with the settings given as flags on top. The same command
 # builds the same configuration on every host, whatever the host held before.
 #
-#   +-------------+----------------+---------------------------------------+
-#   | Flag        | Setting        | Takes                                 |
-#   +-------------+----------------+---------------------------------------+
-#   | Company     | company        | the name, printable ASCII             |
-#   | Environment | environment    | UNSET, DEV-TEST, LAB, PROD or PUB     |
-#   | BannerImage | art.name       | a piece of the module's art, or os    |
-#   | Border      | border.set     | a border set (D6)                     |
-#   | BorderChar  | border.char    | the character OneChar draws with      |
-#   | BorderCap   | border.cap     | an ASCII face for the top line        |
-#   | ColorPreset | color.preset   | a preset (D7)                         |
-#   | ColorMode   | color.mode     | auto, truecolor, 256, 16 or none      |
-#   | Glyphs      | glyphs         | auto, unicode or ascii                |
-#   | Legal       | legal.template | L1 to L5                              |
-#   | LegalText   | legal.text     | the admin's own lines: custom         |
-#   | Voice       | voice          | plain, uwu, random or leet            |
-#   | PreInit     | preInit        | HostName, Ip, both, or None           |
-#   | PreLogon    | preLogon       | the same, for the SSH banner          |
-#   | VlanFile    | vlans          | a CSV or TSV file of the VLANs        |
-#   | Services    | services       | the names, or default                 |
-#   +-------------+----------------+---------------------------------------+
+#   +--------------+----------------+--------------------------------------+
+#   | Flag         | Setting        | Takes                                |
+#   +--------------+----------------+--------------------------------------+
+#   | Company      | company        | the name, printable ASCII            |
+#   | Environment  | environment    | UNSET, DEV-TEST, LAB, PROD or PUB    |
+#   | BannerImage  | art.name       | a piece of the module's art, or os   |
+#   | Border       | border.set     | a border set (D6)                    |
+#   | BorderChar   | border.char    | the character OneChar draws with     |
+#   | BorderCap    | border.cap     | an ASCII face for the top line       |
+#   | ColorPreset  | color.preset   | a preset (D7)                        |
+#   | ColorMode    | color.mode     | auto, truecolor, 256, 16 or none     |
+#   | Glyphs       | glyphs         | auto, unicode or ascii               |
+#   | Legal        | legal.template | L1 to L5                             |
+#   | LegalText    | legal.text     | the admin's own lines: custom        |
+#   | Voice        | voice          | plain, uwu, random or leet           |
+#   | PreInit      | preInit        | HostName, Ip, both, or None          |
+#   | PreLogon     | preLogon       | the same, for the SSH banner         |
+#   | VlanFile     | vlans          | a CSV or TSV file of the VLANs       |
+#   | Services     | services       | the names, or default                |
+#   | Update       | update.mode    | off, notify or install (D14)         |
+#   | UpdateSource | update.source  | the https address of the releases'   |
+#   |              |                | files                                |
+#   +--------------+----------------+--------------------------------------+
 #
 # The naming standard is a table of tables: it comes from a file alone.
 
 $script:UsaDeployFlags = [ordered]@{
-    Company     = 'company'
-    Environment = 'environment'
-    BannerImage = 'art.name'
-    Border      = 'border.set'
-    BorderChar  = 'border.char'
-    BorderCap   = 'border.cap'
-    ColorPreset = 'color.preset'
-    ColorMode   = 'color.mode'
-    Glyphs      = 'glyphs'
-    Legal       = 'legal.template'
-    LegalText   = 'legal.text'
-    Voice       = 'voice'
-    PreInit     = 'preInit'
-    PreLogon    = 'preLogon'
-    VlanFile    = 'vlans'
-    Services    = 'services'
+    Company      = 'company'
+    Environment  = 'environment'
+    BannerImage  = 'art.name'
+    Border       = 'border.set'
+    BorderChar   = 'border.char'
+    BorderCap    = 'border.cap'
+    ColorPreset  = 'color.preset'
+    ColorMode    = 'color.mode'
+    Glyphs       = 'glyphs'
+    Legal        = 'legal.template'
+    LegalText    = 'legal.text'
+    Voice        = 'voice'
+    PreInit      = 'preInit'
+    PreLogon     = 'preLogon'
+    VlanFile     = 'vlans'
+    Services     = 'services'
+    Update       = 'update.mode'
+    UpdateSource = 'update.source'
 }
 
 function Get-UsaBannerDeployFlagName {
@@ -152,8 +157,8 @@ function New-UsaBannerDeployConfig {
     Throws on a flag the table does not have, on art the module does not
     have, on -LegalText with another template or without text, on a custom
     template left without text, on None or default given with something
-    else, and when the result breaks the schema: each problem with the flag
-    that set it.
+    else, on an update channel turned on without a source, and when the
+    result breaks the schema: each problem with the flag that set it.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.IDictionary])]
@@ -223,6 +228,11 @@ function New-UsaBannerDeployConfig {
     }
     if ($config['legal']['template'] -ceq 'custom' -and @(@($config['legal']['text']) | Where-Object { "$_".Trim() }).Count -eq 0) {
         throw 'UsaBanner: the legal template is custom, but there is no text for it: give the lines with -LegalText.'
+    }
+    # The schema cannot say this without a branch, and D27 keeps it free of them.
+    $mode = [string]$config['update']['mode']
+    if ($mode -cne 'off' -and -not [string]$config['update']['source']) {
+        throw "UsaBanner: the update channel is set to $mode, with no source to look at: give -UpdateSource, the https address the releases' files are downloaded from (docs/DECISIONS.md, D14)."
     }
     $problems = @(Test-UsaBannerConfig -Json (ConvertTo-UsaBannerConfigJson -Config $config))
     if ($problems.Count) {

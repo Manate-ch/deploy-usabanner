@@ -21,6 +21,8 @@ function Deploy-UsaBanner {
     - a periodic job every 15 minutes (usabanner-sample.timer), which keeps
       the 24-hour ranges and the slow facts, and draws the banners again
       when the host's name, address or configuration changes;
+    - where -Update turns it on, the update job once a day
+      (usabanner-update.timer);
     - the module, in PowerShell's module folder for every user.
     Ubuntu's own banner files stay as they are, so apt never asks about
     them. The stock MOTD scripts the banner replaces are turned off, and
@@ -39,9 +41,19 @@ function Deploy-UsaBanner {
       restarted, so a session over SSH stays up: restart it yourself;
     - the logon notice before a console or RDP sign-in, where no other is
       set;
-    - the periodic job, a task that runs as SYSTEM every 15 minutes.
+    - the periodic job, a task that runs as SYSTEM every 15 minutes;
+    - where -Update turns it on, the update job, a task that runs as SYSTEM
+      once a day.
     OpenSSH, PowerShell 7 and the SSH default shell belong to
     deploy-usawinssh: the deploy checks them, and says what is missing.
+
+    The update channel is off unless -Update turns it on. Then, once a day,
+    the update job reads the release's SHA256SUMS at -UpdateSource. When it
+    names a newer UsaBanner than the one installed, notify has the banner
+    after login say so, and install installs it: the archive checked against
+    SHA256SUMS, then the new version deploys this host's own configuration.
+    The job runs as root (SYSTEM), so whoever can change the releases at the
+    source can change what runs on this host.
 
     The banner after login is drawn alike for every login: pam_motd gives it
     no terminal to ask. -ColorMode and -Glyphs say what the clients of this
@@ -96,10 +108,18 @@ function Deploy-UsaBanner {
     .PARAMETER Services
     The services the banner after login watches, by name; default for the
     OS's own list.
+    .PARAMETER Update
+    The update channel: off (the default), notify or install.
+    .PARAMETER UpdateSource
+    The https address the releases' files are downloaded from: SHA256SUMS
+    and UsaBanner-<version>.zip are under it, as under a GitHub repository's
+    .../releases/latest/download.
     .EXAMPLE
     Deploy-UsaBanner -Company Contoso -Environment PROD -WhatIf
     .EXAMPLE
     Deploy-UsaBanner -Company Contoso -Environment LAB -VlanFile ./vlans.csv -ColorMode truecolor -Glyphs unicode
+    .EXAMPLE
+    Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource https://releases.example.com/usabanner
     .EXAMPLE
     Deploy-UsaBanner -Path ./contoso.json -Environment DEV-TEST
     #>
@@ -150,7 +170,12 @@ function Deploy-UsaBanner {
         [ValidateNotNullOrEmpty()]
         [string]$VlanFile,
 
-        [string[]]$Services
+        [string[]]$Services,
+
+        [ValidateSet('off', 'notify', 'install')]
+        [string]$Update,
+
+        [string]$UpdateSource
     )
     begin {
         $handedOff = Test-UsaBannerHandoff
@@ -167,6 +192,7 @@ function Deploy-UsaBanner {
         }
         if ($Path) { $config = New-UsaBannerDeployConfig -Flags $flags -Path $Path }
         else { $config = New-UsaBannerDeployConfig -Flags $flags }
+        Write-UsaBannerUpdateWarning -Config $config
         if ((Get-UsaBannerHostOs) -eq 'windows') { Invoke-UsaBannerWindowsDeploy -Config $config }
         else { Invoke-UsaBannerLinuxDeploy -Config $config }
     }
