@@ -1109,6 +1109,13 @@ updates could sit waiting [known].
   forum report has a base-files upgrade erroring after the units were deleted
   (not masked) [search-snippet]. The lab test covered it: with the timer
   masked, a point-release upgrade of base-files raised no error [measured].
+  **Stopped first, then masked (2026-10-23):** `mask --now` masks before it
+  stops, and a timer that is running at that reload fails ("Unit to trigger
+  vanished", "Failed with result 'resources'", systemd 255 [measured]), which
+  every login then lists among the failed units. `Deploy-UsaBanner` stops the
+  timer, then masks it. With UsaBanner deployed, base-files, motd-news-config,
+  update-notifier-common and landscape-common down to the release versions
+  and back up asked nothing either [measured, 2026-10-23].
 - **Diverting the conffiles (`dpkg-divert`) is not the answer.** It works
   mechanically, but Debian Policy says not to divert a conffile [search-snippet:
   Debian Policy, diversions appendix; mechanism fetched from dpkg 1.22.6
@@ -1622,7 +1629,13 @@ configuration or art that fails leaves the old banner as it was
   the old banner's folder, which went whole before this, so the clone went
   then too, though this list said it stayed. A remote URL with sign-in
   details in it (the README's private-fork steps put a deploy token there)
-  gets a warning to revoke the token: deleting the copy does not end it.
+  gets a warning to revoke the token: deleting the copy does not end it. On
+  Windows, `Install-ManatechBanner.ps1 -UpdateTask` sets the clone's ACL with
+  `icacls /T`, which leaves each file in it with no access for anyone, so its
+  `.git\config` cannot be read: the warning then says so, and to revoke a
+  token if the clone was made with one [measured, 2026-10-23]. The delete
+  still works (the folder's own ACL allows it), once each read-only file is
+  made writable: .NET on Windows refuses to delete one [measured].
 - **Group Policy is not adopted:** a GPO that delivers the old banner puts it
   back at the next boot or refresh, so it comes off the host first. The
   deploy warns where the policy ADSys applies still runs the old banner's

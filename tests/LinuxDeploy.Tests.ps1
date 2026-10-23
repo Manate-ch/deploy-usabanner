@@ -140,9 +140,16 @@ Describe 'Deploy-UsaBanner on a stock Ubuntu host' -Skip:$IsWindows {
 
     It 'masks motd-news.timer rather than changing /etc/default/motd-news, and records that it was running' {
         $null = Deploy-UsaBanner -Company Contoso
-        Get-Calls -Changes | Should -Contain 'systemctl mask --now motd-news.timer'
+        Get-Calls -Changes | Should -Contain 'systemctl mask motd-news.timer'
         (Get-Record)['masked'][0]['unit'] | Should -BeExactly 'motd-news.timer'
         (Get-Record)['masked'][0]['active'] | Should -BeTrue
+    }
+
+    It 'stops motd-news.timer before it masks it, so the timer is not left failed for every login to list' {
+        # The lab (2026-10-23): mask --now on the running timer left it "Failed with result 'resources'".
+        $null = Deploy-UsaBanner -Company Contoso
+        @(Get-Calls -Changes | Where-Object { $_ -like 'systemctl * motd-news.timer' }) | Should -Be @('systemctl stop motd-news.timer', 'systemctl mask motd-news.timer')
+        $global:UsaDeployUnits.Failed | Should -Not -Contain 'motd-news.timer'
     }
 
     It 'checks sshd''s configuration with the Banner line, then reloads ssh, then reads what sshd sends' {

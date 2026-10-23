@@ -399,6 +399,18 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Windows Server' {
         "$warned $lines" | Should -Not -BeLike '*not-a-real-token*'
     }
 
+    It 'says whether a token was in the clone could not be told where its .git/config cannot be read, and deletes it still' {
+        # The lab (Server 2022, 2026-10-23): -UpdateTask's icacls /T leaves the clone's files with no access for
+        # anyone, so a sign-in in .git/config cannot be seen.
+        Add-OldWindowsBanner $Root
+        Add-OldRepoCopy $Root 'ProgramData/Manatech/repo' -Url 'https://deploy:not-a-real-token@gitlab.example.com/contoso/motd.git'
+        [System.IO.File]::SetUnixFileMode((Join-Path $Root 'ProgramData/Manatech/repo/.git/config'), [System.IO.UnixFileMode]::None)
+        $global:UsaWinTasks['Manatech banner update'].Arguments = "-File `"$Root/ProgramData/Manatech/repo/windows/Update-ManatechBanner.ps1`""
+        $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue
+        Join-Path $Root 'ProgramData/Manatech/repo' | Should -Not -Exist
+        "$warned" | Should -BeLike "*$Root/ProgramData/Manatech/repo/.git/config could not be read*whether a remote URL in it held a deploy token is not known*revoke it where it was issued*"
+    }
+
     It 'leaves the host as it was before the old banner came, its clone included, after Remove-UsaBanner, but for the old installer''s copy of sshd_config' {
         $before = Get-WindowsHostState $Root
         Add-OldWindowsBanner $Root

@@ -358,12 +358,16 @@ function Test-UsaBannerRepoSignIn {
     # In:  a copy of a repository
     # Out: $true when a remote URL in its .git/config holds sign-in details
     #      (https://user:token@host/...), as the README's private-fork steps
-    #      clone it; the URL itself is never returned
+    #      clone it; $null when the file is there and cannot be read, so no
+    #      one can say; $false otherwise. The URL itself is never returned
+    # Why: Install-ManatechBanner.ps1 -UpdateTask sets the clone's ACL with
+    #      icacls /T, which leaves each file already in it with no access for
+    #      anyone, Administrators included (lab, 2026-10-23)
     param([Parameter(Mandatory)][string]$Path)
     $config = [System.IO.Path]::Combine($Path, '.git', 'config')
     if (-not [System.IO.File]::Exists($config)) { return $false }
     try { $lines = [System.IO.File]::ReadAllLines($config) }
-    catch [System.UnauthorizedAccessException], [System.IO.IOException] { return $false }
+    catch [System.UnauthorizedAccessException], [System.IO.IOException] { return $null }
     @($lines | Where-Object { $_ -match '^\s*url\s*=\s*https?://[^/@\s]+@' }).Count -gt 0
 }
 
@@ -377,7 +381,9 @@ function Remove-UsaBannerOldRepo {
     Out: a line when it was deleted. A folder without the repository's own
          files is left, with a warning: its path came from a unit or a task.
          Where a remote URL in it held sign-in details, a warning says to
-         revoke the token: deleting the copy does not end it.
+         revoke the token: deleting the copy does not end it. Where its
+         .git/config could not be read, a warning says so, and to revoke a
+         token if the clone was made with one.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -405,6 +411,9 @@ function Remove-UsaBannerOldRepo {
     "deleted $Path and the $($files.Count) file(s) in it: the copy of the old banner's repository $What"
     if ($signIn) {
         Write-Warning "UsaBanner: a remote URL in $Path held sign-in details, as the README's private-fork steps put a deploy token there. The copy is deleted, and the token works until it is revoked: revoke it where it was issued."
+    }
+    elseif ($null -eq $signIn) {
+        Write-Warning "UsaBanner: $([System.IO.Path]::Combine($Path, '.git', 'config')) could not be read (Install-ManatechBanner.ps1 -UpdateTask leaves the clone's files so), so whether a remote URL in it held a deploy token is not known. The copy is deleted; if it was cloned with a token, as the README's private-fork steps do, revoke it where it was issued."
     }
 }
 

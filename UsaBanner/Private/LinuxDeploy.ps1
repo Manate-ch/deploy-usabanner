@@ -680,8 +680,17 @@ function Disable-UsaBannerStockMotd {
     $first = if ($state.Count) { [string]$state[0] } else { '' }
     if ($first -and $first -notmatch '^masked|not-found|No such file|Failed') {
         $active = [string](@((Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'is-active', 'motd-news.timer').Output) + '')[0] -eq 'active'
-        if ($PSCmdlet.ShouldProcess('motd-news.timer', 'Mask it, so motd-news stays off without a change to /etc/default/motd-news (systemctl mask --now)')) {
-            $masked = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'mask', '--now', 'motd-news.timer'
+        if ($PSCmdlet.ShouldProcess('motd-news.timer', 'Stop it, then mask it, so motd-news stays off without a change to /etc/default/motd-news (systemctl stop, systemctl mask)')) {
+            # A timer masked while it runs fails: at the reload mask makes, its
+            # unit file is /dev/null, and systemd 255 logs "Unit to trigger
+            # vanished" and "Failed with result 'resources'" (lab, 2026-10-23),
+            # which every login then lists among the failed units. mask --now
+            # masks first, so it is stopped before.
+            if ($active) {
+                $stopped = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'stop', 'motd-news.timer'
+                if ($stopped.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl could not stop motd-news.timer: $($stopped.Output -join ' ')" }
+            }
+            $masked = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'mask', 'motd-news.timer'
             if ($masked.ExitCode -eq 0) {
                 Add-UsaBannerRecordEntry -Record $Record -List 'masked' -Entry ([ordered]@{ unit = 'motd-news.timer'; active = $active }) -Key 'unit'
                 'masked motd-news.timer: the MOTD news stay off'
