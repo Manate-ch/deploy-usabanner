@@ -41,7 +41,8 @@ Describe 'bootstrap.sh' -Skip:$IsWindows {
             # Out: @{ ExitCode; Output; Calls }: bootstrap.sh's exit code, what it printed, and
             #      the stand-ins' calls, a line each
             param([string[]]$Arguments = @(), [string[]]$Variables = @())
-            $output = @(& $EnvTool -i "PATH=$Bin" "STUB_LOG=$Log" "STUB_BIN=$Bin" "STUB_SPARE=$Spare" "USABANNER_ROOT=$Root" @Variables /bin/sh $Script @Arguments 2>&1 | ForEach-Object { "$_" })
+            # TMPDIR: mktemp's download file lands in the test's own folder, never /tmp.
+            $output = @(& $EnvTool -i "PATH=$Bin" "TMPDIR=$Work" "STUB_LOG=$Log" "STUB_BIN=$Bin" "STUB_SPARE=$Spare" "USABANNER_ROOT=$Root" @Variables /bin/sh $Script @Arguments 2>&1 | ForEach-Object { "$_" })
             @{
                 ExitCode = $LASTEXITCODE
                 Output   = $output
@@ -51,11 +52,11 @@ Describe 'bootstrap.sh' -Skip:$IsWindows {
     }
 
     BeforeEach {
-        $work = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
-        $script:Bin = Join-Path $work 'bin'
-        $script:Spare = Join-Path $work 'spare'
-        $script:Root = Join-Path $work 'host'
-        $script:Log = Join-Path $work 'calls.log'
+        $script:Work = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
+        $script:Bin = Join-Path $Work 'bin'
+        $script:Spare = Join-Path $Work 'spare'
+        $script:Root = Join-Path $Work 'host'
+        $script:Log = Join-Path $Work 'calls.log'
         foreach ($folder in $Bin, $Spare, (Join-Path $Root 'etc')) { $null = New-Item -ItemType Directory -Path $folder -Force }
         # The tools bootstrap.sh and the stand-ins use, as they are.
         foreach ($tool in 'sed', 'tr', 'dirname', 'mktemp', 'rm', 'cp') {
@@ -97,6 +98,7 @@ exit 0
         $result = Invoke-Bootstrap -Arguments @('-Company', 'Contoso')
         $result.ExitCode | Should -Be 0
         $deb = ($result.Calls[0] -split $Tab)[3]
+        $deb | Should -BeLike "$Work/*"
         $result.Calls | Should -Be @(
             "curl${Tab}-fsSL${Tab}-o${Tab}$deb${Tab}$Url"
             "dpkg${Tab}-i${Tab}$deb"
