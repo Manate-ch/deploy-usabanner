@@ -29,7 +29,7 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         $null = Deploy-UsaBanner -Company Contoso -Environment PROD
         foreach ($file in 'usabanner.json', 'usabanner.psd1', 'sshd-banner.txt', 'deploy.json') { Join-Path $Data $file | Should -Exist }
         $global:UsaWinCalls | Should -Contain "icacls.exe $Data /setowner *S-1-5-32-544 /T /Q"
-        $global:UsaWinCalls | Should -Contain "icacls.exe $Data /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /T /Q"
+        $global:UsaWinCalls | Should -Contain "icacls.exe $Data /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /Q"
         $global:UsaWinCalls | Should -Not -Contain 'ACL SET AFTER A FILE'
         foreach ($profileFile in 'Windows/System32/WindowsPowerShell/v1.0/profile.ps1', 'ProgramFiles/PowerShell/7/profile.ps1') {
             [System.IO.File]::ReadAllText((Join-Path $Root $profileFile)) | Should -Match ([regex]::Escape("Show-UsaBanner -Path '$Data/usabanner.psd1'"))
@@ -48,6 +48,18 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         $copy = Join-Path $Root "ProgramFiles/WindowsPowerShell/Modules/UsaBanner/$version"
         $files = { param($Folder) @(Get-WindowsHostState $Folder | Where-Object { $_ -notmatch '^(notice: |task )' }) }
         (& $files $copy) | Should -Be (& $files $moduleRoot)
+    }
+
+    It 'lets a file already in its folder inherit the folder''s ACL, and gives it no ACE meant for a folder' {
+        # The lab (Server 2022, 2026-10-23): a sample made the folder and a file in it before the deploy set the
+        # ACL; with /T, icacls left the file an empty ACL, which no one could read, and said it succeeded.
+        $null = New-Item -ItemType Directory -Path $Data -Force
+        [System.IO.File]::WriteAllText((Join-Path $Data 'slow.tsv'), '')
+        $null = Deploy-UsaBanner -Company Contoso
+        $acl = @($global:UsaWinCalls | Where-Object { $_ -like 'icacls.exe *' })
+        $acl | Should -Contain "icacls.exe $Data /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /Q"
+        $acl | Should -Contain "icacls.exe $([System.IO.Path]::Combine($Data, '*')) /reset /T /Q"
+        @($acl | Where-Object { $_ -match '/grant' -and $_ -match ' /T ' }) | Should -BeNullOrEmpty
     }
 
     It 'writes the configuration as data that reads back as the same settings, and draws the same banner' {
@@ -256,6 +268,20 @@ Describe 'Remove-UsaBanner on Windows Server' {
         $lines | Should -Contain 'put back the logon notice as it was before the deploy'
     }
 
+    It 'stops a sample still running before the banner''s folder goes, so it cannot write it again' {
+        # The lab (Server 2022, 2026-10-23): a Remove-UsaBanner 9 s after a deploy, while the deploy's first
+        # sample still ran, and the sample made the banner's folder again 4 s after it went.
+        $before = Get-WindowsHostState $Root
+        $null = Deploy-UsaBanner -Company Contoso -Environment PROD
+        $null = Remove-UsaBanner
+        # A run still in progress ends now, writing what Update-UsaBannerSample writes.
+        if ($global:UsaWinRunning['UsaBanner sample']) {
+            $null = New-Item -ItemType Directory -Path (Join-Path $Root 'ProgramData/UsagiTools/Banner') -Force
+            [System.IO.File]::WriteAllText((Join-Path $Root 'ProgramData/UsagiTools/Banner/samples.tsv'), "1`tcpu`t5`n")
+        }
+        Get-WindowsHostState $Root | Should -Be $before
+    }
+
     It 'leaves a logon notice someone else set after the deploy' {
         $null = Deploy-UsaBanner -Company Contoso
         $global:UsaWinNotice = @{ Caption = 'NOTICE'; Text = 'Contoso policy applies.'; Exists = $true }
@@ -270,5 +296,18 @@ Describe 'Remove-UsaBanner on Windows Server' {
         @(Remove-UsaBanner -WhatIf) | Should -BeNullOrEmpty
         Get-WindowsHostState $Root | Should -Be $before
         $global:UsaWinCalls | Should -BeNullOrEmpty
+    }
+
+    It 'takes the module''s copy whichever separators its path was recorded with, and refuses any other module' {
+        # On Windows Server 2022 and 2025 (lab, 2026-10-23) a deploy recorded the copy as
+        # C:\Program Files\WindowsPowerShell\Modules/UsaBanner/0.1.0, and Remove-UsaBanner refused it.
+        InModuleScope UsaBanner {
+            Mock Get-UsaBannerWindowsLayout { @{ Modules = 'C:\Program Files\WindowsPowerShell\Modules'; Data = 'C:\ProgramData\UsagiTools\Banner'; OldData = 'C:\ProgramData\Manatech' } }
+            foreach ($path in 'C:\Program Files\WindowsPowerShell\Modules/UsaBanner/0.1.0', 'C:\Program Files\WindowsPowerShell\Modules\UsaBanner\0.1.0') {
+                { Remove-UsaBannerWindowsFolder -Path $path -Allowed $path -What 'the module''s copy for every user' } | Should -Not -Throw
+            }
+            $other = 'C:\Program Files\WindowsPowerShell\Modules\UsaBannerOther\0.1.0'
+            { Remove-UsaBannerWindowsFolder -Path $other -Allowed $other -What 'another module' } | Should -Throw '*is not one of the banner''s own folders*'
+        }
     }
 }

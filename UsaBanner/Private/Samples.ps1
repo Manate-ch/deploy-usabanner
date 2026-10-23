@@ -28,7 +28,8 @@ function Add-UsaBannerSample {
     Out: nothing. A line each for the CPU, the memory and each disk that has
          a percentage. The file is written whole beside itself, then moved
          into place, so a reader never sees half of it; its folder is made
-         when missing. A line that is not a sample is dropped.
+         when missing. A line that is not a sample is dropped, and a file
+         this account cannot read starts again, with a warning.
     #>
     [CmdletBinding()]
     param(
@@ -37,11 +38,19 @@ function Add-UsaBannerSample {
         [datetimeoffset]$Now = [datetimeoffset]::Now
     )
     $time = $Now.ToUnixTimeSeconds()
-    $kept = @(if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
-                $stamp = ($line -split "`t", 2)[0]
-                if ($stamp -match '^[0-9]+$' -and [long]$stamp -gt $time - 86400) { $line }
-            }
+    # The lab (Server 2022 and 2025, 2026-10-23): with an empty ACL on the
+    # file, the next run replaced it, as the move below may; said here, so it
+    # does not rest on the read's error ending only the statement it is in.
+    $old = @()
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        try { $old = [System.IO.File]::ReadAllLines($Path) }
+        catch [System.UnauthorizedAccessException], [System.IO.IOException] {
+            Write-Warning "UsaBanner: $Path cannot be read, so the 24-hour range starts again: $($_.Exception.Message)"
+        }
+    }
+    $kept = @(foreach ($line in $old) {
+            $stamp = ($line -split "`t", 2)[0]
+            if ($stamp -match '^[0-9]+$' -and [long]$stamp -gt $time - 86400) { $line }
         })
     $taken = @(
         if ($Facts['Cpu'] -and $null -ne $Facts['Cpu'].Now) { "$time`tcpu`t$($Facts['Cpu'].Now)" }
@@ -52,9 +61,27 @@ function Add-UsaBannerSample {
     )
     $folder = Split-Path -Path $Path -Parent
     if ($folder -and -not (Test-Path -LiteralPath $folder)) { $null = New-Item -ItemType Directory -Path $folder -Force }
+    Save-UsaBannerJobFile -Path $Path -Text (-join @(foreach ($line in $kept + $taken) { "$line`n" }))
+}
+
+function Save-UsaBannerJobFile {
+    # In:  a file of the periodic job's, and its whole text
+    # Out: nothing; the file holds the text, written beside itself and moved
+    #      into place, so a reader never sees half of it. When the move
+    #      fails, the file beside it goes and the error stops the job: in
+    #      the lab (2026-10-23) a slow.tsv no one could read was never
+    #      replaced, a file beside it was left at each run, and the task
+    #      still said it succeeded
+    param([Parameter(Mandatory)][string]$Path, [AllowEmptyString()][string]$Text)
     $partial = "$Path.$PID"
-    [System.IO.File]::WriteAllText($partial, -join @(foreach ($line in $kept + $taken) { "$line`n" }))
-    Move-Item -LiteralPath $partial -Destination $Path -Force
+    try {
+        [System.IO.File]::WriteAllText($partial, $Text)
+        [System.IO.File]::Move($partial, $Path, $true)
+    }
+    catch {
+        if ([System.IO.File]::Exists($partial)) { [System.IO.File]::Delete($partial) }
+        throw
+    }
 }
 
 function Add-UsaBannerSampleRange {
@@ -75,10 +102,14 @@ function Add-UsaBannerSampleRange {
         [datetimeoffset]$Now = [datetimeoffset]::Now
     )
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+    # A file this user cannot read gives no range: the banner draws without
+    # it, and Get-UsaBanner's periodic job check names the file.
+    try { $lines = [System.IO.File]::ReadAllLines($Path) }
+    catch [System.UnauthorizedAccessException], [System.IO.IOException] { return }
     $cut = $Now.ToUnixTimeSeconds() - 86400
     $lowest = @{}
     $highest = @{}
-    foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
+    foreach ($line in $lines) {
         $f = $line -split "`t"
         if ($f.Count -lt 3 -or $f[0] -notmatch '^[0-9]+$' -or [long]$f[0] -le $cut) { continue }
         if ($f[1] -eq 'disk') {

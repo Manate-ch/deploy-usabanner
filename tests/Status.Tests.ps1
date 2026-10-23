@@ -167,6 +167,8 @@ Describe 'Get-UsaBanner on Ubuntu' -Skip:$IsWindows {
             } }
         @{ Case = 'no sample for an hour'; Check = 'periodic job'; State = 'stale'; Detail = 'the last sample is 60 minutes old: the periodic job samples every 15'
             Break = { [System.IO.File]::SetLastWriteTimeUtc((Join-Path $global:UsaDeployRoot 'var/lib/usabanner/samples.tsv'), [datetime]::UtcNow.AddHours(-1)) } }
+        @{ Case = 'the slow facts no one can read'; Check = 'periodic job'; State = 'invalid'; Detail = '*slow.tsv cannot be read, so a login draws its banner without what is in it:*'
+            Break = { Write-TestFile $global:UsaDeployRoot 'var/lib/usabanner/slow.tsv' "1`tupdates`t0`t0`n" -Mode '000' } }
         @{ Case = 'the module''s copy deleted'; Check = 'module copy'; State = 'missing'; Detail = 'there is no copy in /usr/local/share/powershell/Modules/UsaBanner, where the periodic job imports it from'
             Break = { [System.IO.Directory]::Delete((Join-Path $global:UsaDeployRoot 'usr/local/share/powershell/Modules/UsaBanner'), $true) } }
         @{ Case = 'the configuration broken'; Check = 'configuration'; State = 'invalid'; Detail = '*usabanner.json is not a valid configuration:*'
@@ -340,6 +342,8 @@ Describe 'Get-UsaBanner on Windows Server' {
             Break = { $global:UsaWinTasks.Remove('UsaBanner sample') } }
         @{ Case = 'the task changed'; Check = 'periodic job'; State = 'differs'; Detail = 'the task runs C:\Windows\System32\cmd.exe /c exit'
             Break = { $global:UsaWinTasks['UsaBanner sample'] = @{ Execute = 'C:\Windows\System32\cmd.exe'; Arguments = '/c exit' } } }
+        @{ Case = 'the slow facts no one can read'; Check = 'periodic job'; State = 'invalid'; Detail = '*slow.tsv cannot be read, so a login draws its banner without what is in it:*'
+            Break = { Write-TestFile $global:UsaWinRoot 'ProgramData/UsagiTools/Banner/slow.tsv' "1`tupdates`t0`t0`n" -Mode '000' } }
         @{ Case = 'the module''s copy deleted'; Check = 'module copy'; State = 'missing'; Detail = 'there is no copy in *ProgramFiles/WindowsPowerShell/Modules/UsaBanner, where every login and the periodic job import it from'
             Break = { [System.IO.Directory]::Delete((Join-Path $global:UsaWinRoot 'ProgramFiles/WindowsPowerShell/Modules/UsaBanner'), $true) } }
     ) {

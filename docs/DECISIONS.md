@@ -951,7 +951,11 @@ The "not liable" part needs a LICENSE behind it to mean anything (D24).
 with `icacls`, by SID. It also makes Administrators the folder's owner: a
 user who made the folder before the first deploy would otherwise keep, as
 its owner, the right to change its ACL. On Ubuntu, root owns every file the
-deploy writes, mode 644, and 755 for the login script.
+deploy writes, mode 644, and 755 for the login script. The ACL goes on the
+folder alone, and whatever is in it already is reset to inherit it: with
+`/T`, a file already there lost its inherited ACEs and took none of the
+folder's `(OI)(CI)` ones, so no one could read it, and `icacls` still said
+it succeeded (measured on Server 2025 in the lab, 2026-10-23).
 
 **The channel, built (M4, 2026-10-23), for your review.** The setting is
 `update`: `mode` off, notify or install, off unless `-Update` turns it on
@@ -1578,8 +1582,10 @@ configuration or art that fails leaves the old banner as it was
 
 - **On Ubuntu:** the old jobs stop and their units go; what `--retire`
   turned off comes back as Ubuntu ships it (four stock MOTD scripts,
-  landscape-sysinfo's statoverride, `motd-news.timer`'s mask); then its sshd
-  drop-in (ssh reloads), its MOTD scripts, console file and folders.
+  landscape-sysinfo's statoverride, `motd-news.timer`'s mask, and the
+  `systemctl disable` the first `install.sh` also ran, where
+  deb-systemd-helper's record says its package enabled the timer); then its
+  sshd drop-in (ssh reloads), its MOTD scripts, console file and folders.
 - **On Windows:** its tasks; its block in both all-users profiles; its
   `Banner` line in `sshd_config`, each `Banner` it turned off back on, checked
   with `sshd -t`; its SSH banner file and its folder.
@@ -1592,10 +1598,48 @@ configuration or art that fails leaves the old banner as it was
   `sshd_config.manatech-bak`, the old installer's copy of `sshd_config`.
 - **Group Policy is not adopted:** a GPO that delivers the old banner puts it
   back at the next boot or refresh, so it comes off the host first. The
-  deploy warns where it sees ADSys's copy of the old banner, or the task the
-  GPO makes, and `Get-UsaBanner` has an **old banner** check: `differs`
-  while any of it is on the host, which counts against Healthy (D28), since
-  a login then shows two banners.
+  deploy warns where the policy ADSys applies still runs the old banner's
+  startup script (its cache under `/var/cache/adsys/policies`: ADSys's copy
+  of SYSVOL keeps the old banner's files after the GPO's link goes, while
+  other GPOs apply), or where it unregisters the task the GPO makes, and
+  `Get-UsaBanner` has an **old banner** check: `differs` while any of it is
+  on the host, which counts against Healthy (D28), since a login then shows
+  two banners.
+
+**The lab run (M4, 2026-10-23).** On an Ubuntu 24.04.5 host that Group
+Policy delivered the old banner to, and on Windows Server 2022 and 2025 with
+`Install-ManatechBanner.ps1 -SshBanner`'s install: the move off, a check, a
+real login, `Remove-UsaBanner`, a diff against the first state, and a fresh
+deploy. What it found, each fixed with a test that fails without it:
+
+- `Remove-UsaBanner` on Windows stopped at the module's copy, recorded as
+  `...\Modules/UsaBanner/0.1.0`: the guard compared it with one separator.
+- A `Remove-UsaBanner` seconds after a deploy deleted the banner's folder
+  while the deploy's first sample still ran, and the sample made it again;
+  the jobs are now stopped first, on both OSes.
+- The redeploy that followed set the folder's ACL with `/T` over that
+  sample's file (above), which no one could then read: every sample after
+  it failed to replace the file and left one beside it, the task said it
+  succeeded, and logins drew no banner. The writers now fail loudly and
+  leave nothing beside the file, a login draws without a file it cannot
+  read, and the periodic job check names that file.
+- The ADSys warning and `motd-news.timer`, above.
+
+**The re-test (2026-10-23).** The fixes above held on the same hosts: a
+deploy over a folder whose ACL was not the banner's left each file in it
+with exactly the folder's three entries; a `Remove-UsaBanner` a second
+after a sample started left no folder behind; a fresh deploy and its
+removal left nothing (a diff of 0 lines). An empty ACL on a job file, as
+the old `/T` left one, lasts only to the next sample: as SYSTEM the
+writer's move replaces a file no one can read (SYSTEM may delete in the
+folder), and the samples file's old lines, unreadable, are dropped with a
+warning. Until then a login draws without the file and `Get-UsaBanner`
+names it. A redeploy sets the ACL only where the folder's own is wrong, so
+it leaves the deploy's own files as they are; nothing in the banner makes
+them unreadable. One more finding, fixed: a sample `Remove-UsaBanner`
+stopped part way ended "Failed with result 'signal'" and, its unit file
+gone, stayed in systemctl's failed list, so Remove now clears the failed
+state of the jobs it stops.
 
 ## D24. A LICENSE
 

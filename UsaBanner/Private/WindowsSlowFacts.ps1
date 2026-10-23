@@ -303,9 +303,7 @@ function Write-UsaBannerSlowFacts {
     if ($updates) { $lines.Add("$time`tupdates`t$($updates.Waiting)`t$($updates.Security)") }
     $folder = Split-Path -Path $Path -Parent
     if ($folder -and -not (Test-Path -LiteralPath $folder)) { $null = New-Item -ItemType Directory -Path $folder -Force }
-    $partial = "$Path.$PID"
-    [System.IO.File]::WriteAllText($partial, -join @(foreach ($line in $lines) { "$line`n" }))
-    Move-Item -LiteralPath $partial -Destination $Path -Force
+    Save-UsaBannerJobFile -Path $Path -Text (-join @(foreach ($line in $lines) { "$line`n" }))
 }
 
 function Add-UsaBannerSlowFacts {
@@ -327,12 +325,17 @@ function Add-UsaBannerSlowFacts {
         [datetimeoffset]$Now = [datetimeoffset]::Now
     )
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+    # A file this user cannot read gives no facts: the banner draws without
+    # them, and Get-UsaBanner's periodic job check names the file (lab,
+    # 2026-10-23: a login drew no banner at all).
+    try { $lines = [System.IO.File]::ReadAllLines($Path) }
+    catch [System.UnauthorizedAccessException], [System.IO.IOException] { return }
     $cut = $Now.ToUnixTimeSeconds() - 86400
     $speed = ''
     $memoryKind = ''
     $diskKinds = @{}
     $counts = $null
-    foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
+    foreach ($line in $lines) {
         $f = $line -split "`t"
         if ($f.Count -lt 3 -or $f[0] -notmatch '^[0-9]+$' -or [double]$f[0] -le $cut) { continue }
         switch -CaseSensitive ($f[1]) {

@@ -79,6 +79,15 @@ function Get-UsaBannerSampleFinding {
     #      24-hour range and the slow facts to age
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Record)
     $now = [datetime]::UtcNow
+    # A login reads the samples and slow.tsv beside them: one it cannot read
+    # draws its banner without what is in it (lab, 2026-10-23).
+    foreach ($file in $Path, [System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($Path), 'slow.tsv')) {
+        if (-not [System.IO.File]::Exists($file)) { continue }
+        try { [System.IO.File]::OpenRead($file).Dispose() }
+        catch [System.UnauthorizedAccessException], [System.IO.IOException] {
+            return @{ State = 'invalid'; Text = "$file cannot be read, so a login draws its banner without what is in it: $($_.Exception.Message)" }
+        }
+    }
     if ([System.IO.File]::Exists($Path)) {
         $minutes = [int][Math]::Floor(($now - [System.IO.File]::GetLastWriteTimeUtc($Path)).TotalMinutes)
         if ($minutes -gt 20) { return @{ State = 'stale'; Text = "the last sample is $minutes minutes old: the periodic job samples every 15" } }
