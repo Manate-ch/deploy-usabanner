@@ -62,6 +62,41 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         @($acl | Where-Object { $_ -match '/grant' -and $_ -match ' /T ' }) | Should -BeNullOrEmpty
     }
 
+    It 'deletes the copy an earlier deploy recorded, of another version, and leaves one no deploy recorded' {
+        # The lab (2026-10-23): a deploy of another version left the earlier copy, so Import-Module loaded the
+        # newer of the two and Remove-UsaBanner, which reads the record, never took the older.
+        $null = Deploy-UsaBanner -Company Contoso
+        $modules = Join-Path $Root 'ProgramFiles/WindowsPowerShell/Modules/UsaBanner'
+        foreach ($old in '0.0.9', '0.0.5') {
+            $null = New-Item -ItemType Directory -Path (Join-Path $modules $old) -Force
+            [System.IO.File]::WriteAllText((Join-Path $modules "$old/UsaBanner.psd1"), "@{ ModuleVersion = '$old' }`n")
+        }
+        $recordPath = Join-Path $Data 'deploy.json'
+        $record = Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json -AsHashtable
+        $record['module'] = Join-Path $modules '0.0.9'
+        [System.IO.File]::WriteAllText($recordPath, ($record | ConvertTo-Json -Depth 8))
+        $lines = @(Deploy-UsaBanner -Company Contoso)
+        $lines | Should -Contain "deleted $(Join-Path $modules '0.0.9') and the 1 file(s) in it: UsaBanner 0.0.9, the copy an earlier deploy installed"
+        Join-Path $modules '0.0.9' | Should -Not -Exist
+        Join-Path $modules '0.0.5' | Should -Exist
+        $version = (Import-PowerShellDataFile -LiteralPath (Join-Path $moduleRoot 'UsaBanner.psd1')).ModuleVersion
+        (Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json -AsHashtable)['module'] | Should -BeExactly ([System.IO.Path]::Combine((Join-Path $Root 'ProgramFiles/WindowsPowerShell/Modules'), 'UsaBanner', $version))
+    }
+
+    It 'never asks to delete the copy it installs, recorded with the other separator by a deploy before 0.1.1' {
+        # On Linux a path with \ is another path, so only a stand-in for the remover shows it is not asked.
+        $null = Deploy-UsaBanner -Company Contoso
+        $recordPath = Join-Path $Data 'deploy.json'
+        $record = Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json -AsHashtable
+        $installed = [string]$record['module']
+        $record['module'] = $installed.Replace('/', '\')
+        [System.IO.File]::WriteAllText($recordPath, ($record | ConvertTo-Json -Depth 8))
+        Mock -ModuleName UsaBanner Remove-UsaBannerWindowsFolder { }
+        $null = Deploy-UsaBanner -Company Contoso
+        Should -Invoke Remove-UsaBannerWindowsFolder -ModuleName UsaBanner -Times 0 -Exactly
+        $installed | Should -Exist
+    }
+
     It 'writes the configuration as data that reads back as the same settings, and draws the same banner' {
         $null = Deploy-UsaBanner -Company Contoso -Environment LAB -Services sshd, W32Time -PreInit HostName
         $read = InModuleScope UsaBanner -Parameters @{ Data = $Data } {

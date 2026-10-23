@@ -990,7 +990,11 @@ files are downloaded from (`-UpdateSource`).
 - **The new version deploys itself:** it runs its own
   `linux/bootstrap.ps1 -Path` with the host's configuration, so an update
   brings the new version's whole deploy, renderer and units included. Then
-  the old version's folder goes. When that deploy fails, the new version's
+  the old version's folder goes. A deploy by hand does the same (lab,
+  2026-10-23): once its copy is in place, the copy its record named, of
+  another version, goes, so `Import-Module` never loads a version a deploy
+  replaced, and `Remove-UsaBanner` takes the one left; a version folder no
+  deploy recorded stays. When that deploy fails, the new version's
   folder goes instead, and the old version deploys the configuration again,
   so the host keeps what it had. `update.json` says what the last look
   found, or what failed, and `Get-UsaBanner` reads it.

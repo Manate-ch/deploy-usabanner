@@ -761,7 +761,7 @@ function Invoke-UsaBannerWindowsDeploy {
     }
 
     if ($ReplaceOld) { Remove-UsaBannerWindowsOldInstall -Layout $layout }
-    Install-UsaBannerModuleCopy -Root '' -Record $record -Created $created -Modules $layout.Modules -FileMode $null -FolderMode $null
+    Install-UsaBannerModuleCopy -Root '' -Record $record -Created $created -Modules $layout.Modules -FileMode $null -FolderMode $null -Os windows
     Set-UsaBannerDataFolder -Path $layout.Data -Created $created
     Set-UsaBannerHostFile -Root '' -Path $jsonPath -Bytes $json -Mode $null -What 'the configuration' -Detail $settings
     $dataFile = [System.IO.Path]::Combine($layout.Data, 'usabanner.psd1')
