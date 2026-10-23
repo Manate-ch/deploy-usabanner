@@ -133,6 +133,13 @@ non-interactive command that builds the same setup.
 
 ## M6. Windows plumbing and Group Policy
 
+**Built before M5** (2026-10-23, your direction: deployable by Group Policy
+as soon as possible). The first rollout (D29) is the tier and role from each
+host's AD Description, the two runners, and `Deploy-UsaBannerGPO`'s base
+policy; the rest of this list follows it.
+
+- **The tier and role from the AD Description** (D29), as today's banner
+  reads them.
 - **PowerShell 7 installed where it is missing** (D18): interactively, the
   newest MSI, checked against the release's `hashes.sha256` and its
   signature; by policy, the MSI deploy-usawinssh stages (D21).

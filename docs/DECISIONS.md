@@ -1871,6 +1871,83 @@ there now, from the host's own configuration and facts.
   setting (`UsaBanner.Format.ps1xml`). Under Windows PowerShell 5.1 the
   command runs itself in pwsh, and its answer comes back as that text.
 
+## D29. Group Policy delivery (M6): the first rollout
+
+**Your direction (2026-10-23):** the banner deployable by Group Policy as
+soon as possible, so M6 comes before M5, with a test deploy on the Manatech
+hosts just before the GPOs go on; and each host's tier and role from its own
+computer object's AD Description, as today's banner does.
+
+**The tier and role from the AD Description (decided: your call).** One
+package for every host leaves the tier and the role as what differs per host.
+- **The format is today's,** "<tier> : <role>". The part before the first
+  colon is the tier when it is letters and hyphens only, with the blanks
+  around it not counting. The rest is the role. A Description without such a
+  prefix is the role alone. That is the rule of `motd-lib.sh` and
+  `Get-ManatechConfig`, but for the hyphen in `DEV-TEST`.
+- **Today's names map to this banner's tiers:** PROD, LAB and PUB stay as
+  they are; DEV and TEST become DEV-TEST; STAGE becomes LAB (my call, the
+  nearest by what it holds). Any other prefix leaves the tier UNSET (a grey
+  badge), and the role is still taken.
+- **The configuration wins where it says something.** A tier other than
+  UNSET wins, and so does a `role`, a new key. UNSET, the default, takes AD's.
+- **The periodic job reads it, not each login.** A DC that answers slowly
+  would cost every login seconds.
+  - Windows asks for its own computer object (ADSI).
+  - Ubuntu does as today's `ad-description.sh`: the machine keytab and
+    `ldapsearch`. That needs `ldap-utils`, `krb5-user` and
+    `libsasl2-modules-gssapi-mit`, which today's banner leaves to the admin.
+    **My call, for your review:** the bootstrap installs them on a joined
+    host (one with `/etc/krb5.keytab`), as it installs PowerShell.
+  - The answer is cached. A DC that does not answer keeps the last one, as
+    today. A change draws the banners again, as a new name or address does.
+- **`Get-UsaBanner` says where each one came from:** the configuration, the
+  AD Description, or neither.
+
+**The policy (my defaults, for your review):**
+- **One GPO**, named `UsaBanner` unless `-Name` says otherwise (D23). It is
+  linked only where `-LinkTarget` says: a link is the admin's act, as today's
+  `Publish-ManatechMotd.ps1` has it.
+- **Staged on the PDC:**
+  - the module's own folder;
+  - the package (`usabanner.json`, the file `Deploy-UsaBanner -Path` reads),
+    built from `Deploy-UsaBanner`'s flags or taken from `-Path`, so the first
+    rollout needs no `Export-UsaBanner`;
+  - the two runners, one per OS.
+  Windows' copy goes in `NETLOGON\UsaBanner`, ADSys's in the domain's
+  `Ubuntu\scripts` folder. `GPT.INI`'s version is raised on each publish.
+- **Windows: an ImmediateTaskV2.** It runs as SYSTEM at each policy refresh,
+  on servers only, with the item-level target deploy-usawinssh uses
+  (`ProductType = 2 OR ProductType = 3`).
+  - It runs a Windows PowerShell 5.1 runner from NETLOGON, which hands over
+    to pwsh: `Deploy-UsaBanner -Path <package> -ReplaceOldBanner`.
+  - A deploy that changes nothing writes nothing, so a refresh costs little.
+  - With no pwsh, the runner logs that and ends. deploy-usawinssh's policy
+    installs PowerShell 7 (D18, D21), and the banner's own MSI step comes
+    later in M6.
+- **Ubuntu: an ADSys startup script** (Ubuntu Pro), as today's banner has.
+  - It copies the module and the package out of ADSys's copy of SYSVOL.
+  - It runs `bootstrap.sh -Path <package> -ReplaceOldBanner` in a transient
+    systemd unit, since ADSys gives a startup script 90 seconds and
+    installing PowerShell can take longer.
+  - A path unit on the copy's `GPT.INI` applies a new publish without a
+    reboot, as today's `units.sh` does.
+- **`-ReplaceOldBanner` on every run.** A host with today's banner moves off
+  it at the first refresh after today's GPO comes off it. While today's GPO
+  still applies, the two undo each other. `Get-UsaBanner`'s old banner check
+  says so (D23), and `Deploy-UsaBannerGPO` warns while today's GPO is linked
+  anywhere.
+- **No update channel in a package for Group Policy.** The GPO is the update
+  path: a new publish is a new version. An update job beside it would install
+  a newer release that the next refresh puts back to the staged one, and each
+  deletes the other's copy (!47). `Deploy-UsaBannerGPO` refuses a package
+  that turns the channel on.
+
+**After the first rollout, in this order:** the OU table (D13's B), then the
+direct links through Block Inheritance (D13). M6's "done when" needs both.
+Then PowerShell 7 from the MSI with `-UpdatePoSHMSI` (D18),
+`Export-UsaBanner` (D12) and `Enter-UsaPSSession` (§3.8).
+
 ## Appendix A. Art mock-ups (rough)
 
 Plain ASCII, so each works before login too. Final art gets drawn properly
