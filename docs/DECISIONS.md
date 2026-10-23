@@ -1568,6 +1568,35 @@ host, removing today's banner and deploying this one in one run, comes with
 V1's release (M7). **And a command to take the banner off:**
 `Remove-UsaBanner` leaves the host as it was before the deploy (D16).
 
+**The move off the old banner, built (M4, 2026-10-23), pulled forward from
+M7 on your go, so the lab can test it on the hosts that run it.**
+`Deploy-UsaBanner -ReplaceOldBanner` takes the old banner off, then
+deploys; without the switch a host with the old banner is still refused, and
+the refusal names it. It runs after every banner is drawn, so a
+configuration or art that fails leaves the old banner as it was
+(`Private/OldBanner.ps1` has the whole list):
+
+- **On Ubuntu:** the old jobs stop and their units go; what `--retire`
+  turned off comes back as Ubuntu ships it (four stock MOTD scripts,
+  landscape-sysinfo's statoverride, `motd-news.timer`'s mask); then its sshd
+  drop-in (ssh reloads), its MOTD scripts, console file and folders.
+- **On Windows:** its tasks; its block in both all-users profiles; its
+  `Banner` line in `sshd_config`, each `Banner` it turned off back on, checked
+  with `sshd -t`; its SSH banner file and its folder.
+- **Back as the OS ships it, not as the host was:** the old banner kept no
+  record of what it changed. The deploy then turns the same stock scripts
+  off again, on its own record, so `Remove-UsaBanner` later turns them back
+  on: deploy, remove, and the host is stock.
+- **Left as they are:** a git clone the old timer pulled into, the OpenSSH
+  default shell (this banner needs a PowerShell there too, D21), and
+  `sshd_config.manatech-bak`, the old installer's copy of `sshd_config`.
+- **Group Policy is not adopted:** a GPO that delivers the old banner puts it
+  back at the next boot or refresh, so it comes off the host first. The
+  deploy warns where it sees ADSys's copy of the old banner, or the task the
+  GPO makes, and `Get-UsaBanner` has an **old banner** check: `differs`
+  while any of it is on the host, which counts against Healthy (D28), since
+  a login then shows two banners.
+
 ## D24. A LICENSE
 
 **Decided: MIT**, with the same text as deploy-usawinssh ("Copyright (c)

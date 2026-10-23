@@ -60,8 +60,9 @@ function Deploy-UsaBanner {
     host show; auto draws 256 colours and ASCII, which nearly every client
     shows.
 
-    A host with the banner of this repository's install.sh is refused:
-    moving a host off it comes with V1's release.
+    A host with the old banner, which this repository's install.sh or
+    Install-ManatechBanner.ps1 installs, is refused unless -ReplaceOldBanner
+    takes that banner off first.
 
     Under Windows PowerShell 5.1 the command runs itself in pwsh (PowerShell
     7), and stops with what to install when there is none.
@@ -114,6 +115,15 @@ function Deploy-UsaBanner {
     The https address the releases' files are downloaded from: SHA256SUMS
     and UsaBanner-<version>.zip are under it, as under a GitHub repository's
     .../releases/latest/download.
+    .PARAMETER ReplaceOldBanner
+    Takes the old banner off first: the one this repository's install.sh
+    (Ubuntu) or Install-ManatechBanner.ps1 (Windows) installs. Its files and
+    jobs go, and what it changed comes back as the OS ships it; then this
+    banner deploys. It runs after every banner is drawn, so a configuration
+    that fails leaves the old banner in place. A Group Policy that delivers
+    the old banner puts it back at the next boot or refresh: take that GPO
+    off the host first. Get-UsaBanner's old banner check says when it is
+    back.
     .EXAMPLE
     Deploy-UsaBanner -Company Contoso -Environment PROD -WhatIf
     .EXAMPLE
@@ -122,6 +132,8 @@ function Deploy-UsaBanner {
     Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource https://releases.example.com/usabanner
     .EXAMPLE
     Deploy-UsaBanner -Path ./contoso.json -Environment DEV-TEST
+    .EXAMPLE
+    Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WhatIf
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -175,7 +187,9 @@ function Deploy-UsaBanner {
         [ValidateSet('off', 'notify', 'install')]
         [string]$Update,
 
-        [string]$UpdateSource
+        [string]$UpdateSource,
+
+        [switch]$ReplaceOldBanner
     )
     begin {
         $handedOff = Test-UsaBannerHandoff
@@ -193,7 +207,7 @@ function Deploy-UsaBanner {
         if ($Path) { $config = New-UsaBannerDeployConfig -Flags $flags -Path $Path }
         else { $config = New-UsaBannerDeployConfig -Flags $flags }
         Write-UsaBannerUpdateWarning -Config $config
-        if ((Get-UsaBannerHostOs) -eq 'windows') { Invoke-UsaBannerWindowsDeploy -Config $config }
-        else { Invoke-UsaBannerLinuxDeploy -Config $config }
+        if ((Get-UsaBannerHostOs) -eq 'windows') { Invoke-UsaBannerWindowsDeploy -Config $config -ReplaceOld:$ReplaceOldBanner }
+        else { Invoke-UsaBannerLinuxDeploy -Config $config -ReplaceOld:$ReplaceOldBanner }
     }
 }

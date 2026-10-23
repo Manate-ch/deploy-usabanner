@@ -65,7 +65,7 @@ Describe 'Get-UsaBanner on Ubuntu' -Skip:$IsWindows {
         $status = Get-ReadOnlyStatus
         $status.PSObject.TypeNames[0] | Should -BeExactly 'UsaBanner.Status'
         Get-Problem $status | Should -BeNullOrEmpty
-        @($status.Checks | ForEach-Object { $_.Check }) | Should -Be @('configuration', 'drawn for this host', 'banner after login', 'console banner', 'ssh banner', 'stock motd off', 'periodic job', 'module copy', 'update channel')
+        @($status.Checks | ForEach-Object { $_.Check }) | Should -Be @('configuration', 'drawn for this host', 'banner after login', 'console banner', 'ssh banner', 'stock motd off', 'periodic job', 'module copy', 'update channel', 'old banner')
         $status.Healthy | Should -BeTrue
         $status.Deployed | Should -BeTrue
         $status.HostName | Should -BeExactly 'h-vsl-web1.ad.example'
@@ -111,7 +111,7 @@ Describe 'Get-UsaBanner on Ubuntu' -Skip:$IsWindows {
         Use-LinuxHost -Root (New-StockHost)
         Write-TestFile $global:UsaDeployRoot 'etc/update-motd.d/05-manatech-banner' "#!/bin/sh`n" -Mode '755'
         (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeExactly ("there is no /etc/usabanner/usabanner.json: no banner is deployed here. " +
-            "This host has the banner of this repository's install.sh (/etc/update-motd.d/05-manatech-banner), which V1's release moves a host off")
+            "This host has the banner of this repository's install.sh (/etc/update-motd.d/05-manatech-banner), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one")
     }
 
     It 'finds the banners drawn for the old name after a rename, until the periodic job draws them again' {
@@ -279,7 +279,7 @@ Describe 'Get-UsaBanner on Windows Server' {
     It 'finds every part of a deploy in place: healthy, SSH open, the settings chosen, and the VLAN this host is in' {
         $status = Get-ReadOnlyStatus
         Get-Problem $status | Should -BeNullOrEmpty
-        @($status.Checks | ForEach-Object { $_.Check }) | Should -Be @('configuration', 'banner after login', 'ssh banner', 'ssh default shell', 'logon notice', 'periodic job', 'folder acl', 'module copy', 'update channel')
+        @($status.Checks | ForEach-Object { $_.Check }) | Should -Be @('configuration', 'banner after login', 'ssh banner', 'ssh default shell', 'logon notice', 'periodic job', 'folder acl', 'module copy', 'update channel', 'old banner')
         $status.Healthy | Should -BeTrue
         $status.HostName | Should -BeExactly 'BEVSW-APP1.ad.example'
         $status.Os | Should -BeExactly 'windows'
@@ -302,7 +302,7 @@ Describe 'Get-UsaBanner on Windows Server' {
     It 'names the banner of this repository''s Install-ManatechBanner.ps1 on a host that has it' {
         Use-WindowsHost (New-WindowsHost)
         $null = New-Item -ItemType Directory -Path (Join-Path $global:UsaWinRoot 'ProgramData/Manatech')
-        (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this repository's Install-ManatechBanner.ps1 (*ProgramData/Manatech), which V1's release moves a host off"
+        (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this repository's Install-ManatechBanner.ps1 (*ProgramData/Manatech), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one"
     }
 
     It 'leaves a logon notice someone else set: off, and the host healthy still' {

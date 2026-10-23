@@ -146,7 +146,9 @@ reach their hosts, including through Block Inheritance.
 
 ## M7. Release
 
-- **`Deploy-UsaBanner` moves a host off today's install** (D23).
+- **`Deploy-UsaBanner` moves a host off today's install** (D23). Built in M4
+  (`-ReplaceOldBanner`, 2026-10-23), so the lab could test it on the hosts
+  that run today's banner.
 - **The README is rewritten for V1**, and today's code retired.
 - **The project is renamed `deploy-usabanner`** (D1), and `v1.0.0` is
   released once it has been validated on the Manatech hosts.

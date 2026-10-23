@@ -49,17 +49,20 @@ $script:UsaLinuxSshd = '/usr/sbin/sshd'
 # package's file, and goes by a statoverride.
 $script:UsaRetiredScripts = @('00-header', '10-help-text', '50-motd-news', '90-updates-available', '98-reboot-required')
 
-# What today's banner (this repository's install.sh) puts on a host: a deploy
-# does not go beside it. V1's release moves a host off it (D23).
+# What the old banner (this repository's install.sh) puts on a host: a deploy
+# does not go beside it, and -ReplaceOldBanner takes it off first (D23,
+# OldBanner.ps1).
 $script:UsaOldInstall = @(
     '/etc/update-motd.d/05-manatech-banner'
     '/etc/update-motd.d/15-manatech-health'
     '/etc/manatech'
     '/usr/local/share/manatech'
+    '/var/lib/manatech'
     '/etc/issue.d/50-manatech.issue'
     '/etc/ssh/sshd_config.d/00-manatech-banner.conf'
     '/etc/ssh/sshd_config.d/10-manatech-banner.conf'
     '/etc/systemd/system/manatech-motd-update.timer'
+    '/etc/systemd/system/manatech-motd-publish.path'
 )
 
 $script:UsaMode644 = [System.IO.UnixFileMode]'UserRead, UserWrite, GroupRead, OtherRead'
@@ -223,8 +226,8 @@ function Remove-UsaBannerHostFolder {
     # In:  the host's root, one of the banner's own folders, and what it is
     # Out: a line when it was deleted with everything in it; nothing when it
     #      was not there, or under -WhatIf
-    # Why: only the banner's own folders are deleted whole; any other path
-    #      is refused, whatever the caller asks
+    # Why: only the banner's own folders, and the old banner's, are deleted
+    #      whole; any other path is refused, whatever the caller asks
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param(
@@ -232,7 +235,7 @@ function Remove-UsaBannerHostFolder {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$What
     )
-    $ours = @($script:UsaLinuxEtc, $script:UsaLinuxShare, $script:UsaLinuxState)
+    $ours = @($script:UsaLinuxEtc, $script:UsaLinuxShare, $script:UsaLinuxState) + @($script:UsaOldFolders.Keys)
     if ($Path -notin $ours -and $Path -notlike "$script:UsaLinuxModules/UsaBanner/*") {
         throw "UsaBanner: $Path is not one of the banner's own folders, so it is not deleted."
     }
@@ -313,11 +316,11 @@ function Assert-UsaBannerLinuxHost {
     .SYNOPSIS
     Stops a deploy or a removal that cannot go ahead here, saying why.
     .DESCRIPTION
-    In:  the host's root, the command, and whether today's banner stops it.
+    In:  the host's root, the command, and whether the old banner stops it.
     Throws unless this process runs as root (under -WhatIf anyone may look);
     unless the host is Ubuntu, with /etc/update-motd.d for pam_motd to run;
-    and, for a deploy, when today's banner (this repository's install.sh) is
-    installed, naming what of it was found.
+    and, for a deploy without -ReplaceOldBanner, when the old banner (this
+    repository's install.sh) is installed, naming what of it was found.
     #>
     [CmdletBinding()]
     param(
@@ -335,7 +338,7 @@ function Assert-UsaBannerLinuxHost {
     if (-not $RefuseOldInstall) { return }
     $found = @(Find-UsaBannerLinuxOldInstall -Root $Root)
     if ($found.Count) {
-        throw "UsaBanner: this host has the banner of this repository's install.sh ($($found -join ', ')). $Command does not install beside it: removing that banner and deploying this one in one step comes with V1's release (docs/V1-PLAN.md, M7)."
+        throw "UsaBanner: this host has the banner of this repository's install.sh ($($found -join ', ')). $Command does not install beside it: $Command -ReplaceOldBanner takes that banner off first, then deploys this one."
     }
 }
 
@@ -847,12 +850,14 @@ function Invoke-UsaBannerLinuxDeploy {
     .SYNOPSIS
     Deploys a configuration to this Ubuntu host: Deploy-UsaBanner's work.
     .DESCRIPTION
-    In:  the configuration (New-UsaBannerDeployConfig).
+    In:  the configuration (New-UsaBannerDeployConfig), and -ReplaceOld to
+         take the old banner off first.
     Out: a line for each change, in the order made; nothing when the host
          already has it all. Under -WhatIf, PowerShell says each change
          instead, and nothing changes.
     Every banner is drawn before anything changes, so a configuration or
-    art that fails leaves the host as it was. Then, so a login never meets
+    art that fails leaves the host as it was. Then the old banner comes off,
+    where -ReplaceOld says so (OldBanner.ps1). Then, so a login never meets
     no banner at all: the module and the login renderer; the configuration
     and the drawn banners; the banner after login; the stock MOTD scripts
     off; SSH; the periodic job. Changes made outside the banner's own files
@@ -860,9 +865,9 @@ function Invoke-UsaBannerLinuxDeploy {
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
-    param([Parameter(Mandatory)][System.Collections.IDictionary]$Config)
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Config, [switch]$ReplaceOld)
     $root = Get-UsaBannerHostRoot
-    Assert-UsaBannerLinuxHost -Root $root -Command 'Deploy-UsaBanner' -RefuseOldInstall
+    Assert-UsaBannerLinuxHost -Root $root -Command 'Deploy-UsaBanner' -RefuseOldInstall:(-not $ReplaceOld)
     $record = Read-UsaBannerDeployRecord -Root $root
     $created = [System.Collections.Generic.List[string]]::new()
     foreach ($folder in @($record['created'])) { if ($folder) { $created.Add([string]$folder) } }
@@ -879,6 +884,7 @@ function Invoke-UsaBannerLinuxDeploy {
         if ($null -ne $old) { $settings = @(Compare-UsaBannerConfig -Old $old -New $Config) -join '; ' }
     }
 
+    if ($ReplaceOld) { Remove-UsaBannerLinuxOldInstall -Root $root }
     Install-UsaBannerModuleCopy -Root $root -Record $record -Created $created
     foreach ($file in $script:UsaLinuxScripts) {
         Set-UsaBannerHostFile -Root $root -Path "$script:UsaLinuxShare/$file" -Bytes ([System.IO.File]::ReadAllBytes((Join-Path $script:UsaBannerRoot 'linux' $file))) -What 'the login renderer and the periodic job' -Created $created
