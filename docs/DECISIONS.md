@@ -1316,6 +1316,35 @@ Microsoft Endpoint Configuration Manager" [fetched]. So 7.6 patches arrive
 the way Windows patches do, and `-UpdatePoSHMSI` mostly sets what a new host
 installs.
 
+**The Ubuntu bootstrap, built (M4, 2026-10-22), for your review.**
+`sudo sh UsaBanner/linux/bootstrap.sh -Company Contoso -Environment PROD`
+deploys from a copy of the module. Where `pwsh` is missing, it installs
+PowerShell as Microsoft's instructions do: `packages-microsoft-prod.deb` for
+the host's `VERSION_ID`, then `apt-get install -y powershell` [fetched:
+Install PowerShell 7 on Ubuntu, updated 2026-09-09]. Microsoft publishes
+that package for 22.04, 24.04 and 26.04, and not for interim releases, so
+on one of those the bootstrap stops and says so. Then
+`UsaBanner/linux/bootstrap.ps1`, run with `pwsh -File`, imports the module
+and runs `Deploy-UsaBanner` with the same flags.
+
+- **It installs only what it uses:** `packages-microsoft-prod` and
+  `powershell`, and `wget` only where the host has neither `wget` nor
+  `curl`. Microsoft's script also installs `apt-transport-https` and
+  `software-properties-common`, which nothing here needs.
+- **A list takes commas** (`-Services ssh,cron`): `pwsh -File` hands every
+  value over as one string [measured: PowerShell 7.6.6], so `bootstrap.ps1`
+  splits the values of `-Services`, `-PreInit` and `-PreLogon`. Legal text
+  of your own, whose lines may hold commas, comes from a file (`-Path`).
+- **PowerShell's logging stays as Microsoft ships it.** D2's 21 GB came from
+  test runs on a build VM. On a host the banner runs `pwsh` only to draw it
+  again after a change, a few times a day at most, and the logs it would
+  turn down are where a host's monitoring finds suspicious script blocks.
+  This install leaves `$PSHOME` writable, so a host that wants them quieter
+  can still set it.
+- **Microsoft's repository serves .NET packages too**, which can mix with
+  Ubuntu's own on a host that installs .NET from Ubuntu [fetched: the same
+  page]. Microsoft's .NET documentation says how to prefer one feed.
+
 ## D19. New-UsaBannerArt: which image formats
 
 PowerShell 7 on Linux has no image decoder of its own. "Starting in .NET 7,
