@@ -252,13 +252,16 @@ function Compare-UsaBannerConfig {
          services, the legal text, a naming table) is one setting, and is
          shown by its length when its JSON runs past 40 characters. Values
          are JSON; one that is not there is (none). Nothing when the two are
-         the same.
+         the same. With -NewOnly, '<setting>: <new>': what the new one sets
+         otherwise than the old, as Get-UsaBanner lists a host's settings
+         against the defaults.
     #>
     [CmdletBinding()]
     [OutputType([string])]
     param(
         [Parameter(Mandatory)][System.Collections.IDictionary]$Old,
-        [Parameter(Mandatory)][System.Collections.IDictionary]$New
+        [Parameter(Mandatory)][System.Collections.IDictionary]$New,
+        [switch]$NewOnly
     )
     $flatten = {
         # In:  a configuration, or part of one, and the path to it
@@ -292,6 +295,7 @@ function Compare-UsaBannerConfig {
         $oldJson = if ($had) { ConvertTo-Json -InputObject $before[$path] -Compress -Depth 10 } else { $null }
         $newJson = if ($has) { ConvertTo-Json -InputObject $after[$path] -Compress -Depth 10 } else { $null }
         if ($had -and $has -and $oldJson -ceq $newJson) { continue }
-        "${path}: $(& $show $before[$path] $had) -> $(& $show $after[$path] $has)"
+        if ($NewOnly) { "${path}: $(& $show $after[$path] $has)" }
+        else { "${path}: $(& $show $before[$path] $had) -> $(& $show $after[$path] $has)" }
     }
 }

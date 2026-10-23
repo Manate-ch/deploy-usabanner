@@ -2,10 +2,10 @@
 
 > Companion to [SPEC.md](SPEC.md). Each decision has an ID, the question, the
 > options, the recommendation and why, and what was decided. D1 to D26 are
-> decided, and the table below sums them up; D27 waits on your review. Facts
-> are tagged **[measured]** (on a
-> test host), **[fetched]** (read at the cited source on 2026-10-09, unless a
-> date says otherwise) or **[known]** (from experience, not re-checked).
+> decided, and the table below sums them up; D27 and D28 wait on your review.
+> Facts are tagged **[measured]** (on a test host), **[fetched]** (read at the
+> cited source on 2026-10-09, unless a date says otherwise) or **[known]**
+> (from experience, not re-checked).
 
 ## Decided (2026-10-09 and 10-10)
 
@@ -68,6 +68,7 @@
 | D25 | Meme voices | decided: plain unless set |
 | D26 | The facts record | decided |
 | D27 | Deploy-UsaBanner's flags | built; for your review |
+| D28 | What Get-UsaBanner checks | built; for your review |
 
 ## D1. Where the code lives, and its name
 
@@ -1655,6 +1656,55 @@ configuration (D12):
   same [measured: PowerShell 7.6.6, 2026-10-22]. So the schema gives
   `services` no branches: a string must be `default`, and a list holds
   names.
+
+## D28. What Get-UsaBanner checks
+
+**Built (M4, 2026-10-22), for your review.** `Get-UsaBanner` (§3.3) gives
+one object for the host: its name and OS, the module's version, whether SSH
+is open, the services the banner watches in their state now, the VLAN rows
+with the one this host is in, the settings, and a check for each part a
+deploy puts in place. Each part is compared with what a deploy would put
+there now, from the host's own configuration and facts.
+
+| State | Means | Counts against healthy |
+|---|---|---|
+| `ok` | in place, as a deploy leaves it | no |
+| `off` | not in place for a reason outside the banner: no OpenSSH server, a logon notice someone else set, another shell for SSH logins | no |
+| `unknown` | this session cannot tell: `sshd -T` needs root on Ubuntu, and a user may not see the task SYSTEM runs on Windows | no |
+| `missing` | a part a deploy puts in place is not there | yes |
+| `differs` | there, but not as a deploy leaves it | yes |
+| `stale` | out of date: drawn for another name, address or configuration; no sample for 20 minutes; on Windows, an `sshd` started before `sshd_config` last changed | yes |
+| `invalid` | the configuration cannot be read | yes |
+
+- **Healthy means a login shows what the configuration draws, now.** So
+  `stale` counts against it, though on Ubuntu the periodic job draws the
+  banners again within 15 minutes: until it does, a login shows the old
+  name. `off` does not: the banner did what it could, and the check says
+  what is missing and whose it is (deploy-usawinssh's, D21; the notice's
+  owner's, D5).
+- **What a session cannot read is `unknown`, never `ok`.** Without root,
+  `sshd -T` fails on a host whose `sshd_config.d` holds a file only root
+  reads, as cloud-init's `50-cloud-init.conf` is [measured: Ubuntu 24.04,
+  2026-10-22]. An unknown check does not count against healthy; the help
+  says to run as root, or as an administrator, for every answer.
+- **Windows' `sshd` reads `sshd_config` at its start** [known], and a
+  deploy leaves the restart to the admin, so an `sshd` that started before
+  the Banner line went in sends no banner yet: `stale`, with
+  `Restart-Service sshd`.
+- **It changes nothing.** Its tests check each host byte for byte before
+  and after, and that no program that changes it ran.
+- **The settings are what the configuration sets otherwise than the
+  defaults,** a line each (`company: "Contoso"`), as a deploy reports a
+  change. The whole configuration is there too, for `Export-UsaBanner`
+  (D12).
+- **`-Moment` shows a banner as installed, not drawn anew:** on Ubuntu, the
+  console's issue file as agetty prints it, and the banner after login by
+  running `05-usabanner` as pam_motd does (as root, pam_motd may see facts
+  another user's run does not); on Windows, the logon notice as the registry
+  holds it.
+- **At a console it prints as a list,** a line for each check, VLAN and
+  setting (`UsaBanner.Format.ps1xml`). Under Windows PowerShell 5.1 the
+  command runs itself in pwsh, and its answer comes back as that text.
 
 ## Appendix A. Art mock-ups (rough)
 

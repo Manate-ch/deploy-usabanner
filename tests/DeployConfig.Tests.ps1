@@ -237,4 +237,11 @@ Describe 'what a deploy changes' {
         Compare-Config (New-DeployConfig) (New-DeployConfig @{ BorderCap = '(^_^)' }) | Should -BeExactly 'border.cap: (none) -> "(^_^)"'
         Compare-Config (New-DeployConfig @{ BorderCap = '(^_^)' }) (New-DeployConfig) | Should -BeExactly 'border.cap: "(^_^)" -> (none)'
     }
+
+    It 'gives only the new values with -NewOnly: what a host sets otherwise than the defaults, for Get-UsaBanner' {
+        $lines = @(InModuleScope UsaBanner {
+                Compare-UsaBannerConfig -Old (Get-UsaBannerConfigDefault) -New (New-UsaBannerDeployConfig -Flags @{ Company = 'Contoso'; Border = 'Rounded'; Services = @('ssh') }) -NewOnly
+            })
+        $lines | Should -BeExactly @('company: "Contoso"', 'border.set: "Rounded"', 'services: ["ssh"]')
+    }
 }

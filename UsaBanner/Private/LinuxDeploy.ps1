@@ -330,10 +330,18 @@ function Assert-UsaBannerLinuxHost {
         throw "UsaBanner: $Command works on Ubuntu (24.04 and later) and Windows Server (2022 and later). This host's /etc/os-release does not say ID=ubuntu, or it has no /etc/update-motd.d."
     }
     if (-not $RefuseOldInstall) { return }
-    $found = @($script:UsaOldInstall | Where-Object { [System.IO.File]::Exists("$Root$_") -or [System.IO.Directory]::Exists("$Root$_") })
+    $found = @(Find-UsaBannerLinuxOldInstall -Root $Root)
     if ($found.Count) {
         throw "UsaBanner: this host has the banner of this repository's install.sh ($($found -join ', ')). $Command does not install beside it: removing that banner and deploying this one in one step comes with V1's release (docs/V1-PLAN.md, M7)."
     }
+}
+
+function Find-UsaBannerLinuxOldInstall {
+    # In:  the host's root
+    # Out: each path of today's banner (this repository's install.sh) on the
+    #      host
+    param([AllowEmptyString()][string]$Root = '')
+    $script:UsaOldInstall | Where-Object { [System.IO.File]::Exists("$Root$_") -or [System.IO.Directory]::Exists("$Root$_") }
 }
 
 function Resolve-UsaBannerLoginLook {
@@ -617,6 +625,20 @@ function Disable-UsaBannerStockMotd {
     Save-UsaBannerDeployRecord -Root $Root -Record $Record -Created $Created
 }
 
+function Get-UsaBannerSshDropIn {
+    # Out: the text of the drop-in that points sshd's Banner at the banner's
+    #      own file
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+    (@(
+            '# UsaBanner: the banner sshd sends before authentication, written by'
+            '# Deploy-UsaBanner. Named 00- because sshd takes the first Banner it reads,'
+            '# and reads these files in name order.'
+            "Banner $script:UsaLinuxEtc/issue.net"
+        ) -join "`n") + "`n"
+}
+
 function Set-UsaBannerSshBanner {
     <#
     .SYNOPSIS
@@ -642,12 +664,7 @@ function Set-UsaBannerSshBanner {
         return
     }
     $want = "$script:UsaLinuxEtc/issue.net"
-    $text = (@(
-            '# UsaBanner: the banner sshd sends before authentication, written by'
-            '# Deploy-UsaBanner. Named 00- because sshd takes the first Banner it reads,'
-            '# and reads these files in name order.'
-            "Banner $want"
-        ) -join "`n") + "`n"
+    $text = Get-UsaBannerSshDropIn
     $full = "$Root$script:UsaLinuxDropIn"
     $before = if ([System.IO.File]::Exists($full)) { [System.IO.File]::ReadAllBytes($full) } else { $null }
     $line = Set-UsaBannerHostFile -Root $Root -Path $script:UsaLinuxDropIn -Bytes ([System.Text.UTF8Encoding]::new($false).GetBytes($text)) -What 'sshd''s Banner line' -Created $Created
