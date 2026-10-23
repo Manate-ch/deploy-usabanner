@@ -360,7 +360,7 @@ function Get-UsaBannerLinuxStatus {
         $facts = Get-UsaBannerHostFacts -Services @()
         $detail = "there is no ${configPath}: no banner is deployed here"
         $old = @(Find-UsaBannerLinuxOldInstall -Root $root)
-        if ($old.Count) { $detail += ". This host has the banner of this repository's install.sh ($($old -join ', ')), which V1's release moves a host off" }
+        if ($old.Count) { $detail += ". This host has the banner of this repository's install.sh ($($old -join ', ')), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one" }
         return New-UsaBannerStatus @common -HostName ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -Deployed $false -Checks @(New-UsaBannerCheck -Check 'configuration' -State 'missing' -Detail $detail)
     }
 
@@ -423,6 +423,7 @@ function Get-UsaBannerLinuxStatus {
         )
     }
     $checks.Add((Get-UsaBannerUpdateCheck -Config $config -State "$root$script:UsaLinuxState" -Found $job))
+    $checks.Add((Get-UsaBannerOldBannerCheck -Found @(Find-UsaBannerLinuxOldInstall -Root $root)))
 
     New-UsaBannerStatus @common -HostName $name -Ip $ip -Deployed $true -Checks $checks.ToArray() -Services (Get-UsaBannerServicesText -Facts $facts) -Config $config
 }
@@ -538,7 +539,7 @@ function Get-UsaBannerWindowsStatus {
         $facts = Get-UsaBannerHostFacts -Services @()
         $detail = "there is no ${jsonPath}: no banner is deployed here"
         $old = @(Find-UsaBannerWindowsOldInstall -Layout $layout)
-        if ($old.Count) { $detail += ". This host has the banner of this repository's Install-ManatechBanner.ps1 ($($old -join ', ')), which V1's release moves a host off" }
+        if ($old.Count) { $detail += ". This host has the banner of this repository's Install-ManatechBanner.ps1 ($($old -join ', ')), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one" }
         return New-UsaBannerStatus @common -HostName ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -Deployed $false -Checks @(New-UsaBannerCheck -Check 'configuration' -State 'missing' -Detail $detail)
     }
 
@@ -590,6 +591,7 @@ function Get-UsaBannerWindowsStatus {
         elseif ($task.Execute -ne $spec.Execute -or $task.Arguments -ne $spec.Arguments) { $job += @{ State = 'differs'; Text = "the task $($spec.Name) runs $($task.Execute) $($task.Arguments)" } }
     }
     $checks.Add((Get-UsaBannerUpdateCheck -Config $config -State $layout.Data -Found $job))
+    $checks.Add((Get-UsaBannerOldBannerCheck -Found @(Find-UsaBannerWindowsOldInstall -Layout $layout)))
 
     New-UsaBannerStatus @common -HostName ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -Deployed $true -Checks $checks.ToArray() -Services (Get-UsaBannerServicesText -Facts $facts) -Config $config
 }

@@ -253,7 +253,7 @@ Describe 'Deploy-UsaBanner on a stock Ubuntu host' -Skip:$IsWindows {
         Write-TestFile $root 'etc/update-motd.d/05-manatech-banner' "#!/bin/sh`n" -Mode '755'
         $null = New-Item -ItemType Directory -Path (Join-Path $root 'etc/manatech')
         $before = Get-HostState $root
-        { Deploy-UsaBanner -Company Contoso } | Should -Throw "*this host has the banner of this repository's install.sh (/etc/update-motd.d/05-manatech-banner, /etc/manatech)*comes with V1's release*"
+        { Deploy-UsaBanner -Company Contoso } | Should -Throw "*this host has the banner of this repository's install.sh (/etc/update-motd.d/05-manatech-banner, /etc/manatech)*Deploy-UsaBanner -ReplaceOldBanner takes that banner off first*"
         Get-HostState $root | Should -Be $before
     }
 

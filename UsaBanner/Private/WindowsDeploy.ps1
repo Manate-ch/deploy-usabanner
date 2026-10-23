@@ -174,13 +174,14 @@ function Test-UsaBannerFolderAcl {
 }
 
 function Get-UsaBannerTask {
-    # In:  one of the banner's tasks, by name, in \UsagiTools\
+    # In:  one of the banner's tasks, by name, in \UsagiTools\; or the old
+    #      banner's, with -Path \
     # Out: its program and arguments, as @{ Execute; Arguments }; nothing
     #      when there is no such task
     [CmdletBinding()]
     [OutputType([hashtable])]
-    param([Parameter(Mandatory)][string]$Name)
-    $task = Get-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $Name -ErrorAction SilentlyContinue
+    param([Parameter(Mandatory)][string]$Name, [string]$Path = $script:UsaTaskPath)
+    $task = Get-ScheduledTask -TaskPath $Path -TaskName $Name -ErrorAction SilentlyContinue
     if ($task) { @{ Execute = [string]$task.Actions[0].Execute; Arguments = [string]$task.Actions[0].Arguments } }
 }
 
@@ -209,11 +210,11 @@ function Register-UsaBannerTask {
 }
 
 function Unregister-UsaBannerTask {
-    # In:  one of the banner's tasks, by name
+    # In:  one of the banner's tasks, by name; or the old banner's, with -Path \
     # Out: nothing; the task is gone
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Name)
-    Unregister-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $Name -Confirm:$false
+    param([Parameter(Mandatory)][string]$Name, [string]$Path = $script:UsaTaskPath)
+    Unregister-ScheduledTask -TaskPath $Path -TaskName $Name -Confirm:$false
 }
 
 function Start-UsaBannerTask {
@@ -323,14 +324,21 @@ function Remove-UsaBannerProfileText {
     .SYNOPSIS
     A profile's text without the banner's block.
     .DESCRIPTION
+    In:  the profile's text, and the block's first and last lines: the
+         banner's, or with -Begin and -End the old banner's, which
+         Install-ManatechBanner.ps1 adds the same way.
     Out: the text as it was before Set-UsaBannerProfileText added the block:
          the block and the blank line put before it are taken out. A profile
          that held only the block comes back empty.
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    param([AllowEmptyString()][string]$Text = '')
-    $pattern = '(?s)(\r?\n\r?\n)?' + [regex]::Escape($script:UsaProfileBegin) + '.*?' + [regex]::Escape($script:UsaProfileEnd) + '(\r?\n)?'
+    param(
+        [AllowEmptyString()][string]$Text = '',
+        [string]$Begin = $script:UsaProfileBegin,
+        [string]$End = $script:UsaProfileEnd
+    )
+    $pattern = '(?s)(\r?\n\r?\n)?' + [regex]::Escape($Begin) + '.*?' + [regex]::Escape($End) + '(\r?\n)?'
     $found = [regex]::Match($Text, $pattern)
     if (-not $found.Success) { return $Text }
     $before = $Text.Substring(0, $found.Index)
@@ -441,11 +449,13 @@ function Get-UsaBannerWindowsLayout {
     .SYNOPSIS
     Where each part of the banner goes on this Windows host.
     .DESCRIPTION
-    Out: @{ Data; Modules; Profiles; SshdConfig; Old }: the banner's own
-         folder; the modules folder for all users; the all-users profile of
-         each PowerShell installed (Windows PowerShell's always, PowerShell
-         7's where its folder is); sshd_config; and what today's banner
-         (windows/Install-ManatechBanner.ps1) leaves, to look for.
+    Out: @{ Data; Modules; Profiles; SshdConfig; Old; OldData; OldSshText }:
+         the banner's own folder; the modules folder for all users; the
+         all-users profile of each PowerShell installed (Windows
+         PowerShell's always, PowerShell 7's where its folder is);
+         sshd_config; and what the old banner
+         (windows/Install-ManatechBanner.ps1) leaves, to look for: its
+         folder and its SSH banner file.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -454,12 +464,16 @@ function Get-UsaBannerWindowsLayout {
     $profiles = @([System.IO.Path]::Combine($paths.Windir, 'System32', 'WindowsPowerShell', 'v1.0', 'profile.ps1'))
     $seven = [System.IO.Path]::Combine($paths.ProgramFiles, 'PowerShell', '7')
     if ([System.IO.Directory]::Exists($seven)) { $profiles += [System.IO.Path]::Combine($seven, 'profile.ps1') }
+    $oldData = [System.IO.Path]::Combine($paths.ProgramData, 'Manatech')
+    $oldSshText = [System.IO.Path]::Combine($paths.ProgramData, 'ssh', 'manatech-banner.txt')
     @{
         Data       = [System.IO.Path]::Combine($paths.ProgramData, 'UsagiTools', 'Banner')
         Modules    = [System.IO.Path]::Combine($paths.ProgramFiles, 'WindowsPowerShell', 'Modules')
         Profiles   = $profiles
         SshdConfig = [System.IO.Path]::Combine($paths.ProgramData, 'ssh', 'sshd_config')
-        Old        = @([System.IO.Path]::Combine($paths.ProgramData, 'Manatech'), [System.IO.Path]::Combine($paths.ProgramData, 'ssh', 'manatech-banner.txt'))
+        Old        = @($oldData, $oldSshText)
+        OldData    = $oldData
+        OldSshText = $oldSshText
     }
 }
 
@@ -470,7 +484,8 @@ function Assert-UsaBannerWindowsHost {
     .DESCRIPTION
     Throws unless this process runs as an administrator (under -WhatIf,
     anyone may look); on a Windows older than Server 2022 (D15); and, for a
-    deploy, when today's banner is installed, naming what of it was found.
+    deploy without -ReplaceOldBanner, when the old banner is installed,
+    naming what of it was found.
     #>
     [CmdletBinding()]
     param(
@@ -487,7 +502,7 @@ function Assert-UsaBannerWindowsHost {
     if (-not $RefuseOldInstall) { return }
     $found = @(Find-UsaBannerWindowsOldInstall -Layout $Layout)
     if ($found.Count) {
-        throw "UsaBanner: this host has the banner of this repository's Install-ManatechBanner.ps1 ($($found -join ', ')). $Command does not install beside it: removing that banner and deploying this one in one step comes with V1's release (docs/V1-PLAN.md, M7)."
+        throw "UsaBanner: this host has the banner of this repository's Install-ManatechBanner.ps1 ($($found -join ', ')). $Command does not install beside it: $Command -ReplaceOldBanner takes that banner off first, then deploys this one."
     }
 }
 
@@ -695,20 +710,22 @@ function Invoke-UsaBannerWindowsDeploy {
     .SYNOPSIS
     Deploys a configuration to this Windows host: Deploy-UsaBanner's work.
     .DESCRIPTION
-    In:  the configuration (New-UsaBannerDeployConfig).
+    In:  the configuration (New-UsaBannerDeployConfig), and -ReplaceOld to
+         take the old banner off first.
     Out: a line for each change, in the order made; nothing when the host
          already has it all. Under -WhatIf, PowerShell says each change
          instead, and nothing changes.
     Every banner is drawn before anything changes, so a configuration or
-    art that fails leaves the host as it was. Then the module; the banner's
+    art that fails leaves the host as it was. Then the old banner comes off,
+    where -ReplaceOld says so (OldBanner.ps1). Then the module; the banner's
     own folder and its ACL, before anything is written in it; the
     configuration; the profiles; SSH; the logon notice; the periodic job.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
-    param([Parameter(Mandatory)][System.Collections.IDictionary]$Config)
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Config, [switch]$ReplaceOld)
     $layout = Get-UsaBannerWindowsLayout
-    Assert-UsaBannerWindowsHost -Layout $layout -Command 'Deploy-UsaBanner' -RefuseOldInstall
+    Assert-UsaBannerWindowsHost -Layout $layout -Command 'Deploy-UsaBanner' -RefuseOldInstall:(-not $ReplaceOld)
     $recordPath = [System.IO.Path]::Combine($layout.Data, 'deploy.json')
     $record = Read-UsaBannerDeployRecord -Path $recordPath
     $created = [System.Collections.Generic.List[string]]::new()
@@ -728,6 +745,7 @@ function Invoke-UsaBannerWindowsDeploy {
         if ($null -ne $old) { $settings = @(Compare-UsaBannerConfig -Old $old -New $Config) -join '; ' }
     }
 
+    if ($ReplaceOld) { Remove-UsaBannerWindowsOldInstall -Layout $layout }
     Install-UsaBannerModuleCopy -Root '' -Record $record -Created $created -Modules $layout.Modules -FileMode $null -FolderMode $null
     Set-UsaBannerDataFolder -Path $layout.Data -Created $created
     Set-UsaBannerHostFile -Root '' -Path $jsonPath -Bytes $json -Mode $null -What 'the configuration' -Detail $settings
@@ -841,13 +859,14 @@ function Invoke-UsaBannerWindowsRemove {
 function Remove-UsaBannerWindowsFolder {
     # In:  a folder, the one folder the caller may delete, and what it is
     # Out: a line when it was deleted with everything in it
-    # Why: only the banner's own folders go whole; any other is refused
+    # Why: only the banner's own folders, and the old banner's, go whole;
+    #      any other is refused
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Allowed, [Parameter(Mandatory)][string]$What)
     $layout = Get-UsaBannerWindowsLayout
     $modules = [System.IO.Path]::Combine($layout.Modules, 'UsaBanner')
-    $ours = $Path -eq $layout.Data -or $Path.StartsWith("$modules/") -or $Path.StartsWith("$modules\")
+    $ours = $Path -eq $layout.Data -or $Path -eq $layout.OldData -or $Path.StartsWith("$modules/") -or $Path.StartsWith("$modules\")
     if ($Path -ne $Allowed -or -not $ours) { throw "UsaBanner: $Path is not one of the banner's own folders, so it is not deleted." }
     if (-not [System.IO.Directory]::Exists($Path)) { return }
     $count = @([System.IO.Directory]::GetFiles($Path, '*', [System.IO.SearchOption]::AllDirectories)).Count
