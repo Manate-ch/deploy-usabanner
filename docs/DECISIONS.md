@@ -1109,6 +1109,13 @@ updates could sit waiting [known].
   forum report has a base-files upgrade erroring after the units were deleted
   (not masked) [search-snippet]. The lab test covered it: with the timer
   masked, a point-release upgrade of base-files raised no error [measured].
+  **Stopped first, then masked (2026-10-23):** `mask --now` masks before it
+  stops, and a timer that is running at that reload fails ("Unit to trigger
+  vanished", "Failed with result 'resources'", systemd 255 [measured]), which
+  every login then lists among the failed units. `Deploy-UsaBanner` stops the
+  timer, then masks it. With UsaBanner deployed, base-files, motd-news-config,
+  update-notifier-common and landscape-common down to the release versions
+  and back up asked nothing either [measured, 2026-10-23].
 - **Diverting the conffiles (`dpkg-divert`) is not the answer.** It works
   mechanically, but Debian Policy says not to divert a conffile [search-snippet:
   Debian Policy, diversions appendix; mechanism fetched from dpkg 1.22.6
@@ -1528,6 +1535,20 @@ and no banner after login; with a default shell that is not a PowerShell,
 nothing shows after login. Calling deploy-usawinssh's host script, and the
 optional public key, come with the walk-through (M5).
 
+**Changed (2026-10-23), your call in !45: the deploy sets the default
+shell.** The banner after login lives in a PowerShell profile, and cmd.exe,
+which sshd starts where no `DefaultShell` is set, runs none. Where OpenSSH's
+`DefaultShell` is not a PowerShell, `Deploy-UsaBanner` sets it to pwsh, or to
+Windows PowerShell where PowerShell 7 is missing; a PowerShell already set is
+kept. The record keeps what was there before the first deploy set it, and
+`Remove-UsaBanner` puts that back while the value is still the one the deploy
+set. `Get-UsaBanner`'s `ssh default shell` check says `differs` where it is
+not a PowerShell, since a deploy would change it. PowerShell remoting over
+SSH (`Enter-PSSession -HostName`) is another path, untouched here: it starts
+PowerShell as an SSH subsystem, which needs a `Subsystem powershell` line in
+`sshd_config`, and loads no profile, so no banner shows in it [fetched:
+Microsoft Learn, "PowerShell Remoting Over SSH", 2025-09-08].
+
 ## D22. Network devices (stretch)
 
 Most network OSes have a static banner command: Cisco IOS and NX-OS have
@@ -1597,9 +1618,24 @@ configuration or art that fails leaves the old banner as it was
   record of what it changed. The deploy then turns the same stock scripts
   off again, on its own record, so `Remove-UsaBanner` later turns them back
   on: deploy, remove, and the host is stock.
-- **Left as they are:** a git clone the old timer pulled into, the OpenSSH
-  default shell (this banner needs a PowerShell there too, D21), and
-  `sshd_config.manatech-bak`, the old installer's copy of `sshd_config`.
+- **Left as they are:** the OpenSSH default shell where it is a PowerShell
+  (this banner sets one where it is not, D21), and `sshd_config.manatech-bak`,
+  the old installer's copy of `sshd_config`.
+- **The copy of its repository goes too (2026-10-23, your call in !45):** the
+  old update job ran from a copy of the old banner's repository, a git clone
+  as the README sets one up, which its unit (Ubuntu) or task (Windows) names,
+  so the path is read before the job goes. Only a folder that holds the
+  repository's own files is deleted. On Windows the README puts the clone in
+  the old banner's folder, which went whole before this, so the clone went
+  then too, though this list said it stayed. A remote URL with sign-in
+  details in it (the README's private-fork steps put a deploy token there)
+  gets a warning to revoke the token: deleting the copy does not end it. On
+  Windows, `Install-ManatechBanner.ps1 -UpdateTask` sets the clone's ACL with
+  `icacls /T`, which leaves each file in it with no access for anyone, so its
+  `.git\config` cannot be read: the warning then says so, and to revoke a
+  token if the clone was made with one [measured, 2026-10-23]. The delete
+  still works (the folder's own ACL allows it), once each read-only file is
+  made writable: .NET on Windows refuses to delete one [measured].
 - **Group Policy is not adopted:** a GPO that delivers the old banner puts it
   back at the next boot or refresh, so it comes off the host first. The
   deploy warns where the policy ADSys applies still runs the old banner's

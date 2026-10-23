@@ -13,22 +13,27 @@
 #   |                | turned off, back on as Ubuntu ships it: four stock     |
 #   |                | MOTD scripts, landscape-sysinfo, motd-news.timer; its  |
 #   |                | sshd drop-in (ssh reloads); its MOTD scripts, console  |
-#   |                | file and folders                                       |
+#   |                | file and folders; the copy of its repository its timer |
+#   |                | ran install.sh from (a git clone, as the README sets   |
+#   |                | one up)                                                |
 #   | Windows Server | its tasks; its block in both all-users profiles; its   |
 #   |                | Banner line in sshd_config, with each Banner it turned |
-#   |                | off back on, checked with sshd -t; its SSH banner file |
-#   |                | and its folder                                         |
+#   |                | off back on, checked with sshd -t; its SSH banner      |
+#   |                | file; the git clone its update task pulled into; its   |
+#   |                | folder                                                 |
 #   +----------------+--------------------------------------------------------+
 #
 # The old banner kept no record, so what it changed comes back as the OS ships
 # it. The deploy that follows turns the same stock scripts off again, on its
-# own record this time, so Remove-UsaBanner turns them back on. Left as they
-# are: a git clone the old timer pulled into, the OpenSSH default shell (this
-# banner needs a PowerShell there too, D21), and sshd_config.manatech-bak, the
-# old installer's copy of sshd_config. A Group Policy that delivers the old
-# banner delivers it again at the next boot or policy refresh, so its GPO comes
-# off the host first (D23); Get-UsaBanner's "old banner" check says when the
-# old banner is back.
+# own record this time, so Remove-UsaBanner turns them back on. A clone's
+# remote URL can hold a deploy token (the README's private-fork steps): the
+# clone goes, and a warning says to revoke the token, which works until it is.
+# Left as they are: the OpenSSH default shell where it is a PowerShell (this
+# banner sets one where it is not, D21), and sshd_config.manatech-bak, the old
+# installer's copy of sshd_config. A Group Policy that delivers the old banner
+# delivers it again at the next boot or policy refresh, so its GPO comes off
+# the host first (D23); Get-UsaBanner's "old banner" check says when the old
+# banner is back.
 
 # The stock MOTD scripts install.sh --retire turns off (chmod -x).
 $script:UsaOldRetired = @('00-header', '10-help-text', '50-motd-news', '98-reboot-required')
@@ -65,6 +70,14 @@ $script:UsaOldSshdNote = '^# replaced by Install-ManatechBanner\.ps1 on \d{4}-\d
 # one the "Manatech MOTD" GPO makes.
 $script:UsaOldTasks = @('Manatech banner update', 'Manatech MOTD sync')
 $script:UsaOldGpoTask = 'Manatech MOTD sync'
+$script:UsaOldUpdateTask = 'Manatech banner update'
+# The unit whose ExecStart names the copy of the repository the old timer ran
+# install.sh from (units_clone in units.sh); where Group Policy delivers it,
+# the unit runs adsys-startup.sh from ADSys's copy of SYSVOL instead.
+$script:UsaOldUpdateUnit = '/etc/systemd/system/manatech-motd-update.service'
+# Two files every copy of the old banner's repository holds: a folder is
+# deleted as one only when it has both.
+$script:UsaOldRepoFiles = @('install.sh', 'windows/Install-ManatechBanner.ps1')
 
 function Enable-UsaBannerExecutable {
     # In:  the host's root, a script's path on the host, and what it is
@@ -102,13 +115,16 @@ function Remove-UsaBannerLinuxOldInstall {
     and started, or enabled again where its package enabled it and the
     first install.sh disabled it. Then its sshd drop-in (ssh reloads), its
     MOTD scripts and console file (and /etc/issue.d, when that leaves it
-    empty: install.sh made it), and its folders. Where ADSys still applies
-    a GPO that runs the old banner's startup script, a warning says it puts
-    the old banner back at the next boot.
+    empty: install.sh made it), its folders, and the copy of its repository
+    its timer ran install.sh from, which the timer's unit names, so it is
+    read before the unit goes. Where ADSys still applies a GPO that runs the
+    old banner's startup script, a warning says it puts the old banner back
+    at the next boot.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param([AllowEmptyString()][string]$Root = '')
+    $repo = Get-UsaBannerOldLinuxRepo -Root $Root
     foreach ($unit in $script:UsaOldJobs) {
         if ([System.IO.File]::Exists("$Root/etc/systemd/system/$unit") -and
             $PSCmdlet.ShouldProcess($unit, 'Stop and disable the old banner''s job (systemctl disable --now)')) {
@@ -183,6 +199,7 @@ function Remove-UsaBannerLinuxOldInstall {
         'deleted the empty folder /etc/issue.d: install.sh made it, and no package ships it'
     }
     foreach ($folder in $script:UsaOldFolders.Keys) { Remove-UsaBannerHostFolder -Root $Root -Path $folder -What $script:UsaOldFolders[$folder] }
+    if ($repo) { Remove-UsaBannerOldRepo -Root $Root -Path $repo -What 'its timer ran install.sh from' }
     if (Test-UsaBannerOldAdsysPolicy -Root $Root) {
         Write-Warning "UsaBanner: a Group Policy that ADSys applies here runs the old banner's startup script ($script:UsaOldAdsysScript), which puts the old banner back at the next boot: take that GPO off this host (D23). Get-UsaBanner's old banner check says when it is back."
     }
@@ -249,13 +266,16 @@ function Remove-UsaBannerWindowsOldInstall {
     Its tasks go first, so they install nothing more while it goes. Then its
     block in both all-users profiles; its Banner line in sshd_config, with
     each Banner it turned off back on (sshd -t checks the file, and one it
-    refuses is put back; sshd is not restarted); its SSH banner file and its
-    folder. The task a Group Policy makes comes back at the next policy
-    refresh while the GPO applies: a warning says so.
+    refuses is put back; sshd is not restarted); its SSH banner file; the git
+    clone its update task pulled into, which the task names, so it is read
+    before the task goes (the README puts the clone in the old banner's
+    folder); its folder. The task a Group Policy makes comes back at the
+    next policy refresh while the GPO applies: a warning says so.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param([Parameter(Mandatory)][hashtable]$Layout)
+    $repo = Get-UsaBannerOldWindowsRepo
     foreach ($name in $script:UsaOldTasks) {
         if ((Get-UsaBannerTask -Path '\' -Name $name) -and $PSCmdlet.ShouldProcess("\$name", 'Unregister the old banner''s task')) {
             Unregister-UsaBannerTask -Path '\' -Name $name
@@ -297,7 +317,104 @@ function Remove-UsaBannerWindowsOldInstall {
         }
     }
     Remove-UsaBannerHostFile -Root '' -Path $Layout.OldSshText -What 'the old banner''s SSH banner'
+    if ($repo) { Remove-UsaBannerOldRepo -Path $repo -What 'its update task pulled into' }
     Remove-UsaBannerWindowsFolder -Path $Layout.OldData -Allowed $Layout.OldData -What 'the old banner: its module, data, settings and logs'
+}
+
+function Get-UsaBannerOldLinuxRepo {
+    # In:  the host's root
+    # Out: the copy of the old banner's repository its timer ran install.sh
+    #      from, as the timer's unit names it (ExecStart=/bin/sh <copy>/
+    #      install.sh); nothing without that unit, or where it runs
+    #      adsys-startup.sh, as it does where Group Policy delivers the banner
+    param([AllowEmptyString()][string]$Root = '')
+    $unit = "$Root$script:UsaOldUpdateUnit"
+    if (-not [System.IO.File]::Exists($unit)) { return }
+    foreach ($line in [System.IO.File]::ReadAllLines($unit)) {
+        if ($line -match '^ExecStart=/bin/sh (/\S+)/install\.sh(\s|$)') { return $Matches[1] }
+    }
+}
+
+function Get-UsaBannerOldWindowsRepo {
+    # Out: the git clone the old banner's update task pulled into, as the
+    #      task names the script it runs (<clone>\windows\
+    #      Update-ManatechBanner.ps1, Install-ManatechBanner.ps1 -UpdateTask);
+    #      nothing without that task
+    $task = Get-UsaBannerTask -Path '\' -Name $script:UsaOldUpdateTask
+    if ($task -and [string]$task.Arguments -match '-File\s+"?(.+?)[\\/]windows[\\/]Update-ManatechBanner\.ps1"?(\s|$)') { $Matches[1] }
+}
+
+function Test-UsaBannerOldRepo {
+    # In:  a folder
+    # Out: $true when it holds a copy of the old banner's repository: both
+    #      of its own files
+    # Why: the folder's path comes from a unit or a task, which anyone who
+    #      may change those could have pointed elsewhere
+    param([Parameter(Mandatory)][string]$Path)
+    @($script:UsaOldRepoFiles | Where-Object { -not [System.IO.File]::Exists([System.IO.Path]::Combine($Path, $_)) }).Count -eq 0
+}
+
+function Test-UsaBannerRepoSignIn {
+    # In:  a copy of a repository
+    # Out: $true when a remote URL in its .git/config holds sign-in details
+    #      (https://user:token@host/...), as the README's private-fork steps
+    #      clone it; $null when the file is there and cannot be read, so no
+    #      one can say; $false otherwise. The URL itself is never returned
+    # Why: Install-ManatechBanner.ps1 -UpdateTask sets the clone's ACL with
+    #      icacls /T, which leaves each file already in it with no access for
+    #      anyone, Administrators included (lab, 2026-10-23)
+    param([Parameter(Mandatory)][string]$Path)
+    $config = [System.IO.Path]::Combine($Path, '.git', 'config')
+    if (-not [System.IO.File]::Exists($config)) { return $false }
+    try { $lines = [System.IO.File]::ReadAllLines($config) }
+    catch [System.UnauthorizedAccessException], [System.IO.IOException] { return $null }
+    @($lines | Where-Object { $_ -match '^\s*url\s*=\s*https?://[^/@\s]+@' }).Count -gt 0
+}
+
+function Remove-UsaBannerOldRepo {
+    <#
+    .SYNOPSIS
+    Deletes the copy of the old banner's repository its update job ran from.
+    .DESCRIPTION
+    In:  the host's root (Ubuntu; '' on Windows), the copy's path on the
+         host, and what the old banner's job did with it.
+    Out: a line when it was deleted. A folder without the repository's own
+         files is left, with a warning: its path came from a unit or a task.
+         Where a remote URL in it held sign-in details, a warning says to
+         revoke the token: deleting the copy does not end it. Where its
+         .git/config could not be read, a warning says so, and to revoke a
+         token if the clone was made with one.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([string])]
+    param(
+        [AllowEmptyString()][string]$Root = '',
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$What
+    )
+    $full = "$Root$Path"
+    if (-not [System.IO.Directory]::Exists($full)) { return }
+    if (-not (Test-UsaBannerOldRepo -Path $full)) {
+        Write-Warning "UsaBanner: $Path, which the old banner's job names, does not hold a copy of the old banner's repository, so it is left as it is."
+        return
+    }
+    $files = @([System.IO.Directory]::GetFiles($full, '*', [System.IO.SearchOption]::AllDirectories))
+    if (-not $PSCmdlet.ShouldProcess($Path, "Delete the folder and the $($files.Count) file(s) in it: the copy of the old banner's repository $What")) { return }
+    $signIn = Test-UsaBannerRepoSignIn -Path $full
+    # git writes its objects read-only, and on Windows .NET deletes no
+    # read-only file.
+    foreach ($file in $files) {
+        $attributes = [System.IO.File]::GetAttributes($file)
+        if ($attributes -band [System.IO.FileAttributes]::ReadOnly) { [System.IO.File]::SetAttributes($file, $attributes -band -bnot [System.IO.FileAttributes]::ReadOnly) }
+    }
+    [System.IO.Directory]::Delete($full, $true)
+    "deleted $Path and the $($files.Count) file(s) in it: the copy of the old banner's repository $What"
+    if ($signIn) {
+        Write-Warning "UsaBanner: a remote URL in $Path held sign-in details, as the README's private-fork steps put a deploy token there. The copy is deleted, and the token works until it is revoked: revoke it where it was issued."
+    }
+    elseif ($null -eq $signIn) {
+        Write-Warning "UsaBanner: $([System.IO.Path]::Combine($Path, '.git', 'config')) could not be read (Install-ManatechBanner.ps1 -UpdateTask leaves the clone's files so), so whether a remote URL in it held a deploy token is not known. The copy is deleted; if it was cloned with a token, as the README's private-fork steps do, revoke it where it was issued."
+    }
 }
 
 function Get-UsaBannerOldBannerCheck {

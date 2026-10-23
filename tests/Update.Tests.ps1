@@ -67,7 +67,7 @@ BeforeAll {
 
 AfterAll {
     Remove-Variable -Name UsaDeployCalls, UsaDeployAnswers, UsaDeployUnits, UsaDeployRoot, UsaRelease, UsaDownloads -Scope Global -ErrorAction SilentlyContinue
-    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinShell, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
     Remove-Module UsaBanner -ErrorAction SilentlyContinue
 }
 

@@ -104,8 +104,10 @@ function Use-StockAnswers {
     $global:UsaDeployAnswers = $Answers
     # Running: the services started and not yet stopped, as a run in progress. Disabled: units
     # an admin (or the first install.sh) disabled, which a stock host has enabled. Failed: a run
-    # stopped part way, as systemd 255 leaves it ("Failed with result 'signal'", lab 2026-10-23).
-    $global:UsaDeployUnits = @{ Masked = @(); Enabled = @(); Overrides = @(); Running = @(); Disabled = @(); Failed = @() }
+    # stopped part way, as systemd 255 leaves it ("Failed with result 'signal'", lab 2026-10-23),
+    # and a timer masked while active ("Unit to trigger vanished", "Failed with result
+    # 'resources'", lab 2026-10-23). Stopped: motd-news.timer, active on a stock host, once stopped.
+    $global:UsaDeployUnits = @{ Masked = @(); Enabled = @(); Overrides = @(); Running = @(); Disabled = @(); Failed = @(); Stopped = @() }
     Mock -ModuleName UsaBanner Invoke-UsaBannerNative {
         $call = (@($FilePath) + @($ArgumentList)) -join ' '
         $global:UsaDeployCalls.Add($call)
@@ -119,12 +121,25 @@ function Use-StockAnswers {
                 if ($Matches[1] -in $units.Enabled -or $Matches[1] -eq 'motd-news.timer') { return @{ ExitCode = 0; Output = @('enabled') } }
                 return @{ ExitCode = 4; Output = @('not-found') }
             }
-            '^systemctl is-active motd-news\.timer$' { return @{ ExitCode = 0; Output = @('active') } }
+            '^systemctl is-active motd-news\.timer$' {
+                if ('motd-news.timer' -in $units.Masked -or 'motd-news.timer' -in $units.Stopped) { return @{ ExitCode = 3; Output = @('inactive') } }
+                return @{ ExitCode = 0; Output = @('active') }
+            }
             '^systemctl is-active (\S+)$' {
                 if ($Matches[1] -in $units.Enabled -or $Matches[1] -match '^ssh\.(service|socket)$') { return @{ ExitCode = 0; Output = @('active') } }
                 return @{ ExitCode = 3; Output = @('inactive') }
             }
-            '^systemctl mask --now (\S+)$' { $units.Masked += $Matches[1]; return $done }
+            '^systemctl mask (--now )?(\S+)$' {
+                # --now masks first, then stops: either way the reload finds the timer active.
+                if ($Matches[2] -eq 'motd-news.timer' -and $Matches[2] -notin $units.Masked -and $Matches[2] -notin $units.Stopped) { $units.Failed += $Matches[2] }
+                $units.Masked += $Matches[2]
+                return $done
+            }
+            '^systemctl start (\S+)$' {
+                $units.Stopped = @($units.Stopped | Where-Object { $_ -ne $Matches[1] })
+                $units.Failed = @($units.Failed | Where-Object { $_ -ne $Matches[1] })
+                return $done
+            }
             '^systemctl unmask (\S+)$' { $units.Masked = @($units.Masked | Where-Object { $_ -ne $Matches[1] }); return $done }
             '^systemctl enable --now (\S+)$' {
                 $units.Enabled += $Matches[1]
@@ -141,6 +156,7 @@ function Use-StockAnswers {
             '^systemctl stop (\S+)$' {
                 if ($Matches[1] -in $units.Running) { $units.Failed += $Matches[1] }
                 $units.Running = @($units.Running | Where-Object { $_ -ne $Matches[1] })
+                if ($Matches[1] -eq 'motd-news.timer') { $units.Stopped += $Matches[1] }
                 return $done
             }
             '^systemctl is-failed (\S+)$' {
@@ -205,7 +221,7 @@ function New-WindowsHost {
 function Get-WindowsHostState {
     # In:  a host folder
     # Out: a line for each file and folder in it, sorted, a file with its SHA-256; then the
-    #      logon notice and each task, as the stores hold them
+    #      logon notice, OpenSSH's default shell and each task, as the stores hold them
     param([string]$Root)
     foreach ($item in @(Get-ChildItem -LiteralPath $Root -Recurse -Force | Sort-Object -Property FullName)) {
         $relative = [System.IO.Path]::GetRelativePath($Root, $item.FullName)
@@ -213,6 +229,7 @@ function Get-WindowsHostState {
         else { "$relative $(Get-FileHashText $item.FullName)" }
     }
     "notice: $($global:UsaWinNotice.Exists) '$($global:UsaWinNotice.Caption)' '$($global:UsaWinNotice.Text)'"
+    "default shell: '$global:UsaWinShell'"
     foreach ($name in @($global:UsaWinTasks.Keys | Sort-Object)) { "task ${name}: $($global:UsaWinTasks[$name].Execute) $($global:UsaWinTasks[$name].Arguments)" }
 }
 
@@ -226,6 +243,8 @@ function Use-WindowsHost {
     $global:UsaWinCalls = [System.Collections.Generic.List[string]]::new()
     $global:UsaWinAnswers = $Answers
     $global:UsaWinNotice = @{ Caption = ''; Text = ''; Exists = $true }
+    # OpenSSH's DefaultShell; '' for none set, which is cmd.exe.
+    $global:UsaWinShell = 'C:\Program Files\PowerShell\7\pwsh.exe'
     # The banner's tasks, by name: @{ Execute; Arguments; Schedule }; and those with a run in progress.
     $global:UsaWinTasks = @{}
     $global:UsaWinRunning = @{}
@@ -239,7 +258,11 @@ function Use-WindowsHost {
     # Started after anything a test writes: sshd has read sshd_config as it is.
     Mock -ModuleName UsaBanner Get-UsaBannerServiceStart { [datetime]::UtcNow }
     Mock -ModuleName UsaBanner Get-UsaBannerHostFacts { @{ Name = 'BEVSW-APP1.ad.example'; Ip = '10.20.40.81'; Services = @{ Text = 'sshd, W32Time running'; Level = 'good' } } }
-    Mock -ModuleName UsaBanner Get-UsaBannerSshDefaultShell { 'C:\Program Files\PowerShell\7\pwsh.exe' }
+    Mock -ModuleName UsaBanner Get-UsaBannerSshDefaultShell { $global:UsaWinShell }
+    Mock -ModuleName UsaBanner Write-UsaBannerSshDefaultShell {
+        $global:UsaWinCalls.Add($(if ($Remove) { 'default shell removed' } else { "default shell set: $Path" }))
+        $global:UsaWinShell = if ($Remove) { '' } else { $Path }
+    }
     Mock -ModuleName UsaBanner Find-UsaBannerPwsh { 'C:\Program Files\PowerShell\7\pwsh.exe' }
     Mock -ModuleName UsaBanner Read-UsaBannerLogonNoticeValue { @{ Caption = $global:UsaWinNotice.Caption; Text = $global:UsaWinNotice.Text; Exists = $global:UsaWinNotice.Exists } }
     Mock -ModuleName UsaBanner Write-UsaBannerLogonNoticeValue {

@@ -94,6 +94,23 @@ BeforeAll {
         $global:UsaWinTasks['Manatech MOTD sync'] = @{ Execute = 'powershell.exe'; Arguments = '-File Sync-ManatechBanner.ps1'; Schedule = 'gpo' }
     }
 
+    function Add-OldRepoCopy {
+        # In:  a host folder, the copy's path in it, and its remote URL
+        # Out: nothing; a copy of the old banner's repository is there as git clone leaves one: the repository's
+        #      own files, and .git with its remote and an object written read-only, as git writes them (5 files)
+        param([string]$Root, [string]$Path, [string]$Url = 'https://gitlab.example.com/contoso/deploy-usamotd.git')
+        $full = Join-Path $Root $Path
+        foreach ($file in 'install.sh', 'windows/Install-ManatechBanner.ps1', 'windows/Update-ManatechBanner.ps1') {
+            $null = New-Item -ItemType Directory -Path (Split-Path (Join-Path $full $file)) -Force
+            [System.IO.File]::WriteAllText((Join-Path $full $file), "# $file`n")
+        }
+        $null = New-Item -ItemType Directory -Path (Join-Path $full '.git/objects/pack') -Force
+        [System.IO.File]::WriteAllText((Join-Path $full '.git/config'), "[remote `"origin`"]`n`turl = $Url`n`tfetch = +refs/heads/*:refs/remotes/origin/*`n")
+        $pack = Join-Path $full '.git/objects/pack/pack-0.pack'
+        [System.IO.File]::WriteAllText($pack, 'PACK')
+        [System.IO.File]::SetAttributes($pack, [System.IO.FileAttributes]::ReadOnly)
+    }
+
     function Add-AdminBanner {
         # In:  the host folder
         # Out: nothing; sshd_config has the admin's own Banner line above the first Match, as before any banner came
@@ -105,7 +122,7 @@ BeforeAll {
 
 AfterAll {
     Remove-Variable -Name UsaDeployCalls, UsaDeployAnswers, UsaDeployUnits, UsaDeployRoot -Scope Global -ErrorAction SilentlyContinue
-    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinShell, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
     Remove-Module UsaBanner -ErrorAction SilentlyContinue
 }
 
@@ -249,6 +266,57 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Ubuntu' -Skip:$IsWindows {
         Get-Calls -Changes | Should -Not -Contain 'systemctl enable --now motd-news.timer'
     }
 
+    It 'deletes the copy of its repository the old timer ran install.sh from, as the timer''s unit names it, last' {
+        Add-OldUbuntuBanner $Root
+        Write-TestFile $Root 'etc/systemd/system/manatech-motd-update.service' "[Service]`nType=oneshot`nExecStart=/bin/sh /opt/manatech-motd/install.sh --update`n"
+        Add-OldRepoCopy $Root 'opt/manatech-motd'
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue)
+        $deleted = "deleted /opt/manatech-motd and the 5 file(s) in it: the copy of the old banner's repository its timer ran install.sh from"
+        $lines | Should -Contain $deleted
+        [array]::IndexOf($lines, $deleted) | Should -BeGreaterThan ([array]::IndexOf($lines, "deleted /var/lib/manatech and the 1 file(s) in it: the old banner's cached facts"))
+        Join-Path $Root 'opt/manatech-motd' | Should -Not -Exist
+        "$warned" | Should -Not -BeLike '*sign-in*'
+    }
+
+    It 'warns to revoke the token where a remote URL in the copy held sign-in details, and never shows the URL' {
+        Add-OldUbuntuBanner $Root
+        Write-TestFile $Root 'etc/systemd/system/manatech-motd-update.service' "[Service]`nExecStart=/bin/sh /opt/manatech-motd/install.sh --update --ad`n"
+        Add-OldRepoCopy $Root 'opt/manatech-motd' -Url 'https://deploy:not-a-real-token@gitlab.example.com/contoso/motd.git'
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue)
+        Join-Path $Root 'opt/manatech-motd' | Should -Not -Exist
+        "$warned" | Should -BeLike '*a remote URL in /opt/manatech-motd held sign-in details*revoke it where it was issued*'
+        "$warned $lines" | Should -Not -BeLike '*not-a-real-token*'
+    }
+
+    It 'leaves a folder the unit names that holds no copy of the repository, and says so' {
+        Add-OldUbuntuBanner $Root
+        Write-TestFile $Root 'etc/systemd/system/manatech-motd-update.service' "[Service]`nExecStart=/bin/sh /srv/tools/install.sh`n"
+        Write-TestFile $Root 'srv/tools/install.sh' "#!/bin/sh`n"
+        $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue
+        Join-Path $Root 'srv/tools/install.sh' | Should -Exist
+        "$warned" | Should -BeLike "*/srv/tools, which the old banner's job names, does not hold a copy of the old banner's repository, so it is left as it is*"
+    }
+
+    It 'reads no copy where Group Policy delivers the old banner, whose unit runs adsys-startup.sh from ADSys''s copy' {
+        Add-OldUbuntuBanner $Root
+        Write-TestFile $Root 'etc/systemd/system/manatech-motd-update.service' "[Service]`nExecStart=/bin/sh /var/cache/adsys/sysvol/assets/scripts/MOTD/adsys-startup.sh`n"
+        Add-OldRepoCopy $Root 'var/cache/adsys/sysvol/assets/scripts/MOTD'
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningAction SilentlyContinue)
+        Join-Path $Root 'var/cache/adsys/sysvol/assets/scripts/MOTD/install.sh' | Should -Exist
+        @($lines | Where-Object { $_ -like '*repository*' }) | Should -BeNullOrEmpty
+    }
+
+    It 'leaves the host as it was before the old banner came, its copy of the repository included, after Remove-UsaBanner' {
+        $null = New-Item -ItemType Directory -Path (Join-Path $Root 'opt')
+        $before = Get-HostState $Root
+        Add-OldUbuntuBanner $Root
+        Write-TestFile $Root 'etc/systemd/system/manatech-motd-update.service' "[Service]`nExecStart=/bin/sh /opt/manatech-motd/install.sh --update`n"
+        Add-OldRepoCopy $Root 'opt/manatech-motd'
+        $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner
+        $null = Remove-UsaBanner
+        Get-HostState $Root | Should -Be $before
+    }
+
     It 'has Get-UsaBanner''s old banner check ok after it, and differs when the old banner is back' {
         Add-OldUbuntuBanner $Root
         $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner
@@ -304,6 +372,53 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Windows Server' {
         $null = Remove-UsaBanner
         @(Get-WindowsHostState $Root | Where-Object { $_ -notlike 'ProgramData/ssh/sshd_config.manatech-bak *' }) | Should -Be $before
         Join-Path $Root 'ProgramData/ssh/sshd_config.manatech-bak' | Should -Exist
+    }
+
+    It 'deletes the git clone its update task pulled into, read-only objects too, before the folder the README puts it in' {
+        Add-OldWindowsBanner $Root
+        Add-OldRepoCopy $Root 'ProgramData/Manatech/repo'
+        $global:UsaWinTasks['Manatech banner update'].Arguments = "-NoProfile -NonInteractive -File `"$Root/ProgramData/Manatech/repo/windows/Update-ManatechBanner.ps1`""
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue)
+        $lines[5..7] | Should -Be @(
+            "deleted $Root/ProgramData/ssh/manatech-banner.txt: the old banner's SSH banner"
+            "deleted $Root/ProgramData/Manatech/repo and the 5 file(s) in it: the copy of the old banner's repository its update task pulled into"
+            "deleted $Root/ProgramData/Manatech and the 3 file(s) in it: the old banner: its module, data, settings and logs"
+        )
+        Join-Path $Root 'ProgramData/Manatech' | Should -Not -Exist
+        "$warned" | Should -Not -BeLike '*sign-in*'
+    }
+
+    It 'deletes a clone the task names outside the old folder, and warns to revoke a token its remote URL held' {
+        Add-OldWindowsBanner $Root
+        Add-OldRepoCopy $Root 'Tools/deploy-usamotd' -Url 'https://deploy:not-a-real-token@gitlab.example.com/contoso/motd.git'
+        $global:UsaWinTasks['Manatech banner update'].Arguments = "-NoProfile -NonInteractive -File `"$Root/Tools/deploy-usamotd/windows/Update-ManatechBanner.ps1`""
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue)
+        $lines | Should -Contain "deleted $Root/Tools/deploy-usamotd and the 5 file(s) in it: the copy of the old banner's repository its update task pulled into"
+        Join-Path $Root 'Tools/deploy-usamotd' | Should -Not -Exist
+        "$warned" | Should -BeLike "*a remote URL in $Root/Tools/deploy-usamotd held sign-in details*revoke it where it was issued*"
+        "$warned $lines" | Should -Not -BeLike '*not-a-real-token*'
+    }
+
+    It 'says whether a token was in the clone could not be told where its .git/config cannot be read, and deletes it still' {
+        # The lab (Server 2022, 2026-10-23): -UpdateTask's icacls /T leaves the clone's files with no access for
+        # anyone, so a sign-in in .git/config cannot be seen.
+        Add-OldWindowsBanner $Root
+        Add-OldRepoCopy $Root 'ProgramData/Manatech/repo' -Url 'https://deploy:not-a-real-token@gitlab.example.com/contoso/motd.git'
+        [System.IO.File]::SetUnixFileMode((Join-Path $Root 'ProgramData/Manatech/repo/.git/config'), [System.IO.UnixFileMode]::None)
+        $global:UsaWinTasks['Manatech banner update'].Arguments = "-File `"$Root/ProgramData/Manatech/repo/windows/Update-ManatechBanner.ps1`""
+        $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue
+        Join-Path $Root 'ProgramData/Manatech/repo' | Should -Not -Exist
+        "$warned" | Should -BeLike "*$Root/ProgramData/Manatech/repo/.git/config could not be read*whether a remote URL in it held a deploy token is not known*revoke it where it was issued*"
+    }
+
+    It 'leaves the host as it was before the old banner came, its clone included, after Remove-UsaBanner, but for the old installer''s copy of sshd_config' {
+        $before = Get-WindowsHostState $Root
+        Add-OldWindowsBanner $Root
+        Add-OldRepoCopy $Root 'ProgramData/Manatech/repo'
+        $global:UsaWinTasks['Manatech banner update'].Arguments = "-File `"$Root/ProgramData/Manatech/repo/windows/Update-ManatechBanner.ps1`""
+        $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningAction SilentlyContinue
+        $null = Remove-UsaBanner
+        @(Get-WindowsHostState $Root | Where-Object { $_ -notlike 'ProgramData/ssh/sshd_config.manatech-bak *' }) | Should -Be $before
     }
 
     It 'changes nothing under -WhatIf' {

@@ -577,7 +577,7 @@ function Get-UsaBannerWindowsStatus {
     else {
         $leaf = Get-UsaBannerSshShellName
         if ($leaf -in 'pwsh.exe', 'powershell.exe') { $checks.Add((New-UsaBannerCheck -Check 'ssh default shell' -State 'ok' -Detail "sshd starts $leaf at a login, whose profile shows the banner")) }
-        else { $checks.Add((New-UsaBannerCheck -Check 'ssh default shell' -State 'off' -Detail "sshd starts $leaf at a login, so no banner shows after an SSH login: deploy-usawinssh sets pwsh.exe")) }
+        else { $checks.Add((New-UsaBannerCheck -Check 'ssh default shell' -State 'differs' -Detail "sshd starts $leaf at a login, so no banner shows after an SSH login: Deploy-UsaBanner sets a PowerShell there")) }
     }
 
     $record = Read-UsaBannerDeployRecord -Path ([System.IO.Path]::Combine($layout.Data, 'deploy.json'))

@@ -49,7 +49,7 @@ BeforeAll {
 
 AfterAll {
     Remove-Variable -Name UsaDeployCalls, UsaDeployAnswers, UsaDeployUnits, UsaDeployRoot -Scope Global -ErrorAction SilentlyContinue
-    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinShell, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
     Remove-Module UsaBanner -ErrorAction SilentlyContinue
 }
 
@@ -316,13 +316,13 @@ Describe 'Get-UsaBanner on Windows Server' {
         $status.Healthy | Should -BeTrue
     }
 
-    It 'says SSH logins show no banner where sshd starts cmd.exe: off, and the host healthy still' {
+    It 'says SSH logins show no banner where sshd starts cmd.exe: differs, as a deploy sets a PowerShell there' {
         Mock -ModuleName UsaBanner Get-UsaBannerSshDefaultShell { '' }
         $status = Get-ReadOnlyStatus
         $check = Get-Check $status 'ssh default shell'
-        $check.State | Should -BeExactly 'off'
-        $check.Detail | Should -BeExactly 'sshd starts cmd.exe at a login, so no banner shows after an SSH login: deploy-usawinssh sets pwsh.exe'
-        $status.Healthy | Should -BeTrue
+        $check.State | Should -BeExactly 'differs'
+        $check.Detail | Should -BeExactly 'sshd starts cmd.exe at a login, so no banner shows after an SSH login: Deploy-UsaBanner sets a PowerShell there'
+        $status.Healthy | Should -BeFalse
     }
 
     It 'names what broke: <Case>' -ForEach @(
