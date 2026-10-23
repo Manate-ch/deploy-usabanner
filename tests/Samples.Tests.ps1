@@ -65,6 +65,22 @@ Describe 'Add-UsaBannerSample' {
         @(Get-ChildItem -LiteralPath $folder -Recurse -Force | ForEach-Object { $_.Name }) | Should -BeExactly @('samples.tsv')
     }
 
+    It 'starts again from a samples file this account cannot read, and says so' {
+        # The lab (Server 2022 and 2025, 2026-10-23): with an empty ACL on samples.tsv, the job's next run
+        # replaced it. -ErrorAction Stop: without its own catch, the read's error stops the call.
+        $path = Join-Path $TestDrive 'unreadable-old.tsv'
+        Write-Samples $path "$($Epoch - 600)`tcpu`t3"
+        [System.IO.File]::SetUnixFileMode($path, [System.IO.UnixFileMode]::None)
+        $warnings = InModuleScope UsaBanner -Parameters @{ Facts = (New-Facts); Path = $path; Now = $Now } {
+            param($Facts, $Path, $Now)
+            Add-UsaBannerSample -Facts $Facts -Path $Path -Now $Now -ErrorAction Stop -WarningVariable seen -WarningAction SilentlyContinue
+            $seen
+        }
+        [System.IO.File]::ReadAllText($path) | Should -BeExactly ((@("$Epoch`tcpu`t12", "$Epoch`tmemory`t41", "$Epoch`tdisk`tC:`t63", "$Epoch`tdisk`tD:`t71") -join "`n") + "`n")
+        @($warnings).Count | Should -Be 1
+        "$warnings" | Should -BeLike "*$path cannot be read, so the 24-hour range starts again*"
+    }
+
     It 'leaves out a fact without a percentage' {
         $facts = New-Facts
         $facts.Cpu.Now = $null

@@ -934,8 +934,9 @@ function Invoke-UsaBannerLinuxRemove {
     Out: a line for each change, in the order made; nothing when there is
          no banner here. Under -WhatIf, PowerShell says each change
          instead, and nothing changes.
-    The periodic job and the update job stop first, so they draw and install
-    nothing more. The stock MOTD
+    The periodic job and the update job stop first, a run in progress with
+    them, so they draw and install nothing more, and a run stopped part way
+    leaves no failed unit behind. The stock MOTD
     scripts come back on before the banner goes, so a login meets one or
     both, never neither. Then the SSH drop-in (ssh reloads), the console's
     file, the banner's own folders, the module's copy, and the folders the
@@ -953,9 +954,11 @@ function Invoke-UsaBannerLinuxRemove {
         'usabanner-sample' = @{ What = 'the periodic job'; Units = Get-UsaBannerSystemdUnits }
         'usabanner-update' = @{ What = 'the update job'; Units = Get-UsaBannerUpdateUnits }
     }
+    $stopped = [System.Collections.Generic.List[string]]::new()
     foreach ($job in $jobs.Keys) {
         if ([System.IO.File]::Exists("$root/etc/systemd/system/$job.timer") -and
             $PSCmdlet.ShouldProcess("$job.timer", "Stop and disable $($jobs[$job].What) (systemctl disable --now)")) {
+            $stopped.Add($job)
             $disable = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'disable', '--now', "$job.timer"
             if ($disable.ExitCode -eq 0) { "stopped $job.timer" }
             else { Write-Warning "UsaBanner: systemctl could not disable $job.timer: $($disable.Output -join ' ')" }
@@ -972,6 +975,17 @@ function Invoke-UsaBannerLinuxRemove {
     if ($gone.Count) {
         $reload = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'daemon-reload'
         if ($reload.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl daemon-reload failed: $($reload.Output -join ' ')" }
+    }
+    # A run stopped part way ends failed ("Failed with result 'signal'"), and
+    # with its unit file gone it stays in systemctl's failed list until it is
+    # reset (lab, 2026-10-23).
+    foreach ($job in $stopped) {
+        $state = [string](@((Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'is-failed', "$job.service").Output) + '')[0]
+        if ($state -eq 'failed' -and $PSCmdlet.ShouldProcess("$job.service", 'Clear its failed state, so no failed unit outlives the banner (systemctl reset-failed)')) {
+            $reset = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'reset-failed', "$job.service"
+            if ($reset.ExitCode -eq 0) { "cleared the failed state of ${job}.service: a run stopped part way, or one that failed, ends so" }
+            else { Write-Warning "UsaBanner: systemctl could not reset $job.service: $($reset.Output -join ' ')" }
+        }
     }
 
     foreach ($entry in @($record['retired'])) {

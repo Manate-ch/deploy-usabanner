@@ -1625,6 +1625,22 @@ deploy. What it found, each fixed with a test that fails without it:
   read, and the periodic job check names that file.
 - The ADSys warning and `motd-news.timer`, above.
 
+**The re-test (2026-10-23).** The fixes above held on the same hosts: a
+deploy over a folder whose ACL was not the banner's left each file in it
+with exactly the folder's three entries; a `Remove-UsaBanner` a second
+after a sample started left no folder behind; a fresh deploy and its
+removal left nothing (a diff of 0 lines). An empty ACL on a job file, as
+the old `/T` left one, lasts only to the next sample: as SYSTEM the
+writer's move replaces a file no one can read (SYSTEM may delete in the
+folder), and the samples file's old lines, unreadable, are dropped with a
+warning. Until then a login draws without the file and `Get-UsaBanner`
+names it. A redeploy sets the ACL only where the folder's own is wrong, so
+it leaves the deploy's own files as they are; nothing in the banner makes
+them unreadable. One more finding, fixed: a sample `Remove-UsaBanner`
+stopped part way ended "Failed with result 'signal'" and, its unit file
+gone, stayed in systemctl's failed list, so Remove now clears the failed
+state of the jobs it stops.
+
 ## D24. A LICENSE
 
 **Decided: MIT**, with the same text as deploy-usawinssh ("Copyright (c)

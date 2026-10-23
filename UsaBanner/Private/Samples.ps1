@@ -28,7 +28,8 @@ function Add-UsaBannerSample {
     Out: nothing. A line each for the CPU, the memory and each disk that has
          a percentage. The file is written whole beside itself, then moved
          into place, so a reader never sees half of it; its folder is made
-         when missing. A line that is not a sample is dropped.
+         when missing. A line that is not a sample is dropped, and a file
+         this account cannot read starts again, with a warning.
     #>
     [CmdletBinding()]
     param(
@@ -37,11 +38,19 @@ function Add-UsaBannerSample {
         [datetimeoffset]$Now = [datetimeoffset]::Now
     )
     $time = $Now.ToUnixTimeSeconds()
-    $kept = @(if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
-                $stamp = ($line -split "`t", 2)[0]
-                if ($stamp -match '^[0-9]+$' -and [long]$stamp -gt $time - 86400) { $line }
-            }
+    # The lab (Server 2022 and 2025, 2026-10-23): with an empty ACL on the
+    # file, the next run replaced it, as the move below may; said here, so it
+    # does not rest on the read's error ending only the statement it is in.
+    $old = @()
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        try { $old = [System.IO.File]::ReadAllLines($Path) }
+        catch [System.UnauthorizedAccessException], [System.IO.IOException] {
+            Write-Warning "UsaBanner: $Path cannot be read, so the 24-hour range starts again: $($_.Exception.Message)"
+        }
+    }
+    $kept = @(foreach ($line in $old) {
+            $stamp = ($line -split "`t", 2)[0]
+            if ($stamp -match '^[0-9]+$' -and [long]$stamp -gt $time - 86400) { $line }
         })
     $taken = @(
         if ($Facts['Cpu'] -and $null -ne $Facts['Cpu'].Now) { "$time`tcpu`t$($Facts['Cpu'].Now)" }

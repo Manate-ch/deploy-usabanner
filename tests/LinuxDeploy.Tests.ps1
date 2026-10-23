@@ -308,6 +308,7 @@ Describe 'Remove-UsaBanner on Ubuntu' -Skip:$IsWindows {
             'systemctl disable --now usabanner-sample.timer'
             'systemctl stop usabanner-sample.service'
             'systemctl daemon-reload'
+            'systemctl reset-failed usabanner-sample.service'
             'dpkg-statoverride --remove /usr/share/landscape/landscape-sysinfo.wrapper'
             'systemctl unmask motd-news.timer'
             'systemctl start motd-news.timer'
@@ -328,6 +329,25 @@ Describe 'Remove-UsaBanner on Ubuntu' -Skip:$IsWindows {
             Write-TestFile $global:UsaDeployRoot 'var/lib/usabanner/samples.tsv' "1`tcpu`t5`n"
         }
         Get-HostState $global:UsaDeployRoot | Should -Be $before
+    }
+
+    It 'leaves no failed unit behind when it stops a sample part way' {
+        # The lab (Ubuntu 24.04.5, 2026-10-23): the sample Remove-UsaBanner stopped ended "Failed with result
+        # 'signal'", and with its unit file gone it stayed in systemctl's failed list.
+        $null = Deploy-UsaBanner -Company Contoso
+        $lines = @(Remove-UsaBanner)
+        $global:UsaDeployUnits.Failed | Should -BeNullOrEmpty
+        $lines | Should -Contain 'cleared the failed state of usabanner-sample.service: a run stopped part way, or one that failed, ends so'
+    }
+
+    It 'clears no failed state where no run was stopped' {
+        $null = Deploy-UsaBanner -Company Contoso
+        # The first sample has ended.
+        $global:UsaDeployUnits.Running = @()
+        $global:UsaDeployCalls.Clear()
+        $null = Remove-UsaBanner
+        @(Get-Calls -Changes) | Should -Not -Contain 'systemctl reset-failed usabanner-sample.service'
+        @(Get-Calls) | Should -Contain 'systemctl is-failed usabanner-sample.service'
     }
 
     It 'turns back on only what the deploy turned off' {

@@ -103,8 +103,9 @@ function Use-StockAnswers {
     $global:UsaDeployCalls = [System.Collections.Generic.List[string]]::new()
     $global:UsaDeployAnswers = $Answers
     # Running: the services started and not yet stopped, as a run in progress. Disabled: units
-    # an admin (or the first install.sh) disabled, which a stock host has enabled.
-    $global:UsaDeployUnits = @{ Masked = @(); Enabled = @(); Overrides = @(); Running = @(); Disabled = @() }
+    # an admin (or the first install.sh) disabled, which a stock host has enabled. Failed: a run
+    # stopped part way, as systemd 255 leaves it ("Failed with result 'signal'", lab 2026-10-23).
+    $global:UsaDeployUnits = @{ Masked = @(); Enabled = @(); Overrides = @(); Running = @(); Disabled = @(); Failed = @() }
     Mock -ModuleName UsaBanner Invoke-UsaBannerNative {
         $call = (@($FilePath) + @($ArgumentList)) -join ' '
         $global:UsaDeployCalls.Add($call)
@@ -137,7 +138,16 @@ function Use-StockAnswers {
                 $units.Running += 'usabanner-sample.service'
                 return $done
             }
-            '^systemctl stop (\S+)$' { $units.Running = @($units.Running | Where-Object { $_ -ne $Matches[1] }); return $done }
+            '^systemctl stop (\S+)$' {
+                if ($Matches[1] -in $units.Running) { $units.Failed += $Matches[1] }
+                $units.Running = @($units.Running | Where-Object { $_ -ne $Matches[1] })
+                return $done
+            }
+            '^systemctl is-failed (\S+)$' {
+                if ($Matches[1] -in $units.Failed) { return @{ ExitCode = 0; Output = @('failed') } }
+                return @{ ExitCode = 1; Output = @('inactive') }
+            }
+            '^systemctl reset-failed (\S+)$' { $units.Failed = @($units.Failed | Where-Object { $_ -ne $Matches[1] }); return $done }
             '^dpkg -S (\S+)$' { return @{ ExitCode = 0; Output = @("landscape-common: $($Matches[1])") } }
             '^dpkg-statoverride --list (\S+)$' {
                 if ($Matches[1] -in $units.Overrides) { return @{ ExitCode = 0; Output = @("root root 644 $($Matches[1])") } }
@@ -170,7 +180,7 @@ function Use-LinuxHost {
 function Get-Calls {
     # Out: the programs run since the answers were set, a line each, reads left out when -Changes
     param([switch]$Changes)
-    @($global:UsaDeployCalls | Where-Object { -not $Changes -or $_ -notmatch '^systemctl is-(enabled|active) |^dpkg -S |^dpkg-statoverride --list |^/usr/sbin/sshd -T$' })
+    @($global:UsaDeployCalls | Where-Object { -not $Changes -or $_ -notmatch '^systemctl is-(enabled|active|failed) |^dpkg -S |^dpkg-statoverride --list |^/usr/sbin/sshd -T$' })
 }
 
 function Get-Record {
