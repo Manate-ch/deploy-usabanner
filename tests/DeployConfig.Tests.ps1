@@ -162,7 +162,25 @@ Describe 'the configuration a deploy builds' {
                 $node = $node['properties'][$part]
             }
         }
-        $settings.Count | Should -Be 16
+        $settings.Count | Should -Be 18
+    }
+
+    It 'turns the update channel on with -Update and the address of the releases with -UpdateSource' {
+        $config = New-DeployConfig @{ Update = 'Notify'; UpdateSource = 'https://releases.example.com/usabanner' }
+        Get-Setting $config 'update.mode' | Should -BeExactly 'notify'
+        Get-Setting $config 'update.source' | Should -BeExactly 'https://releases.example.com/usabanner'
+    }
+
+    It 'leaves the update channel off unless a flag turns it on' {
+        Get-Setting (New-DeployConfig @{ Company = 'Contoso' }) 'update.mode' | Should -BeExactly 'off'
+    }
+
+    It 'refuses an update channel turned on with no source to look at' {
+        Get-Failure { New-DeployConfig @{ Update = 'install' } } | Should -BeLike '*the update channel is set to install, with no source to look at: give -UpdateSource*'
+    }
+
+    It 'refuses a source that is not https, naming the flag' {
+        Get-Failure { New-DeployConfig @{ Update = 'notify'; UpdateSource = 'http://releases.example.com/usabanner' } } | Should -BeLike '*-UpdateSource: /update/source: *'
     }
 }
 

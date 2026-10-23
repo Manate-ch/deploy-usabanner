@@ -295,6 +295,47 @@ function Get-UsaBannerLinuxJobCheck {
     Join-UsaBannerFinding -Check 'periodic job' -Ok "usabanner-sample.timer samples every 15 minutes; $($sample.Text)" -Found ($found + @($sample))
 }
 
+function Get-UsaBannerUpdateCheck {
+    <#
+    .SYNOPSIS
+    The update channel's check (D14).
+    .DESCRIPTION
+    In:  the configuration ($null when it cannot be read), the banner's own
+         folder, where the update job keeps update.json, and the findings on
+         the job itself: its units, or its task.
+    Out: the check. ok when the channel is off. Else the job's findings, and
+         its last look as update.json holds it: stale when that failed or is
+         two days old; ok, with what it found, when not.
+    #>
+    param(
+        [AllowNull()][System.Collections.IDictionary]$Config,
+        [Parameter(Mandatory)][string]$State,
+        [object[]]$Found = @()
+    )
+    if (-not $Config) { return New-UsaBannerCheck -Check 'update channel' -State 'unknown' -Detail 'what the configuration sets is not known' }
+    $mode = [string]$Config['update']['mode']
+    if ($mode -eq 'off') { return New-UsaBannerCheck -Check 'update channel' -State 'ok' -Detail 'off: no release is looked for' }
+    $findings = @($Found)
+    $look = 'no look yet: the job looks within a day of the deploy'
+    $path = [System.IO.Path]::Combine($State, 'update.json')
+    if ([System.IO.File]::Exists($path)) {
+        $last = $null
+        try { $last = [System.IO.File]::ReadAllText($path) | ConvertFrom-Json -AsHashtable }
+        catch { $findings += @{ State = 'differs'; Text = "$path cannot be read: $($_.Exception.Message)" } }
+        if ($last) {
+            $checked = [System.DateTimeOffset]::FromUnixTimeSeconds([long]$last['checked']).UtcDateTime
+            $days = [int][Math]::Floor(([datetime]::UtcNow - $checked).TotalDays)
+            if ([string]$last['error']) { $findings += @{ State = 'stale'; Text = "the last look, at $($checked.ToString('u')), failed: $($last['error'])" } }
+            elseif ($days -ge 2) { $findings += @{ State = 'stale'; Text = "the last look was at $($checked.ToString('u')), $days days ago: the job looks once a day" } }
+            elseif ([string]$last['latest'] -and [string]$last['installed'] -and [version][string]$last['latest'] -gt [version][string]$last['installed']) {
+                $look = "UsaBanner $($last['latest']) is out, and this host has $($last['installed']): the banner after login says so"
+            }
+            else { $look = "UsaBanner $($last['installed']) is the newest release, at the last look ($($checked.ToString('u')))" }
+        }
+    }
+    Join-UsaBannerFinding -Check 'update channel' -Ok "$mode, from $([string]$Config['update']['source']); $look" -Found $findings
+}
+
 function Get-UsaBannerLinuxStatus {
     <#
     .SYNOPSIS
@@ -372,6 +413,16 @@ function Get-UsaBannerLinuxStatus {
     $checks.Add((Get-UsaBannerLinuxJobCheck -Root $root))
     if ($common.Version) { $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'ok' -Detail "UsaBanner $($common.Version), for every user and the periodic job: $script:UsaLinuxModules/UsaBanner/$($common.Version)")) }
     else { $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'missing' -Detail "there is no copy in $script:UsaLinuxModules/UsaBanner, where the periodic job imports it from")) }
+    $job = @()
+    if ($config -and [string]$config['update']['mode'] -ne 'off') {
+        $units = Get-UsaBannerUpdateUnits
+        $job = @(
+            foreach ($unit in $units.Keys) { Test-UsaBannerDrawnFile -Root $root -Path "/etc/systemd/system/$unit" -Want $units[$unit] -Stale $false }
+            $timer = [string](@((Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'is-enabled', 'usabanner-update.timer').Output) + '')[0]
+            if ($timer -ne 'enabled') { @{ State = 'differs'; Text = "usabanner-update.timer is $(if ($timer) { $timer } else { 'not known to systemd' }), not enabled" } }
+        )
+    }
+    $checks.Add((Get-UsaBannerUpdateCheck -Config $config -State "$root$script:UsaLinuxState" -Found $job))
 
     New-UsaBannerStatus @common -HostName $name -Ip $ip -Deployed $true -Checks $checks.ToArray() -Services (Get-UsaBannerServicesText -Facts $facts) -Config $config
 }
@@ -453,7 +504,7 @@ function Get-UsaBannerWindowsJobCheck {
     $pwsh = Find-UsaBannerPwsh
     if (-not $pwsh) { $pwsh = (Get-Process -Id $PID).Path }
     $spec = New-UsaBannerSampleTaskSpec -Pwsh $pwsh
-    $task = Get-UsaBannerSampleTask
+    $task = Get-UsaBannerTask -Name $spec.Name
     $found = @()
     if (-not $task) {
         if (Test-UsaBannerPrivileged) { $found += @{ State = 'missing'; Text = "there is no task $($spec.Path)$($spec.Name)" } }
@@ -526,6 +577,19 @@ function Get-UsaBannerWindowsStatus {
     else { $checks.Add((New-UsaBannerCheck -Check 'folder acl' -State 'differs' -Detail "$($layout.Data) does not have the banner's ACL, so others may change the banners every login shows: Deploy-UsaBanner sets it again")) }
     if ($common.Version) { $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'ok' -Detail "UsaBanner $($common.Version), for every user and the periodic job: $([System.IO.Path]::Combine($layout.Modules, 'UsaBanner', [string]$common.Version))")) }
     else { $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'missing' -Detail "there is no copy in $([System.IO.Path]::Combine($layout.Modules, 'UsaBanner')), where every login and the periodic job import it from")) }
+    $job = @()
+    if ($config -and [string]$config['update']['mode'] -ne 'off') {
+        $pwsh = Find-UsaBannerPwsh
+        if (-not $pwsh) { $pwsh = (Get-Process -Id $PID).Path }
+        $spec = New-UsaBannerUpdateTaskSpec -Pwsh $pwsh
+        $task = Get-UsaBannerTask -Name $spec.Name
+        if (-not $task) {
+            if (Test-UsaBannerPrivileged) { $job += @{ State = 'missing'; Text = "there is no task $($spec.Path)$($spec.Name)" } }
+            else { $job += @{ State = 'unknown'; Text = "the task $($spec.Path)$($spec.Name) is not found: an administrator sees every task" } }
+        }
+        elseif ($task.Execute -ne $spec.Execute -or $task.Arguments -ne $spec.Arguments) { $job += @{ State = 'differs'; Text = "the task $($spec.Name) runs $($task.Execute) $($task.Arguments)" } }
+    }
+    $checks.Add((Get-UsaBannerUpdateCheck -Config $config -State $layout.Data -Found $job))
 
     New-UsaBannerStatus @common -HostName ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -Deployed $true -Checks $checks.ToArray() -Services (Get-UsaBannerServicesText -Facts $facts) -Config $config
 }

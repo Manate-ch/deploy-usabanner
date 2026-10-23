@@ -227,5 +227,9 @@
       }
     ]
   },
-  "services": "default"
+  "services": "default",
+  "update": {
+    "mode": "off",
+    "source": ""
+  }
 }

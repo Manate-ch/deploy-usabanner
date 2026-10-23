@@ -22,6 +22,9 @@
 #   |                                        | no other is set               |
 #   | the task \UsagiTools\UsaBanner sample  | the periodic job: as SYSTEM,  |
 #   |                                        | every 15 minutes (D17)        |
+#   | the task \UsagiTools\UsaBanner update  | the update job, once a day,   |
+#   |                                        | where the update channel is   |
+#   |                                        | on (D14)                      |
 #   +----------------------------------------+-------------------------------+
 #
 # OpenSSH, PowerShell 7 and the SSH default shell belong to deploy-usawinssh
@@ -34,6 +37,7 @@ $script:UsaSshdNote = '# Turned off by Deploy-UsaBanner, which put its own Banne
 $script:UsaNoticeKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
 $script:UsaTaskPath = '\UsagiTools\'
 $script:UsaTaskName = 'UsaBanner sample'
+$script:UsaUpdateTaskName = 'UsaBanner update'
 
 function Get-UsaBannerWindowsPaths {
     <#
@@ -169,42 +173,55 @@ function Test-UsaBannerFolderAcl {
     $true
 }
 
-function Get-UsaBannerSampleTask {
-    # Out: the registered sample task's program and arguments, as
-    #      @{ Execute; Arguments }; nothing when there is no such task
+function Get-UsaBannerTask {
+    # In:  one of the banner's tasks, by name, in \UsagiTools\
+    # Out: its program and arguments, as @{ Execute; Arguments }; nothing
+    #      when there is no such task
     [CmdletBinding()]
     [OutputType([hashtable])]
-    param()
-    $task = Get-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $script:UsaTaskName -ErrorAction SilentlyContinue
+    param([Parameter(Mandatory)][string]$Name)
+    $task = Get-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $Name -ErrorAction SilentlyContinue
     if ($task) { @{ Execute = [string]$task.Actions[0].Execute; Arguments = [string]$task.Actions[0].Arguments } }
 }
 
-function Register-UsaBannerSampleTask {
-    # In:  the task's spec (New-UsaBannerSampleTaskSpec)
-    # Out: nothing; the task is registered, replacing one of the same name
+function Register-UsaBannerTask {
+    # In:  the task's spec (New-UsaBannerSampleTaskSpec, New-UsaBannerUpdateTaskSpec)
+    # Out: nothing; the task is registered as SYSTEM, replacing one of the
+    #      same name. A daily task runs within an hour after 03:00, and at
+    #      the next start when the host was off then; the sample task 2
+    #      minutes after a start and every 15 minutes
     [CmdletBinding()]
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Spec)
     $action = New-ScheduledTaskAction -Execute $Spec.Execute -Argument $Spec.Arguments
-    $startup = New-ScheduledTaskTrigger -AtStartup
-    $startup.Delay = 'PT2M'
-    $repeat = New-ScheduledTaskTrigger -Once -At ([datetime]::Now.AddMinutes(1)) -RepetitionInterval ([timespan]::FromMinutes(15))
+    if ($Spec.Schedule -eq 'daily') {
+        $triggers = @(New-ScheduledTaskTrigger -Daily -At '03:00' -RandomDelay ([timespan]::FromHours(1)))
+        $limit = [timespan]::FromMinutes(30)
+    }
+    else {
+        $startup = New-ScheduledTaskTrigger -AtStartup
+        $startup.Delay = 'PT2M'
+        $triggers = @($startup, (New-ScheduledTaskTrigger -Once -At ([datetime]::Now.AddMinutes(1)) -RepetitionInterval ([timespan]::FromMinutes(15))))
+        $limit = [timespan]::FromMinutes(10)
+    }
     $principal = New-ScheduledTaskPrincipal -UserId 'S-1-5-18' -LogonType ServiceAccount -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([timespan]::FromMinutes(10)) -MultipleInstances IgnoreNew -StartWhenAvailable
-    $null = Register-ScheduledTask -TaskPath $Spec.Path -TaskName $Spec.Name -Action $action -Trigger $startup, $repeat -Principal $principal -Settings $settings -Description $Spec.Description -Force
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit $limit -MultipleInstances IgnoreNew -StartWhenAvailable
+    $null = Register-ScheduledTask -TaskPath $Spec.Path -TaskName $Spec.Name -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Description $Spec.Description -Force
 }
 
-function Unregister-UsaBannerSampleTask {
-    # Out: nothing; the sample task is gone
+function Unregister-UsaBannerTask {
+    # In:  one of the banner's tasks, by name
+    # Out: nothing; the task is gone
     [CmdletBinding()]
-    param()
-    Unregister-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $script:UsaTaskName -Confirm:$false
+    param([Parameter(Mandatory)][string]$Name)
+    Unregister-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $Name -Confirm:$false
 }
 
-function Start-UsaBannerSampleTask {
-    # Out: nothing; the sample task runs now, in the background
+function Start-UsaBannerTask {
+    # In:  one of the banner's tasks, by name
+    # Out: nothing; the task runs now, in the background
     [CmdletBinding()]
-    param()
-    Start-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $script:UsaTaskName
+    param([Parameter(Mandatory)][string]$Name)
+    Start-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $Name
 }
 
 function New-UsaBannerSampleTaskSpec {
@@ -213,8 +230,8 @@ function New-UsaBannerSampleTaskSpec {
     The periodic job's task on Windows (D17), as data.
     .DESCRIPTION
     In:  the pwsh.exe it runs.
-    Out: @{ Path; Name; Execute; Arguments; Description }. As SYSTEM, 2
-         minutes after a start and every 15 minutes, it runs
+    Out: @{ Path; Name; Execute; Arguments; Description; Schedule }. As
+         SYSTEM, 2 minutes after a start and every 15 minutes, it runs
          Update-UsaBannerSample in the module: a sample and the slow facts.
     #>
     [CmdletBinding()]
@@ -226,6 +243,29 @@ function New-UsaBannerSampleTaskSpec {
         Execute     = $Pwsh
         Arguments   = '-NoProfile -NonInteractive -Command "& (Import-Module UsaBanner -PassThru) { Update-UsaBannerSample }"'
         Description = 'UsaBanner: sample this host for its banner every 15 minutes (Deploy-UsaBanner).'
+        Schedule    = 'sample'
+    }
+}
+
+function New-UsaBannerUpdateTaskSpec {
+    <#
+    .SYNOPSIS
+    The update job's task on Windows (D14), as data.
+    .DESCRIPTION
+    In:  the pwsh.exe it runs.
+    Out: @{ Path; Name; Execute; Arguments; Description; Schedule }. As
+         SYSTEM, once a day, it runs Update-UsaBannerRelease in the module.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)][string]$Pwsh)
+    @{
+        Path        = $script:UsaTaskPath
+        Name        = $script:UsaUpdateTaskName
+        Execute     = $Pwsh
+        Arguments   = '-NoProfile -NonInteractive -Command "& (Import-Module UsaBanner -PassThru) { Update-UsaBannerRelease }"'
+        Description = 'UsaBanner: look for a newer release of the banner once a day, and say so or install it (Deploy-UsaBanner -Update).'
+        Schedule    = 'daily'
     }
 }
 
@@ -607,25 +647,43 @@ function Set-UsaBannerWindowsNotice {
 }
 
 function Set-UsaBannerWindowsTask {
-    # In:  the banner's folder
-    # Out: a line for each change: the task registered where it is missing
-    #      or runs something else; a first sample on a host with none yet
+    # In:  the banner's folder, and the configuration
+    # Out: a line for each change: the sample task registered where it is
+    #      missing or runs something else, and a first sample on a host with
+    #      none yet; the update task the same way where the configuration
+    #      turns the update channel on, and unregistered where it is off
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
-    param([Parameter(Mandatory)][string]$Data)
+    param([Parameter(Mandatory)][string]$Data, [Parameter(Mandatory)][System.Collections.IDictionary]$Config)
     $pwsh = Find-UsaBannerPwsh
     if (-not $pwsh) { $pwsh = (Get-Process -Id $PID).Path }
     $spec = New-UsaBannerSampleTaskSpec -Pwsh $pwsh
-    $have = Get-UsaBannerSampleTask
+    $have = Get-UsaBannerTask -Name $spec.Name
     if ((-not $have -or $have.Execute -ne $spec.Execute -or $have.Arguments -ne $spec.Arguments) -and
         $PSCmdlet.ShouldProcess("$($spec.Path)$($spec.Name)", 'Register the periodic job: as SYSTEM, every 15 minutes')) {
-        Register-UsaBannerSampleTask -Spec $spec
+        Register-UsaBannerTask -Spec $spec
         "registered the task $($spec.Path)$($spec.Name): a sample every 15 minutes, as SYSTEM"
     }
     if (-not [System.IO.File]::Exists([System.IO.Path]::Combine($Data, 'samples.tsv')) -and
         $PSCmdlet.ShouldProcess("$($spec.Path)$($spec.Name)", 'Take a first sample now, in the background')) {
-        Start-UsaBannerSampleTask
+        Start-UsaBannerTask -Name $spec.Name
         'started a first sample: the 24-hour range and the slow facts begin now'
+    }
+
+    $update = New-UsaBannerUpdateTaskSpec -Pwsh $pwsh
+    $have = Get-UsaBannerTask -Name $update.Name
+    $mode = [string]$Config['update']['mode']
+    if ($mode -eq 'off') {
+        if ($have -and $PSCmdlet.ShouldProcess("$($update.Path)$($update.Name)", 'Unregister the update job: the update channel is off')) {
+            Unregister-UsaBannerTask -Name $update.Name
+            "unregistered the task $($update.Path)$($update.Name): the update channel is off"
+        }
+        return
+    }
+    if ((-not $have -or $have.Execute -ne $update.Execute -or $have.Arguments -ne $update.Arguments) -and
+        $PSCmdlet.ShouldProcess("$($update.Path)$($update.Name)", "Register the update job ($mode): as SYSTEM, once a day")) {
+        Register-UsaBannerTask -Spec $update
+        "registered the task $($update.Path)$($update.Name): the update channel ($mode), once a day, as SYSTEM"
     }
 }
 
@@ -677,7 +735,7 @@ function Invoke-UsaBannerWindowsDeploy {
     Set-UsaBannerWindowsSsh -Layout $layout -Config $Config -Record $record
     Set-UsaBannerWindowsNotice -Config $Config -Record $record
     Save-UsaBannerWindowsRecord -Path $recordPath -Record $record -Created $created
-    Set-UsaBannerWindowsTask -Data $layout.Data
+    Set-UsaBannerWindowsTask -Data $layout.Data -Config $Config
 }
 
 function Save-UsaBannerWindowsRecord {
@@ -714,9 +772,11 @@ function Invoke-UsaBannerWindowsRemove {
     Assert-UsaBannerWindowsHost -Layout $layout -Command 'Remove-UsaBanner'
     $record = Read-UsaBannerDeployRecord -Path ([System.IO.Path]::Combine($layout.Data, 'deploy.json'))
 
-    if ((Get-UsaBannerSampleTask) -and $PSCmdlet.ShouldProcess("$script:UsaTaskPath$script:UsaTaskName", 'Unregister the periodic job')) {
-        Unregister-UsaBannerSampleTask
-        "unregistered the task $script:UsaTaskPath$script:UsaTaskName"
+    foreach ($name in $script:UsaTaskName, $script:UsaUpdateTaskName) {
+        if ((Get-UsaBannerTask -Name $name) -and $PSCmdlet.ShouldProcess("$script:UsaTaskPath$name", 'Unregister the task')) {
+            Unregister-UsaBannerTask -Name $name
+            "unregistered the task $script:UsaTaskPath$name"
+        }
     }
     foreach ($path in $layout.Profiles) {
         if (-not [System.IO.File]::Exists($path)) { continue }

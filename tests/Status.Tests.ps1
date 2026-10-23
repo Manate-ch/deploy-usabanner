@@ -48,7 +48,7 @@ BeforeAll {
 
 AfterAll {
     Remove-Variable -Name UsaDeployCalls, UsaDeployAnswers, UsaDeployUnits, UsaDeployRoot -Scope Global -ErrorAction SilentlyContinue
-    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinTask, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
     Remove-Module UsaBanner -ErrorAction SilentlyContinue
 }
 
@@ -64,7 +64,7 @@ Describe 'Get-UsaBanner on Ubuntu' -Skip:$IsWindows {
         $status = Get-ReadOnlyStatus
         $status.PSObject.TypeNames[0] | Should -BeExactly 'UsaBanner.Status'
         Get-Problem $status | Should -BeNullOrEmpty
-        @($status.Checks | ForEach-Object { $_.Check }) | Should -Be @('configuration', 'drawn for this host', 'banner after login', 'console banner', 'ssh banner', 'stock motd off', 'periodic job', 'module copy')
+        @($status.Checks | ForEach-Object { $_.Check }) | Should -Be @('configuration', 'drawn for this host', 'banner after login', 'console banner', 'ssh banner', 'stock motd off', 'periodic job', 'module copy', 'update channel')
         $status.Healthy | Should -BeTrue
         $status.Deployed | Should -BeTrue
         $status.HostName | Should -BeExactly 'h-vsl-web1.ad.example'
@@ -278,7 +278,7 @@ Describe 'Get-UsaBanner on Windows Server' {
     It 'finds every part of a deploy in place: healthy, SSH open, the settings chosen, and the VLAN this host is in' {
         $status = Get-ReadOnlyStatus
         Get-Problem $status | Should -BeNullOrEmpty
-        @($status.Checks | ForEach-Object { $_.Check }) | Should -Be @('configuration', 'banner after login', 'ssh banner', 'ssh default shell', 'logon notice', 'periodic job', 'folder acl', 'module copy')
+        @($status.Checks | ForEach-Object { $_.Check }) | Should -Be @('configuration', 'banner after login', 'ssh banner', 'ssh default shell', 'logon notice', 'periodic job', 'folder acl', 'module copy', 'update channel')
         $status.Healthy | Should -BeTrue
         $status.HostName | Should -BeExactly 'BEVSW-APP1.ad.example'
         $status.Os | Should -BeExactly 'windows'
@@ -336,9 +336,9 @@ Describe 'Get-UsaBanner on Windows Server' {
         @{ Case = 'the logon notice cleared'; Check = 'logon notice'; State = 'missing'; Detail = 'no logon notice is set: Deploy-UsaBanner sets it where none is'
             Break = { $global:UsaWinNotice = @{ Caption = ''; Text = ''; Exists = $false } } }
         @{ Case = 'the task unregistered'; Check = 'periodic job'; State = 'missing'; Detail = 'there is no task \UsagiTools\UsaBanner sample'
-            Break = { $global:UsaWinTask = $null } }
+            Break = { $global:UsaWinTasks.Remove('UsaBanner sample') } }
         @{ Case = 'the task changed'; Check = 'periodic job'; State = 'differs'; Detail = 'the task runs C:\Windows\System32\cmd.exe /c exit'
-            Break = { $global:UsaWinTask = @{ Execute = 'C:\Windows\System32\cmd.exe'; Arguments = '/c exit' } } }
+            Break = { $global:UsaWinTasks['UsaBanner sample'] = @{ Execute = 'C:\Windows\System32\cmd.exe'; Arguments = '/c exit' } } }
         @{ Case = 'the module''s copy deleted'; Check = 'module copy'; State = 'missing'; Detail = 'there is no copy in *ProgramFiles/WindowsPowerShell/Modules/UsaBanner, where every login and the periodic job import it from'
             Break = { [System.IO.Directory]::Delete((Join-Path $global:UsaWinRoot 'ProgramFiles/WindowsPowerShell/Modules/UsaBanner'), $true) } }
     ) {
@@ -361,7 +361,7 @@ Describe 'Get-UsaBanner on Windows Server' {
 
     It 'leaves to an administrator a task another user cannot see' {
         Mock -ModuleName UsaBanner Test-UsaBannerPrivileged { $false }
-        $global:UsaWinTask = $null
+        $global:UsaWinTasks.Remove('UsaBanner sample')
         $status = Get-ReadOnlyStatus
         (Get-Check $status 'periodic job').State | Should -BeExactly 'unknown'
         $status.Healthy | Should -BeTrue

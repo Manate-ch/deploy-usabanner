@@ -234,6 +234,26 @@
         "type": "string",
         "pattern": "^[A-Za-z0-9_.@-]+$"
       }
+    },
+    "update": {
+      "description": "The update channel (D14). off looks for nothing. notify looks for a newer release once a day, and the banner after login says when there is one. install installs it, each file checked against the release's SHA256SUMS. The job runs as root (SYSTEM): whoever can change the releases at the source can change what runs on this host.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "off",
+            "notify",
+            "install"
+          ]
+        },
+        "source": {
+          "description": "The https address the releases' files are downloaded from: SHA256SUMS and UsaBanner-<version>.zip are found under it, as under a GitHub repository's .../releases/latest/download, or a GitLab project's .../-/releases/permalink/latest/downloads. Empty while the mode is off.",
+          "type": "string",
+          "pattern": "^(https://[!-~]+)?$",
+          "maxLength": 512
+        }
+      }
     }
   },
   "$defs": {

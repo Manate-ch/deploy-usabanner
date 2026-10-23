@@ -7,3 +7,7 @@
 
 # Review worktrees live inside the repo folder.
 .review-worktrees/
+
+# Releases build/New-UsaBannerRelease.ps1 writes: they go to the release, not
+# the repository.
+dist/

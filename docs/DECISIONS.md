@@ -54,7 +54,7 @@
 | D11 | The interactive UI: built in, or a module | decided: built in |
 | D12 | The Export-UsaBanner package format | decided: JSON |
 | D13 | GPO layering: one base, OU overrides | decided |
-| D14 | The update channel | decided: B |
+| D14 | The update channel | decided: B; built, for your review |
 | D15 | Windows Server 2019 | decided: 2022 and later |
 | D16 | Ubuntu: stop the apt prompts | decided; done 2026-10-11 |
 | D17 | Slow facts, and min/max over what window | decided: 24 h |
@@ -953,6 +953,50 @@ user who made the folder before the first deploy would otherwise keep, as
 its owner, the right to change its ACL. On Ubuntu, root owns every file the
 deploy writes, mode 644, and 755 for the login script.
 
+**The channel, built (M4, 2026-10-23), for your review.** The setting is
+`update`: `mode` off, notify or install, off unless `-Update` turns it on
+(your call, 2026-10-22); and `source`, the https address the releases'
+files are downloaded from (`-UpdateSource`).
+
+- **`source` has no default, for your call.** The default would be this
+  project's releases, and its address cannot go into public code until the
+  public home exists (M7). Until then a host names its source itself.
+- **A release is two files**, built by `build/New-UsaBannerRelease.ps1`:
+  `UsaBanner-<version>.zip`, the module's folder at its root, and
+  `SHA256SUMS`, as `sha256sum` writes it. Both forges serve the latest
+  release's files at one address: a GitLab project's
+  `.../-/releases/permalink/latest/downloads/<file>` [fetched: GitLab,
+  Release fields] and a GitHub repository's
+  `.../releases/latest/download/<file>` [fetched: GitHub, Linking to
+  releases]. So the source is that address, and the job asks it for
+  `SHA256SUMS` and then for the archive it names.
+- **The job runs once a day, as root (SYSTEM):** `usabanner-update.timer`,
+  10 minutes after boot and then daily, each host within its own hour; on
+  Windows the task `\UsagiTools\UsaBanner update`, daily within an hour
+  after 03:00, and at the next start after a missed day. notify downloads
+  `SHA256SUMS` alone, and writes the notice the banner after login shows.
+  install also downloads the archive.
+- **What install checks:** https only, and PowerShell 7 refuses a redirect
+  from https to http [fetched: Invoke-WebRequest]; the archive against its
+  line in `SHA256SUMS` before it is unpacked; .NET's extraction, which
+  refuses an entry that would land outside its folder [fetched:
+  ZipFile.ExtractToDirectory]; and the manifest's version against the
+  archive's name. A name in `SHA256SUMS` counts only as
+  `UsaBanner-<version>.zip`, so none can point a download elsewhere.
+- **The new version deploys itself:** it runs its own
+  `linux/bootstrap.ps1 -Path` with the host's configuration, so an update
+  brings the new version's whole deploy, renderer and units included. Then
+  the old version's folder goes. When that deploy fails, the new version's
+  folder goes instead, and the old version deploys the configuration again,
+  so the host keeps what it had. `update.json` says what the last look
+  found, or what failed, and `Get-UsaBanner` reads it.
+- **A deploy that turns install on says what it means**, D14's warning
+  less "Type YES": the job runs once a day, not at every login, and a deploy
+  by flags asks nothing. M5's walk-through asks YES.
+- **Option A, following `main`, is not built.** D14 allows it for the
+  maintainer's lab as an explicit `-Channel main`; releases are the only
+  source for now.
+
 ## D15. Windows Server 2019
 
 **Decided: Windows Server 2022 and later.** For the record, 2019 is not
@@ -1665,6 +1709,8 @@ configuration (D12):
 | `-PreInit`, `-PreLogon` | `preInit`, `preLogon` | `HostName`, `Ip`, both, or `None` (D9) |
 | `-VlanFile` | `vlans` | a CSV or TSV file: `name`, `tag` and `cidr`, then `color` and `short` where wanted |
 | `-Services` | `services` | the names, or `default` (D10) |
+| `-Update` | `update.mode` | `off`, `notify` or `install` (D14) |
+| `-UpdateSource` | `update.source` | the https address of the releases' files (D14) |
 
 - **A deploy builds the whole configuration.** It starts from the defaults,
   or from a file given with `-Path`, and puts the flags on top; what the
