@@ -956,7 +956,8 @@ function Invoke-UsaBannerLinuxRemove {
          instead, and nothing changes.
     The periodic job and the update job stop first, a run in progress with
     them, so they draw and install nothing more, and a run stopped part way
-    leaves no failed unit behind. The stock MOTD
+    leaves no failed unit behind; so does the Group Policy runner's publish
+    watcher (linux/adsys-startup.sh, D29), where it wrote one. The stock MOTD
     scripts come back on before the banner goes, so a login meets one or
     both, never neither. Then the SSH drop-in (ssh reloads), the console's
     file, the banner's own folders, the module's copy, and the folders the
@@ -970,26 +971,30 @@ function Invoke-UsaBannerLinuxRemove {
     Assert-UsaBannerLinuxHost -Root $root -Command 'Remove-UsaBanner'
     $record = Read-UsaBannerDeployRecord -Root $root
 
+    # Each job, the unit that starts it, and its units' names. The publish
+    # watcher is not the deploy's: the Group Policy runner writes it.
     $jobs = [ordered]@{
-        'usabanner-sample' = @{ What = 'the periodic job'; Units = Get-UsaBannerSystemdUnits }
-        'usabanner-update' = @{ What = 'the update job'; Units = Get-UsaBannerUpdateUnits }
+        'usabanner-sample'  = @{ What = 'the periodic job'; Trigger = 'timer'; Units = @((Get-UsaBannerSystemdUnits).Keys) }
+        'usabanner-update'  = @{ What = 'the update job'; Trigger = 'timer'; Units = @((Get-UsaBannerUpdateUnits).Keys) }
+        'usabanner-publish' = @{ What = 'the Group Policy publish watcher'; Trigger = 'path'; Units = @('usabanner-publish.path', 'usabanner-publish.service') }
     }
     $stopped = [System.Collections.Generic.List[string]]::new()
     foreach ($job in $jobs.Keys) {
-        if ([System.IO.File]::Exists("$root/etc/systemd/system/$job.timer") -and
-            $PSCmdlet.ShouldProcess("$job.timer", "Stop and disable $($jobs[$job].What) (systemctl disable --now)")) {
+        $trigger = "$job.$($jobs[$job].Trigger)"
+        if ([System.IO.File]::Exists("$root/etc/systemd/system/$trigger") -and
+            $PSCmdlet.ShouldProcess($trigger, "Stop and disable $($jobs[$job].What) (systemctl disable --now)")) {
             $stopped.Add($job)
-            $disable = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'disable', '--now', "$job.timer"
-            if ($disable.ExitCode -eq 0) { "stopped $job.timer" }
-            else { Write-Warning "UsaBanner: systemctl could not disable $job.timer: $($disable.Output -join ' ')" }
-            # The timer stopped, a run in progress goes on, and writes the
+            $disable = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'disable', '--now', $trigger
+            if ($disable.ExitCode -eq 0) { "stopped $trigger" }
+            else { Write-Warning "UsaBanner: systemctl could not disable ${trigger}: $($disable.Output -join ' ')" }
+            # The trigger stopped, a run in progress goes on, and writes the
             # banner's folder again after it is gone (lab, 2026-10-23).
             $stop = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'stop', "$job.service"
             if ($stop.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl could not stop $job.service: $($stop.Output -join ' ')" }
         }
     }
     $gone = @(foreach ($job in $jobs.Keys) {
-            foreach ($unit in $jobs[$job].Units.Keys) { Remove-UsaBannerHostFile -Root $root -Path "/etc/systemd/system/$unit" -What "a unit of $($jobs[$job].What)" }
+            foreach ($unit in $jobs[$job].Units) { Remove-UsaBannerHostFile -Root $root -Path "/etc/systemd/system/$unit" -What "a unit of $($jobs[$job].What)" }
         })
     $gone
     if ($gone.Count) {

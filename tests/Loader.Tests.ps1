@@ -4,10 +4,11 @@
 BeforeDiscovery {
     $moduleRoot = Join-Path (Split-Path $PSScriptRoot -Parent) 'UsaBanner'
     $hasAnalyzer = [bool](Get-Module -ListAvailable -Name PSScriptAnalyzer)
-    # The files Windows PowerShell 5.1 parses: the loader, Bootstrap\ and Public\.
+    # The files Windows PowerShell 5.1 parses: the loader, Bootstrap\ and Public\, and windows\, the
+    # Group Policy runner, which a 5.1 runs from NETLOGON (D29).
     $files51 = @(
         @{ File = 'UsaBanner.psm1' }
-        foreach ($f in Get-ChildItem -LiteralPath (Join-Path $moduleRoot 'Bootstrap'), (Join-Path $moduleRoot 'Public') -Filter '*.ps1' -File) {
+        foreach ($f in Get-ChildItem -LiteralPath (Join-Path $moduleRoot 'Bootstrap'), (Join-Path $moduleRoot 'Public'), (Join-Path $moduleRoot 'windows') -Filter '*.ps1' -File) {
             @{ File = [System.IO.Path]::GetRelativePath($moduleRoot, $f.FullName) }
         }
     )
