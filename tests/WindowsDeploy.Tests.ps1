@@ -14,7 +14,7 @@ BeforeAll {
 }
 
 AfterAll {
-    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinShell, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
     Remove-Module UsaBanner -ErrorAction SilentlyContinue
 }
 
@@ -238,10 +238,61 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         $global:UsaWinNotice.Caption | Should -BeExactly 'ATTENTION'
     }
 
-    It 'warns when sshd''s default shell is not a PowerShell, as no banner would show after login' {
-        Mock -ModuleName UsaBanner Get-UsaBannerSshDefaultShell { '' }
-        $null = Deploy-UsaBanner -Company Contoso -WarningVariable warned -WarningAction SilentlyContinue
-        "$warned" | Should -BeLike '*sshd starts cmd.exe at a login, so no banner shows after an SSH login*'
+    It 'sets pwsh as sshd''s default shell where none is set, and Remove-UsaBanner takes it away again' {
+        $global:UsaWinShell = ''
+        $before = Get-WindowsHostState $Root
+        $lines = @(Deploy-UsaBanner -Company Contoso)
+        $lines | Should -Contain "set OpenSSH's default shell to C:\Program Files\PowerShell\7\pwsh.exe: sshd started cmd.exe at a login, whose banner after login never showed"
+        $global:UsaWinShell | Should -BeExactly 'C:\Program Files\PowerShell\7\pwsh.exe'
+        $record = Get-Content -LiteralPath (Join-Path $Data 'deploy.json') -Raw | ConvertFrom-Json -AsHashtable
+        '{0} | {1}' -f $record.shell.path, $record.shell.before | Should -BeExactly 'C:\Program Files\PowerShell\7\pwsh.exe | '
+        $lines = @(Remove-UsaBanner)
+        $lines | Should -Contain 'put back OpenSSH''s default shell as it was before the deploy: none set, so sshd starts cmd.exe'
+        $global:UsaWinCalls | Should -Contain 'default shell removed'
+        Get-WindowsHostState $Root | Should -Be $before
+    }
+
+    It 'puts back the program it replaced, as the first deploy found it, after a second deploy' {
+        $global:UsaWinShell = 'C:\Program Files\Git\bin\bash.exe'
+        $null = Deploy-UsaBanner -Company Contoso
+        $global:UsaWinShell | Should -BeExactly 'C:\Program Files\PowerShell\7\pwsh.exe'
+        # Someone takes the value away; the next deploy sets pwsh again and keeps what the first one found.
+        $global:UsaWinShell = ''
+        $null = Deploy-UsaBanner -Company Contoso
+        $global:UsaWinShell | Should -BeExactly 'C:\Program Files\PowerShell\7\pwsh.exe'
+        @(Remove-UsaBanner) | Should -Contain 'put back OpenSSH''s default shell as it was before the deploy: C:\Program Files\Git\bin\bash.exe'
+        $global:UsaWinShell | Should -BeExactly 'C:\Program Files\Git\bin\bash.exe'
+    }
+
+    It 'keeps a PowerShell already set as sshd''s default shell, and has nothing to put back' {
+        $global:UsaWinShell = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+        $null = Deploy-UsaBanner -Company Contoso
+        $null = Remove-UsaBanner
+        $global:UsaWinShell | Should -BeExactly 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+        @($global:UsaWinCalls | Where-Object { $_ -like 'default shell *' }) | Should -BeNullOrEmpty
+    }
+
+    It 'sets Windows PowerShell as sshd''s default shell where PowerShell 7 is missing' {
+        Mock -ModuleName UsaBanner Find-UsaBannerPwsh { }
+        $global:UsaWinShell = ''
+        $null = Deploy-UsaBanner -Company Contoso
+        $global:UsaWinShell | Should -BeExactly ([System.IO.Path]::Combine("$Root/Windows", 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'))
+    }
+
+    It 'leaves a default shell changed since the deploy when the banner is removed' {
+        $global:UsaWinShell = ''
+        $null = Deploy-UsaBanner -Company Contoso
+        $global:UsaWinShell = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+        @(Remove-UsaBanner | Where-Object { $_ -like '*default shell*' }) | Should -BeNullOrEmpty
+        $global:UsaWinShell | Should -BeExactly 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+    }
+
+    It 'changes no default shell under -WhatIf' {
+        $global:UsaWinShell = ''
+        $before = Get-WindowsHostState $Root
+        @(Deploy-UsaBanner -Company Contoso -WhatIf) | Should -BeNullOrEmpty
+        Get-WindowsHostState $Root | Should -Be $before
+        $global:UsaWinCalls | Should -BeNullOrEmpty
     }
 
     It 'adds no SSH banner where OpenSSH''s server is not installed, says so, and still writes the profiles' {

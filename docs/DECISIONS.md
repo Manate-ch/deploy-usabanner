@@ -1528,6 +1528,20 @@ and no banner after login; with a default shell that is not a PowerShell,
 nothing shows after login. Calling deploy-usawinssh's host script, and the
 optional public key, come with the walk-through (M5).
 
+**Changed (2026-10-23), your call in !45: the deploy sets the default
+shell.** The banner after login lives in a PowerShell profile, and cmd.exe,
+which sshd starts where no `DefaultShell` is set, runs none. Where OpenSSH's
+`DefaultShell` is not a PowerShell, `Deploy-UsaBanner` sets it to pwsh, or to
+Windows PowerShell where PowerShell 7 is missing; a PowerShell already set is
+kept. The record keeps what was there before the first deploy set it, and
+`Remove-UsaBanner` puts that back while the value is still the one the deploy
+set. `Get-UsaBanner`'s `ssh default shell` check says `differs` where it is
+not a PowerShell, since a deploy would change it. PowerShell remoting over
+SSH (`Enter-PSSession -HostName`) is another path, untouched here: it starts
+PowerShell as an SSH subsystem, which needs a `Subsystem powershell` line in
+`sshd_config`, and loads no profile, so no banner shows in it [fetched:
+Microsoft Learn, "PowerShell Remoting Over SSH", 2025-09-08].
+
 ## D22. Network devices (stretch)
 
 Most network OSes have a static banner command: Cisco IOS and NX-OS have
@@ -1597,9 +1611,18 @@ configuration or art that fails leaves the old banner as it was
   record of what it changed. The deploy then turns the same stock scripts
   off again, on its own record, so `Remove-UsaBanner` later turns them back
   on: deploy, remove, and the host is stock.
-- **Left as they are:** a git clone the old timer pulled into, the OpenSSH
-  default shell (this banner needs a PowerShell there too, D21), and
-  `sshd_config.manatech-bak`, the old installer's copy of `sshd_config`.
+- **Left as they are:** the OpenSSH default shell where it is a PowerShell
+  (this banner sets one where it is not, D21), and `sshd_config.manatech-bak`,
+  the old installer's copy of `sshd_config`.
+- **The copy of its repository goes too (2026-10-23, your call in !45):** the
+  old update job ran from a copy of the old banner's repository, a git clone
+  as the README sets one up, which its unit (Ubuntu) or task (Windows) names,
+  so the path is read before the job goes. Only a folder that holds the
+  repository's own files is deleted. On Windows the README puts the clone in
+  the old banner's folder, which went whole before this, so the clone went
+  then too, though this list said it stayed. A remote URL with sign-in
+  details in it (the README's private-fork steps put a deploy token there)
+  gets a warning to revoke the token: deleting the copy does not end it.
 - **Group Policy is not adopted:** a GPO that delivers the old banner puts it
   back at the next boot or refresh, so it comes off the host first. The
   deploy warns where the policy ADSys applies still runs the old banner's

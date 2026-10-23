@@ -17,6 +17,9 @@
 #   | both all-users profiles                | a block that shows the banner |
 #   |                                        | after an SSH login            |
 #   | sshd_config                            | its Banner line               |
+#   | OpenSSH's DefaultShell                 | a PowerShell, where it is not |
+#   |                                        | one: the banner after login   |
+#   |                                        | lives in its profile (D21)    |
 #   | the logon notice                       | the legal text before a       |
 #   |                                        | console or RDP sign-in, where |
 #   |                                        | no other is set               |
@@ -27,8 +30,8 @@
 #   |                                        | on (D14)                      |
 #   +----------------------------------------+-------------------------------+
 #
-# OpenSSH, PowerShell 7 and the SSH default shell belong to deploy-usawinssh
-# (D21): a deploy checks them and says what is missing, and changes none.
+# OpenSSH and PowerShell 7 belong to deploy-usawinssh (D21): a deploy checks
+# them and says what is missing, and installs neither.
 
 $script:UsaProfileBegin = '# >>> UsaBanner: the banner after an SSH login (Deploy-UsaBanner) >>>'
 $script:UsaProfileEnd = '# <<< UsaBanner <<<'
@@ -113,6 +116,21 @@ function Get-UsaBannerSshShellName {
     param()
     $shell = Get-UsaBannerSshDefaultShell
     if ($shell) { @($shell.Trim().Trim('"') -split '[\\/]')[-1] } else { 'cmd.exe' }
+}
+
+function Write-UsaBannerSshDefaultShell {
+    # In:  the program sshd is to start at a login, or -Remove to take the
+    #      value away, which leaves sshd starting cmd.exe
+    # Out: nothing; the registry holds it
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Path = '', [switch]$Remove)
+    $key = 'HKLM:\SOFTWARE\OpenSSH'
+    if ($Remove) {
+        Remove-ItemProperty -LiteralPath $key -Name 'DefaultShell' -ErrorAction SilentlyContinue
+        return
+    }
+    if (-not (Test-Path -LiteralPath $key)) { $null = New-Item -Path $key -Force }
+    $null = New-ItemProperty -LiteralPath $key -Name 'DefaultShell' -Value $Path -PropertyType String -Force
 }
 
 function Read-UsaBannerLogonNoticeValue {
@@ -587,6 +605,36 @@ function Get-UsaBannerWindowsSshText {
     (@(Get-UsaBannerPreLogon -Config $Config -Os windows -Facts $names) -join "`n") + "`n`n"
 }
 
+function Set-UsaBannerWindowsShell {
+    <#
+    .SYNOPSIS
+    OpenSSH's default shell: a PowerShell, so the banner shows after an SSH
+    login (D21).
+    .DESCRIPTION
+    In:  the record.
+    Out: a line when it changed. The banner after login lives in a
+         PowerShell profile, and cmd.exe, which sshd starts where no
+         DefaultShell is set, runs none: where the default shell is not a
+         PowerShell, it is set to pwsh, or to Windows PowerShell where
+         PowerShell 7 is missing. A PowerShell already set is kept. The
+         record keeps what was there before the banner first set it, for
+         removal.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Record)
+    $leaf = Get-UsaBannerSshShellName
+    if ($leaf -in 'pwsh.exe', 'powershell.exe') { return }
+    $shell = Find-UsaBannerPwsh
+    if (-not $shell) { $shell = [System.IO.Path]::Combine((Get-UsaBannerWindowsPaths).Windir, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') }
+    if (-not $PSCmdlet.ShouldProcess('OpenSSH''s default shell (DefaultShell under HKLM:\SOFTWARE\OpenSSH)', "Set it to ${shell}: sshd starts $leaf at a login, which shows no banner")) { return }
+    $ours = $Record['shell']
+    $before = if ($ours) { [string]$ours['before'] } else { Get-UsaBannerSshDefaultShell }
+    Write-UsaBannerSshDefaultShell -Path $shell
+    $Record['shell'] = [ordered]@{ path = $shell; before = $before }
+    "set OpenSSH's default shell to ${shell}: sshd started $leaf at a login, whose banner after login never showed"
+}
+
 function Set-UsaBannerWindowsSsh {
     <#
     .SYNOPSIS
@@ -598,7 +646,7 @@ function Set-UsaBannerWindowsSsh {
     after: one sshd refuses is put back, with a warning. sshd is not
     restarted, so the admin's own SSH session is safe: the line says to
     restart it. A default shell that is not a PowerShell shows no banner
-    after login, and a warning says so; deploy-usawinssh sets it (D21).
+    after login, so it is set to one first (Set-UsaBannerWindowsShell, D21).
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -612,10 +660,7 @@ function Set-UsaBannerWindowsSsh {
         'no SSH banner, and no banner after login: OpenSSH''s server is not installed here (deploy-usawinssh installs it); run Deploy-UsaBanner again once it is'
         return
     }
-    $leaf = Get-UsaBannerSshShellName
-    if ($leaf -notin 'pwsh.exe', 'powershell.exe') {
-        Write-Warning "UsaBanner: sshd starts $leaf at a login, so no banner shows after an SSH login. The banner lives in PowerShell's profile: set the default shell to pwsh.exe (deploy-usawinssh does)."
-    }
+    Set-UsaBannerWindowsShell -Record $Record
     $text = Get-UsaBannerWindowsSshText -Config $Config
     Set-UsaBannerHostFile -Root '' -Path ([System.IO.Path]::Combine($Layout.Data, 'sshd-banner.txt')) -Bytes ([System.Text.Encoding]::ASCII.GetBytes($text)) -Mode $null -What 'the SSH banner'
     if (-not [System.IO.File]::Exists($Layout.SshdConfig)) {
@@ -734,7 +779,8 @@ function Invoke-UsaBannerWindowsDeploy {
     art that fails leaves the host as it was. Then the old banner comes off,
     where -ReplaceOld says so (OldBanner.ps1). Then the module; the banner's
     own folder and its ACL, before anything is written in it; the
-    configuration; the profiles; SSH; the logon notice; the periodic job.
+    configuration; the profiles; SSH (the default shell, then the Banner
+    line); the logon notice; the periodic job.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -797,9 +843,9 @@ function Invoke-UsaBannerWindowsRemove {
     The periodic job goes first, then the profiles' blocks, sshd_config's
     Banner line (with any Banner it turned off back on, checked with
     sshd -t), the logon notice where it still holds the banner's text, the
-    banner's own folder, the module's copy, and the folders the deploy
-    made, once empty. Only what the record says the deploy changed is
-    changed back.
+    default shell where it is still the one the deploy set, the banner's own
+    folder, the module's copy, and the folders the deploy made, once empty.
+    Only what the record says the deploy changed is changed back.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -858,6 +904,14 @@ function Invoke-UsaBannerWindowsRemove {
             else { Write-UsaBannerLogonNoticeValue -Remove }
             'put back the logon notice as it was before the deploy'
         }
+    }
+    $shell = $record['shell']
+    if ($shell -and (Get-UsaBannerSshDefaultShell) -eq [string]$shell['path'] -and
+        $PSCmdlet.ShouldProcess('OpenSSH''s default shell (DefaultShell under HKLM:\SOFTWARE\OpenSSH)', 'Put back what it was before the deploy')) {
+        $before = [string]$shell['before']
+        if ($before) { Write-UsaBannerSshDefaultShell -Path $before }
+        else { Write-UsaBannerSshDefaultShell -Remove }
+        "put back OpenSSH's default shell as it was before the deploy: $(if ($before) { $before } else { 'none set, so sshd starts cmd.exe' })"
     }
     Remove-UsaBannerWindowsFolder -Path $layout.Data -Allowed $layout.Data -What 'the configuration, the SSH banner, the samples and the record'
     if ($record['module']) {

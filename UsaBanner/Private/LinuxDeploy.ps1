@@ -259,8 +259,9 @@ function Read-UsaBannerDeployRecord {
          and mode before), masked (each unit, and whether it was active),
          created (the folders made, parents first), module (the module's
          folder, when a deploy put it there); on Windows also notice (the
-         logon notice set, and what it was before) and sshd. Empty lists
-         when there is no record.
+         logon notice set, and what it was before), shell (OpenSSH's default
+         shell set, and what it was before) and sshd. Empty lists when there
+         is no record.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]

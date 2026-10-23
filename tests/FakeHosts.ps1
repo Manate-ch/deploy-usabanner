@@ -205,7 +205,7 @@ function New-WindowsHost {
 function Get-WindowsHostState {
     # In:  a host folder
     # Out: a line for each file and folder in it, sorted, a file with its SHA-256; then the
-    #      logon notice and each task, as the stores hold them
+    #      logon notice, OpenSSH's default shell and each task, as the stores hold them
     param([string]$Root)
     foreach ($item in @(Get-ChildItem -LiteralPath $Root -Recurse -Force | Sort-Object -Property FullName)) {
         $relative = [System.IO.Path]::GetRelativePath($Root, $item.FullName)
@@ -213,6 +213,7 @@ function Get-WindowsHostState {
         else { "$relative $(Get-FileHashText $item.FullName)" }
     }
     "notice: $($global:UsaWinNotice.Exists) '$($global:UsaWinNotice.Caption)' '$($global:UsaWinNotice.Text)'"
+    "default shell: '$global:UsaWinShell'"
     foreach ($name in @($global:UsaWinTasks.Keys | Sort-Object)) { "task ${name}: $($global:UsaWinTasks[$name].Execute) $($global:UsaWinTasks[$name].Arguments)" }
 }
 
@@ -226,6 +227,8 @@ function Use-WindowsHost {
     $global:UsaWinCalls = [System.Collections.Generic.List[string]]::new()
     $global:UsaWinAnswers = $Answers
     $global:UsaWinNotice = @{ Caption = ''; Text = ''; Exists = $true }
+    # OpenSSH's DefaultShell; '' for none set, which is cmd.exe.
+    $global:UsaWinShell = 'C:\Program Files\PowerShell\7\pwsh.exe'
     # The banner's tasks, by name: @{ Execute; Arguments; Schedule }; and those with a run in progress.
     $global:UsaWinTasks = @{}
     $global:UsaWinRunning = @{}
@@ -239,7 +242,11 @@ function Use-WindowsHost {
     # Started after anything a test writes: sshd has read sshd_config as it is.
     Mock -ModuleName UsaBanner Get-UsaBannerServiceStart { [datetime]::UtcNow }
     Mock -ModuleName UsaBanner Get-UsaBannerHostFacts { @{ Name = 'BEVSW-APP1.ad.example'; Ip = '10.20.40.81'; Services = @{ Text = 'sshd, W32Time running'; Level = 'good' } } }
-    Mock -ModuleName UsaBanner Get-UsaBannerSshDefaultShell { 'C:\Program Files\PowerShell\7\pwsh.exe' }
+    Mock -ModuleName UsaBanner Get-UsaBannerSshDefaultShell { $global:UsaWinShell }
+    Mock -ModuleName UsaBanner Write-UsaBannerSshDefaultShell {
+        $global:UsaWinCalls.Add($(if ($Remove) { 'default shell removed' } else { "default shell set: $Path" }))
+        $global:UsaWinShell = if ($Remove) { '' } else { $Path }
+    }
     Mock -ModuleName UsaBanner Find-UsaBannerPwsh { 'C:\Program Files\PowerShell\7\pwsh.exe' }
     Mock -ModuleName UsaBanner Read-UsaBannerLogonNoticeValue { @{ Caption = $global:UsaWinNotice.Caption; Text = $global:UsaWinNotice.Text; Exists = $global:UsaWinNotice.Exists } }
     Mock -ModuleName UsaBanner Write-UsaBannerLogonNoticeValue {
