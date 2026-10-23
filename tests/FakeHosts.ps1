@@ -73,8 +73,17 @@ function Get-HostState {
         $relative = [System.IO.Path]::GetRelativePath($Root, $item.FullName)
         if ($item.LinkTarget) { "$relative -> $($item.LinkTarget)" }
         elseif ($item.PSIsContainer) { "$relative/ $([System.Convert]::ToString([int]$item.UnixFileMode, 8))" }
-        else { "$relative $([System.Convert]::ToString([int]$item.UnixFileMode, 8)) $([System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.IO.File]::ReadAllBytes($item.FullName))))" }
+        else { "$relative $([System.Convert]::ToString([int]$item.UnixFileMode, 8)) $(Get-FileHashText $item.FullName)" }
     }
+}
+
+function Get-FileHashText {
+    # In:  a file's path
+    # Out: its SHA-256 in hex, or unreadable when the tests' user cannot read it
+    # Why: a test can make a file no one may read, as the lab met one
+    param([string]$Path)
+    try { [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.IO.File]::ReadAllBytes($Path))) }
+    catch [System.UnauthorizedAccessException] { 'unreadable' }
 }
 
 function Get-Mode {
@@ -93,7 +102,9 @@ function Use-StockAnswers {
     param([hashtable]$Answers = @{})
     $global:UsaDeployCalls = [System.Collections.Generic.List[string]]::new()
     $global:UsaDeployAnswers = $Answers
-    $global:UsaDeployUnits = @{ Masked = @(); Enabled = @(); Overrides = @() }
+    # Running: the services started and not yet stopped, as a run in progress. Disabled: units
+    # an admin (or the first install.sh) disabled, which a stock host has enabled.
+    $global:UsaDeployUnits = @{ Masked = @(); Enabled = @(); Overrides = @(); Running = @(); Disabled = @() }
     Mock -ModuleName UsaBanner Invoke-UsaBannerNative {
         $call = (@($FilePath) + @($ArgumentList)) -join ' '
         $global:UsaDeployCalls.Add($call)
@@ -103,6 +114,7 @@ function Use-StockAnswers {
         switch -Regex ($call) {
             '^systemctl is-enabled (\S+)$' {
                 if ($Matches[1] -in $units.Masked) { return @{ ExitCode = 1; Output = @('masked') } }
+                if ($Matches[1] -in $units.Disabled) { return @{ ExitCode = 1; Output = @('disabled') } }
                 if ($Matches[1] -in $units.Enabled -or $Matches[1] -eq 'motd-news.timer') { return @{ ExitCode = 0; Output = @('enabled') } }
                 return @{ ExitCode = 4; Output = @('not-found') }
             }
@@ -113,13 +125,19 @@ function Use-StockAnswers {
             }
             '^systemctl mask --now (\S+)$' { $units.Masked += $Matches[1]; return $done }
             '^systemctl unmask (\S+)$' { $units.Masked = @($units.Masked | Where-Object { $_ -ne $Matches[1] }); return $done }
-            '^systemctl enable --now (\S+)$' { $units.Enabled += $Matches[1]; return $done }
-            '^systemctl disable --now (\S+)$' { $units.Enabled = @($units.Enabled | Where-Object { $_ -ne $Matches[1] }); return $done }
-            '^systemctl start --no-block usabanner-sample\.service$' {
-                # As sample.sh does at its first run.
-                [System.IO.File]::WriteAllText((Join-Path $global:UsaDeployRoot 'var/lib/usabanner/samples.tsv'), '')
+            '^systemctl enable --now (\S+)$' {
+                $units.Enabled += $Matches[1]
+                $units.Disabled = @($units.Disabled | Where-Object { $_ -ne $Matches[1] })
                 return $done
             }
+            '^systemctl disable --now (\S+)$' { $units.Enabled = @($units.Enabled | Where-Object { $_ -ne $Matches[1] }); return $done }
+            '^systemctl start --no-block usabanner-sample\.service$' {
+                # As sample.sh does at its first run; it runs on until stopped.
+                [System.IO.File]::WriteAllText((Join-Path $global:UsaDeployRoot 'var/lib/usabanner/samples.tsv'), '')
+                $units.Running += 'usabanner-sample.service'
+                return $done
+            }
+            '^systemctl stop (\S+)$' { $units.Running = @($units.Running | Where-Object { $_ -ne $Matches[1] }); return $done }
             '^dpkg -S (\S+)$' { return @{ ExitCode = 0; Output = @("landscape-common: $($Matches[1])") } }
             '^dpkg-statoverride --list (\S+)$' {
                 if ($Matches[1] -in $units.Overrides) { return @{ ExitCode = 0; Output = @("root root 644 $($Matches[1])") } }
@@ -182,7 +200,7 @@ function Get-WindowsHostState {
     foreach ($item in @(Get-ChildItem -LiteralPath $Root -Recurse -Force | Sort-Object -Property FullName)) {
         $relative = [System.IO.Path]::GetRelativePath($Root, $item.FullName)
         if ($item.PSIsContainer) { "$relative/" }
-        else { "$relative $([System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.IO.File]::ReadAllBytes($item.FullName))))" }
+        else { "$relative $(Get-FileHashText $item.FullName)" }
     }
     "notice: $($global:UsaWinNotice.Exists) '$($global:UsaWinNotice.Caption)' '$($global:UsaWinNotice.Text)'"
     foreach ($name in @($global:UsaWinTasks.Keys | Sort-Object)) { "task ${name}: $($global:UsaWinTasks[$name].Execute) $($global:UsaWinTasks[$name].Arguments)" }
@@ -198,8 +216,9 @@ function Use-WindowsHost {
     $global:UsaWinCalls = [System.Collections.Generic.List[string]]::new()
     $global:UsaWinAnswers = $Answers
     $global:UsaWinNotice = @{ Caption = ''; Text = ''; Exists = $true }
-    # The banner's tasks, by name: @{ Execute; Arguments; Schedule }.
+    # The banner's tasks, by name: @{ Execute; Arguments; Schedule }; and those with a run in progress.
     $global:UsaWinTasks = @{}
+    $global:UsaWinRunning = @{}
     $global:UsaWinAcl = $false
     Mock -ModuleName UsaBanner Get-UsaBannerHostOs { 'windows' }
     Mock -ModuleName UsaBanner Get-UsaBannerWindowsPaths { @{ ProgramData = "$global:UsaWinRoot/ProgramData"; ProgramFiles = "$global:UsaWinRoot/ProgramFiles"; Windir = "$global:UsaWinRoot/Windows" } }
@@ -226,9 +245,11 @@ function Use-WindowsHost {
     Mock -ModuleName UsaBanner Unregister-UsaBannerTask { $global:UsaWinCalls.Add("task unregistered: $Name"); $global:UsaWinTasks.Remove($Name) }
     Mock -ModuleName UsaBanner Start-UsaBannerTask {
         $global:UsaWinCalls.Add("task started: $Name")
-        # As Update-UsaBannerSample does at its first run.
+        # As Update-UsaBannerSample does at its first run; it runs on until stopped.
         if ($Name -eq 'UsaBanner sample') { [System.IO.File]::WriteAllText("$global:UsaWinRoot/ProgramData/UsagiTools/Banner/samples.tsv", '') }
+        $global:UsaWinRunning[$Name] = $true
     }
+    Mock -ModuleName UsaBanner Stop-UsaBannerTask { $global:UsaWinCalls.Add("task stopped: $Name"); $global:UsaWinRunning.Remove($Name) }
     Mock -ModuleName UsaBanner Invoke-UsaBannerNative {
         $call = (@($FilePath) + @($ArgumentList)) -join ' '
         $global:UsaWinCalls.Add($call)

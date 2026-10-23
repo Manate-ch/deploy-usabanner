@@ -306,6 +306,7 @@ Describe 'Remove-UsaBanner on Ubuntu' -Skip:$IsWindows {
         Get-HostState $global:UsaDeployRoot | Should -Be $before
         Get-Calls -Changes | Should -Be @(
             'systemctl disable --now usabanner-sample.timer'
+            'systemctl stop usabanner-sample.service'
             'systemctl daemon-reload'
             'dpkg-statoverride --remove /usr/share/landscape/landscape-sysinfo.wrapper'
             'systemctl unmask motd-news.timer'
@@ -314,6 +315,19 @@ Describe 'Remove-UsaBanner on Ubuntu' -Skip:$IsWindows {
         )
         $lines | Should -Contain 'turned back on /etc/update-motd.d/10-help-text'
         $lines | Should -Contain 'deleted /etc/update-motd.d/05-usabanner: the banner after login'
+    }
+
+    It 'stops a sample still running before the banner''s folders go, so it cannot write them again' {
+        # The lab (2026-10-23): a Remove-UsaBanner 9 s after a deploy, while the deploy's first sample still ran,
+        # and the sample made the banner's folder again 4 s after it went.
+        $before = Get-HostState $global:UsaDeployRoot
+        $null = Deploy-UsaBanner -Company Contoso
+        $null = Remove-UsaBanner
+        # A run still in progress ends now, writing what sample.sh writes.
+        if ('usabanner-sample.service' -in $global:UsaDeployUnits.Running) {
+            Write-TestFile $global:UsaDeployRoot 'var/lib/usabanner/samples.tsv' "1`tcpu`t5`n"
+        }
+        Get-HostState $global:UsaDeployRoot | Should -Be $before
     }
 
     It 'turns back on only what the deploy turned off' {

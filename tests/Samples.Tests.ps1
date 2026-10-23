@@ -55,6 +55,15 @@ Describe 'Add-UsaBannerSample' {
         @(Get-ChildItem -LiteralPath $folder -Force | ForEach-Object { $_.Name }) | Should -BeExactly @('samples.tsv')
     }
 
+    It 'stops, and leaves nothing beside the file, when the file cannot be replaced' {
+        # The lab (Server 2022, 2026-10-23): a slow.tsv no one could read was never replaced, a file beside it was
+        # left at each run, and the task still said it succeeded. A folder in the file's place stands in for it.
+        $folder = Join-Path $TestDrive 'locked'
+        $null = New-Item -ItemType Directory -Path (Join-Path $folder 'samples.tsv') -Force
+        { InModuleScope UsaBanner -Parameters @{ Facts = (New-Facts); Path = (Join-Path $folder 'samples.tsv'); Now = $Now } { param($Facts, $Path, $Now) Add-UsaBannerSample -Facts $Facts -Path $Path -Now $Now } } | Should -Throw
+        @(Get-ChildItem -LiteralPath $folder -Force | ForEach-Object { $_.Name }) | Should -BeExactly @('samples.tsv')
+    }
+
     It 'leaves out a fact without a percentage' {
         $facts = New-Facts
         $facts.Cpu.Now = $null
@@ -103,6 +112,19 @@ Describe 'Add-UsaBannerSampleRange' {
 
     It 'leaves the facts as they were without a samples file' {
         $facts = InModuleScope UsaBanner -Parameters @{ Facts = (New-Facts); Path = (Join-Path $TestDrive 'none.tsv'); Now = $Now } {
+            param($Facts, $Path, $Now)
+            Add-UsaBannerSampleRange -Facts $Facts -Path $Path -Now $Now
+            $Facts
+        }
+        @($facts.Cpu.Min, $facts.Cpu.Max, $facts.Memory.Min, $facts.Memory.Max).Where({ $null -ne $_ }).Count | Should -Be 0
+    }
+
+    It 'leaves the facts as they were, and goes on, with a samples file this user cannot read' {
+        # The lab (Server 2022, 2026-10-23): a job file no one could read stopped every login's banner.
+        $path = Join-Path $TestDrive 'unreadable.tsv'
+        Write-Samples $path "$($Epoch - 600)`tcpu`t3"
+        [System.IO.File]::SetUnixFileMode($path, [System.IO.UnixFileMode]::None)
+        $facts = InModuleScope UsaBanner -Parameters @{ Facts = (New-Facts); Path = $path; Now = $Now } {
             param($Facts, $Path, $Now)
             Add-UsaBannerSampleRange -Facts $Facts -Path $Path -Now $Now
             $Facts

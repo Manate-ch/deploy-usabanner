@@ -225,6 +225,14 @@ function Start-UsaBannerTask {
     Start-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $Name
 }
 
+function Stop-UsaBannerTask {
+    # In:  one of the banner's tasks, by name
+    # Out: nothing; a run of it in progress is stopped
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Name)
+    Stop-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $Name
+}
+
 function New-UsaBannerSampleTaskSpec {
     <#
     .SYNOPSIS
@@ -525,7 +533,7 @@ function Set-UsaBannerDataFolder {
     Out: a line for each change. Owner Administrators, so no one who made
          the folder first keeps an owner's right to change its ACL;
          inheritance off; SYSTEM and Administrators full control, Users read
-         and execute; the same on whatever is in it already.
+         and execute; whatever is in it already inherits that ACL.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -541,9 +549,16 @@ function Set-UsaBannerDataFolder {
     if (Test-UsaBannerFolderAcl -Path $Path) { return }
     if (-not $PSCmdlet.ShouldProcess($Path, 'Set its owner to Administrators, and its ACL: Administrators and SYSTEM full control, Users read and execute, nothing inherited')) { return }
     $owner = Invoke-UsaBannerNative -FilePath 'icacls.exe' -ArgumentList $Path, '/setowner', '*S-1-5-32-544', '/T', '/Q'
-    $grant = Invoke-UsaBannerNative -FilePath 'icacls.exe' -ArgumentList $Path, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-32-545:(OI)(CI)RX', '/T', '/Q'
-    if ($owner.ExitCode -ne 0 -or $grant.ExitCode -ne 0) {
-        throw "UsaBanner: icacls could not set the ACL of ${Path}, so nothing more is changed: $(@($owner.Output) + @($grant.Output) -join ' ')"
+    # The folder alone: with /T, a file already in it lost its inherited ACEs
+    # and took none of these, which are a folder's (OI)(CI), so nothing could
+    # read it, and icacls still said it succeeded (Server 2025, 2026-10-23).
+    $grant = Invoke-UsaBannerNative -FilePath 'icacls.exe' -ArgumentList $Path, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-32-545:(OI)(CI)RX', '/Q'
+    $reset = @{ ExitCode = 0; Output = @() }
+    if (@([System.IO.Directory]::GetFileSystemEntries($Path)).Count) {
+        $reset = Invoke-UsaBannerNative -FilePath 'icacls.exe' -ArgumentList ([System.IO.Path]::Combine($Path, '*')), '/reset', '/T', '/Q'
+    }
+    if ($owner.ExitCode -ne 0 -or $grant.ExitCode -ne 0 -or $reset.ExitCode -ne 0) {
+        throw "UsaBanner: icacls could not set the ACL of ${Path}, so nothing more is changed: $(@($owner.Output) + @($grant.Output) + @($reset.Output) -join ' ')"
     }
     "set the ACL of ${Path}: Administrators and SYSTEM may change it, Users read it"
 }
@@ -795,6 +810,9 @@ function Invoke-UsaBannerWindowsRemove {
 
     foreach ($name in $script:UsaTaskName, $script:UsaUpdateTaskName) {
         if ((Get-UsaBannerTask -Name $name) -and $PSCmdlet.ShouldProcess("$script:UsaTaskPath$name", 'Unregister the task')) {
+            # Unregistered, a run in progress goes on, and writes the banner's
+            # folder again after it is gone (lab, 2026-10-23): stopped first.
+            Stop-UsaBannerTask -Name $name
             Unregister-UsaBannerTask -Name $name
             "unregistered the task $script:UsaTaskPath$name"
         }
@@ -865,8 +883,11 @@ function Remove-UsaBannerWindowsFolder {
     [OutputType([string])]
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Allowed, [Parameter(Mandatory)][string]$What)
     $layout = Get-UsaBannerWindowsLayout
-    $modules = [System.IO.Path]::Combine($layout.Modules, 'UsaBanner')
-    $ours = $Path -eq $layout.Data -or $Path -eq $layout.OldData -or $Path.StartsWith("$modules/") -or $Path.StartsWith("$modules\")
+    # Windows takes either separator, and a deploy before 0.1.1 recorded the
+    # module's copy with both (C:\Program Files\...\Modules/UsaBanner/0.1.0):
+    # compare with one.
+    $modules = [System.IO.Path]::Combine($layout.Modules, 'UsaBanner').Replace('\', '/') + '/'
+    $ours = $Path -eq $layout.Data -or $Path -eq $layout.OldData -or $Path.Replace('\', '/').StartsWith($modules)
     if ($Path -ne $Allowed -or -not $ours) { throw "UsaBanner: $Path is not one of the banner's own folders, so it is not deleted." }
     if (-not [System.IO.Directory]::Exists($Path)) { return }
     $count = @([System.IO.Directory]::GetFiles($Path, '*', [System.IO.SearchOption]::AllDirectories)).Count

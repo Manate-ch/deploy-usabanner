@@ -35,6 +35,25 @@ BeforeAll {
         $global:UsaDeployUnits.Masked += 'motd-news.timer'
     }
 
+    function New-AdsysPolicies {
+        # In:  the startup script a GPO has ADSys run
+        # Out: ADSys's cache of the policy it applies to the machine, with that GPO, in the form ADSys
+        #      writes it (Ubuntu 24.04.5, 2026-10-23)
+        param([string]$Script)
+        @(
+            'gpos:'
+            "    - id: '{0F0E0D0C-0B0A-0908-0706-050403020100}'"
+            '      name: Contoso startup'
+            '      rules:'
+            '        scripts:'
+            '            - key: startup'
+            '              value: |'
+            "                $Script"
+            '              disabled: false'
+            '              strategy: append'
+        ) -join "`n"
+    }
+
     # Install-ManatechBanner.ps1's profile block, as it writes it.
     $script:OldBlock = @(
         '# >>> Manatech banner (Install-ManatechBanner.ps1) >>>'
@@ -190,11 +209,44 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Ubuntu' -Skip:$IsWindows {
         Join-Path $Root 'etc/issue.d/40-contoso.issue' | Should -Exist
     }
 
-    It 'warns where ADSys keeps a copy of the old banner, which a Group Policy puts back at the next boot' {
+    It 'warns where ADSys applies a Group Policy that runs the old banner, which puts it back at the next boot' {
         Add-OldUbuntuBanner $Root
         Write-TestFile $Root 'var/cache/adsys/sysvol/assets/scripts/MOTD/adsys-startup.sh' "#!/bin/sh`n"
+        Write-TestFile $Root 'var/cache/adsys/policies/H-VSL-WEB1/policies' (New-AdsysPolicies 'MOTD/adsys-startup.sh')
         $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue
-        "$warned" | Should -BeLike "*this host keeps ADSys's copy of the old banner*puts the old banner back at the next boot: take that GPO off this host (D23)*"
+        "$warned" | Should -BeLike "*a Group Policy that ADSys applies here runs the old banner's startup script (MOTD/adsys-startup.sh), which puts the old banner back at the next boot: take that GPO off this host (D23)*"
+    }
+
+    It 'says nothing of ADSys where its copy of SYSVOL keeps the old banner but no GPO it applies runs it' {
+        # The lab (2026-10-23): with the GPO's link off and ADSys refreshed, its copy of SYSVOL still held the old
+        # banner's files, as other GPOs applied.
+        Add-OldUbuntuBanner $Root
+        Write-TestFile $Root 'var/cache/adsys/sysvol/assets/scripts/MOTD/adsys-startup.sh' "#!/bin/sh`n"
+        Write-TestFile $Root 'var/cache/adsys/policies/H-VSL-WEB1/policies' (New-AdsysPolicies 'contoso/agent-startup.sh')
+        $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue
+        "$warned" | Should -Not -BeLike '*ADSys*'
+    }
+
+    It 'enables motd-news.timer again where its package enabled it and the first install.sh disabled it' {
+        # The lab (2026-10-23): the first install.sh ran systemctl disable --now on it, and a later one masked it;
+        # deb-systemd-helper's record says its package enabled it.
+        Add-OldUbuntuBanner $Root
+        $global:UsaDeployUnits.Disabled += 'motd-news.timer'
+        Write-TestFile $Root 'var/lib/systemd/deb-systemd-helper-enabled/timers.target.wants/motd-news.timer' ''
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner)
+        $lines | Should -Contain 'unmasked and enabled motd-news.timer: the old banner masked it, and its first install.sh disabled it'
+        Get-Calls -Changes | Should -Contain 'systemctl enable --now motd-news.timer'
+        $null = Remove-UsaBanner
+        $global:UsaDeployUnits.Disabled | Should -BeNullOrEmpty
+        $global:UsaDeployUnits.Masked | Should -BeNullOrEmpty
+    }
+
+    It 'leaves motd-news.timer disabled where no package''s record says it enabled it' {
+        Add-OldUbuntuBanner $Root
+        $global:UsaDeployUnits.Disabled += 'motd-news.timer'
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner)
+        $lines | Should -Contain 'unmasked motd-news.timer: the old banner masked it'
+        Get-Calls -Changes | Should -Not -Contain 'systemctl enable --now motd-news.timer'
     }
 
     It 'has Get-UsaBanner''s old banner check ok after it, and differs when the old banner is back' {

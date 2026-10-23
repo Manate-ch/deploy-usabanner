@@ -47,8 +47,13 @@ $script:UsaOldFolders = [ordered]@{
     '/usr/local/share/manatech' = 'the old banner''s code and data'
     '/var/lib/manatech'         = 'the old banner''s cached facts'
 }
-# Where ADSys keeps its copy of the old banner, on a host Group Policy delivers it to.
-$script:UsaOldAdsysCopy = '/var/cache/adsys/sysvol/assets/scripts/MOTD/adsys-startup.sh'
+# Where ADSys keeps the policy it applies, a folder for the machine and each
+# user; and the startup script the old banner's GPO has it run, as
+# Publish-ManatechMotd.ps1 sets it.
+$script:UsaAdsysPolicies = '/var/cache/adsys/policies'
+$script:UsaOldAdsysScript = 'MOTD/adsys-startup.sh'
+# Where deb-systemd-helper records each timer a package enabled.
+$script:UsaDebEnabledTimers = '/var/lib/systemd/deb-systemd-helper-enabled/timers.target.wants'
 
 # Install-ManatechBanner.ps1's marks: its profile block, its Banner line, and
 # the note it puts before a Banner it turns off.
@@ -93,12 +98,13 @@ function Remove-UsaBannerLinuxOldInstall {
     Its jobs stop first, so they install nothing more while it goes. Then
     what --retire turned off comes back on as Ubuntu ships it: the stock
     MOTD scripts; landscape-sysinfo, its statoverride removed (or, for a
-    file no package owns, its execute bits set); motd-news.timer, unmasked
-    and started where it is enabled. Then its sshd drop-in (ssh reloads),
-    its MOTD scripts and console file (and /etc/issue.d, when that leaves it
-    empty: install.sh made it), and its folders. Where the host keeps
-    ADSys's copy of the old banner, a warning says that a Group Policy still
-    running it puts it back at the next boot.
+    file no package owns, its execute bits set); motd-news.timer, unmasked,
+    and started, or enabled again where its package enabled it and the
+    first install.sh disabled it. Then its sshd drop-in (ssh reloads), its
+    MOTD scripts and console file (and /etc/issue.d, when that leaves it
+    empty: install.sh made it), and its folders. Where ADSys still applies
+    a GPO that runs the old banner's startup script, a warning says it puts
+    the old banner back at the next boot.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -142,15 +148,22 @@ function Remove-UsaBannerLinuxOldInstall {
         }
     }
     $state = [string](@((Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'is-enabled', 'motd-news.timer').Output) + '')[0]
-    if ($state -eq 'masked' -and $PSCmdlet.ShouldProcess('motd-news.timer', 'Unmask it, which the old banner masked, and start it where it is enabled (systemctl unmask)')) {
+    if ($state -eq 'masked' -and $PSCmdlet.ShouldProcess('motd-news.timer', 'Unmask it, which the old banner masked, and start it, enabling it again where its package enabled it (systemctl unmask)')) {
         $unmasked = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'unmask', 'motd-news.timer'
         if ($unmasked.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl could not unmask motd-news.timer: $($unmasked.Output -join ' ')" }
         else {
-            if ([string](@((Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'is-enabled', 'motd-news.timer').Output) + '')[0] -eq 'enabled') {
-                $started = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'start', 'motd-news.timer'
-                if ($started.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl could not start motd-news.timer: $($started.Output -join ' ')" }
+            # The first install.sh also ran systemctl disable --now, which a
+            # later one's mask hid: its package enabled it, as
+            # deb-systemd-helper's record says (lab, 2026-10-23).
+            $enabled = [string](@((Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'is-enabled', 'motd-news.timer').Output) + '')[0]
+            $verb = if ($enabled -eq 'enabled') { 'start' } elseif ([System.IO.File]::Exists("$Root$script:UsaDebEnabledTimers/motd-news.timer")) { 'enable' }
+            if ($verb) {
+                $arguments = if ($verb -eq 'enable') { @('enable', '--now', 'motd-news.timer') } else { @('start', 'motd-news.timer') }
+                $result = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList $arguments
+                if ($result.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl could not $verb motd-news.timer: $($result.Output -join ' ')" }
             }
-            'unmasked motd-news.timer: the old banner masked it'
+            if ($verb -eq 'enable') { 'unmasked and enabled motd-news.timer: the old banner masked it, and its first install.sh disabled it' }
+            else { 'unmasked motd-news.timer: the old banner masked it' }
         }
     }
 
@@ -170,9 +183,27 @@ function Remove-UsaBannerLinuxOldInstall {
         'deleted the empty folder /etc/issue.d: install.sh made it, and no package ships it'
     }
     foreach ($folder in $script:UsaOldFolders.Keys) { Remove-UsaBannerHostFolder -Root $Root -Path $folder -What $script:UsaOldFolders[$folder] }
-    if ([System.IO.File]::Exists("$Root$script:UsaOldAdsysCopy")) {
-        Write-Warning "UsaBanner: this host keeps ADSys's copy of the old banner ($script:UsaOldAdsysCopy). A Group Policy that runs it puts the old banner back at the next boot: take that GPO off this host (D23). Get-UsaBanner's old banner check says when it is back."
+    if (Test-UsaBannerOldAdsysPolicy -Root $Root) {
+        Write-Warning "UsaBanner: a Group Policy that ADSys applies here runs the old banner's startup script ($script:UsaOldAdsysScript), which puts the old banner back at the next boot: take that GPO off this host (D23). Get-UsaBanner's old banner check says when it is back."
     }
+}
+
+function Test-UsaBannerOldAdsysPolicy {
+    # In:  the host's root
+    # Out: $true when the policy ADSys applies here runs the old banner's
+    #      startup script
+    # Why: ADSys's copy of SYSVOL keeps the old banner's files while any GPO
+    #      applies, its GPO linked or not (lab, 2026-10-23); the policy it
+    #      applies says whether one still runs them at the next boot
+    param([AllowEmptyString()][string]$Root = '')
+    $folder = "$Root$script:UsaAdsysPolicies"
+    if (-not [System.IO.Directory]::Exists($folder)) { return $false }
+    foreach ($file in [System.IO.Directory]::GetFiles($folder, 'policies', [System.IO.SearchOption]::AllDirectories)) {
+        try { $lines = [System.IO.File]::ReadAllLines($file) }
+        catch [System.UnauthorizedAccessException], [System.IO.IOException] { continue }
+        if (@($lines | Where-Object { $_.Trim() -ceq $script:UsaOldAdsysScript }).Count) { return $true }
+    }
+    $false
 }
 
 function Remove-UsaBannerOldSshdBannerLine {

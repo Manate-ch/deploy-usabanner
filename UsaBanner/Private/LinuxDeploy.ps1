@@ -542,7 +542,7 @@ function Install-UsaBannerModuleCopy {
         [AllowNull()][Nullable[System.IO.UnixFileMode]]$FolderMode = $script:UsaMode755
     )
     $version = [string](Import-PowerShellDataFile -LiteralPath $script:UsaBannerManifest).ModuleVersion
-    $target = "$Modules/UsaBanner/$version"
+    $target = [System.IO.Path]::Combine($Modules, 'UsaBanner', $version)
     $source = [System.IO.Path]::GetFullPath($script:UsaBannerRoot).TrimEnd('/', '\')
     if ($source -eq [System.IO.Path]::GetFullPath("$Root$target").TrimEnd('/', '\')) { return }
     $copy = [System.Collections.Generic.List[string]]::new()
@@ -959,6 +959,10 @@ function Invoke-UsaBannerLinuxRemove {
             $disable = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'disable', '--now', "$job.timer"
             if ($disable.ExitCode -eq 0) { "stopped $job.timer" }
             else { Write-Warning "UsaBanner: systemctl could not disable $job.timer: $($disable.Output -join ' ')" }
+            # The timer stopped, a run in progress goes on, and writes the
+            # banner's folder again after it is gone (lab, 2026-10-23).
+            $stop = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'stop', "$job.service"
+            if ($stop.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl could not stop $job.service: $($stop.Output -join ' ')" }
         }
     }
     $gone = @(foreach ($job in $jobs.Keys) {

@@ -148,6 +148,15 @@ Describe 'Write-UsaBannerSlowFacts' {
         $path = Join-Path $TestDrive 'made' 'for' 'slow.tsv'
         Invoke-SlowFacts $Recorded -Updates $null -Path $path | Should -BeExactly (Join-Line "$Epoch`tcpu-speed`t3.1")
     }
+
+    It 'stops, and leaves nothing beside the file, when the file cannot be replaced' {
+        # The lab (Server 2022, 2026-10-23): this file, with an ACL no one could read, was never replaced, a file
+        # beside it was left at each run, and the task still said it succeeded. A folder in its place stands in.
+        $folder = Join-Path $TestDrive 'locked'
+        $null = New-Item -ItemType Directory -Path (Join-Path $folder 'slow.tsv') -Force
+        { Invoke-SlowFacts $Recorded -Updates $null -Path (Join-Path $folder 'slow.tsv') } | Should -Throw
+        @(Get-ChildItem -LiteralPath $folder -Force | ForEach-Object { $_.Name }) | Should -BeExactly @('slow.tsv')
+    }
 }
 
 Describe 'Add-UsaBannerSlowFacts' {
@@ -194,6 +203,20 @@ Describe 'Add-UsaBannerSlowFacts' {
         $facts.Cpu.Text | Should -BeExactly '4 cores'
         $facts.Memory.Kind | Should -BeNullOrEmpty
         $facts.ContainsKey('Updates') | Should -BeFalse
+    }
+
+    It 'leaves the facts as they are, and goes on, with a file this user cannot read' {
+        # The lab (Server 2022, 2026-10-23): a slow.tsv no one could read stopped every login's banner.
+        $path = Join-Path $TestDrive 'unreadable.tsv'
+        [System.IO.File]::WriteAllText($path, "$Epoch`tmemory-kind`tDDR4-3200`n")
+        [System.IO.File]::SetUnixFileMode($path, [System.IO.UnixFileMode]::None)
+        $facts = InModuleScope UsaBanner -Parameters @{ Facts = (New-Facts); Path = $path; Now = $Now } {
+            param($Facts, $Path, $Now)
+            Add-UsaBannerSlowFacts -Facts $Facts -Path $Path -Now $Now
+            $Facts
+        }
+        $facts.Memory.Kind | Should -BeNullOrEmpty
+        $facts.Cpu.Text | Should -BeExactly '4 cores'
     }
 }
 
