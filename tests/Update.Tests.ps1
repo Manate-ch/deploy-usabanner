@@ -208,7 +208,7 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
     }
 
     It 'install: checks the archive, unpacks it, has the new version deploy this host''s configuration, and takes the old version away' {
-        $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source
+        $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source -WarningAction SilentlyContinue
         Use-Release (New-Release -Version '0.2.0')
         Mock -ModuleName UsaBanner Invoke-UsaBannerNative -ParameterFilter { $ArgumentList -contains '-File' } {
             $global:UsaNewDeploy = @($ArgumentList)
@@ -227,7 +227,7 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
     }
 
     It 'install: refuses an archive SHA256SUMS does not match, and installs nothing' {
-        $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source
+        $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source -WarningAction SilentlyContinue
         $release = New-Release -Version '0.2.0'
         [System.IO.File]::AppendAllText((Join-Path $release 'UsaBanner-0.2.0.zip'), 'x')
         Use-Release $release
@@ -239,14 +239,14 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
     }
 
     It 'install: refuses an archive whose module is another version than its name says' {
-        $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source
+        $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source -WarningAction SilentlyContinue
         Use-Release (New-Release -Version '0.2.0' -ManifestVersion '0.3.0')
         { InModuleScope UsaBanner { Update-UsaBannerRelease } } | Should -Throw '*UsaBanner-0.2.0.zip holds UsaBanner 0.3.0, not 0.2.0, so nothing is installed*'
         @(Get-ChildItem -LiteralPath $Modules -Name) | Should -Be @($Installed)
     }
 
     It 'install: keeps the old version when the new one''s deploy fails, and puts back what that deploy changed' {
-        $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source
+        $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source -WarningAction SilentlyContinue
         Use-Release (New-Release -Version '0.2.0')
         Mock -ModuleName UsaBanner Invoke-UsaBannerNative -ParameterFilter { $ArgumentList -contains '-File' } {
             # A deploy cut short: half of the new module in place, and a script of the renderer changed.
