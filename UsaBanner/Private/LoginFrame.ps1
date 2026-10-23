@@ -11,7 +11,7 @@
 #   +------+-------------------------------------------------------------+
 #   | H    | a line drawn above the facts' rows: the art, the welcome    |
 #   |      | line, the tier strip, the panel's top line, and its schema, |
-#   |      | VLAN and tier rows                                          |
+#   |      | VLAN, tier and role rows                                    |
 #   | F    | the panel's bottom line                                     |
 #   | T    | a key and its value: what awk draws the facts in (below)    |
 #   +------+-------------------------------------------------------------+
@@ -19,9 +19,13 @@
 # T's keys: reset, and the escape of each style (label, value, dim, good,
 # warn, bad, edge), '' where the mode draws none; the box's sides (left,
 # right); the panel's glyphs (full, empty, sep, ok, markwarn, markbad); the
-# voice (voice) and its word for each row (word.os ... word.services) and for
-# all clear (allclear); and the sizes (width, inside, inner, labelmax). No
-# drawn line holds a tab.
+# voice (voice) and its word for each row awk draws (word.os ... word.services)
+# and for all clear (allclear); and the sizes (width, inside, inner,
+# labelmax). No drawn line holds a tab.
+#
+# The tier and the role come from the configuration and the host's AD
+# Description (D29), so they are drawn here, never at a login: a change to
+# either draws the frame again (linux/redraw.sh).
 
 function New-UsaBannerLoginFrame {
     <#
@@ -76,7 +80,7 @@ function New-UsaBannerLoginFrame {
     $theme['markwarn'] = $glyphs.Warn
     $theme['markbad'] = $glyphs.Bad
     $theme['voice'] = if ($words) { $voice } else { 'plain' }
-    foreach ($word in 'os', 'role', 'uptime', 'cpu', 'memory', 'disk', 'sessions', 'time', 'ipv4', 'updates', 'reboot', 'services') { $theme["word.$word"] = Get-UsaBannerVoiceLabel -Label $word -Voice $voice }
+    foreach ($word in 'os', 'uptime', 'cpu', 'memory', 'disk', 'sessions', 'time', 'ipv4', 'updates', 'reboot', 'services') { $theme["word.$word"] = Get-UsaBannerVoiceLabel -Label $word -Voice $voice }
     $theme['allclear'] = if ($words) { $words.AllClear } else { 'all clear' }
     $theme['width'] = $script:UsaBannerWidth
     $theme['inside'] = $script:UsaBannerWidth - 5

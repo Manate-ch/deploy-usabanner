@@ -121,9 +121,39 @@ Describe 'Get-UsaBanner on Ubuntu' -Skip:$IsWindows {
         $drawn.State | Should -BeExactly 'stale'
         $drawn.Detail | Should -BeExactly 'drawn for h-vsl-web1.ad.example (10.20.40.80), and this host is h-vsl-web2.ad.example (10.20.40.80): the periodic job draws the banners again within 15 minutes'
         (Get-Check $status 'banner after login').State | Should -BeExactly 'stale'
-        (Get-Check $status 'banner after login').Detail | Should -BeExactly '/var/lib/usabanner/postlogin.frame was drawn for another name, address or configuration'
+        (Get-Check $status 'banner after login').Detail | Should -BeExactly '/var/lib/usabanner/postlogin.frame was drawn for another name, address, configuration or AD Description'
         # agetty fills in the name, so the console's banner holds none to be out of date.
         (Get-Check $status 'console banner').State | Should -BeExactly 'ok'
+        $status.Healthy | Should -BeFalse
+        $null = InModuleScope UsaBanner { Update-UsaBannerDrawing }
+        Get-Problem (Get-UsaBanner) | Should -BeNullOrEmpty
+    }
+
+    It 'says where the tier and the role came from: here the configuration, and neither, with no AD Description cached' {
+        $status = Get-ReadOnlyStatus
+        $status.Tier | Should -BeExactly 'PROD'
+        $status.TierFrom | Should -BeExactly 'configuration'
+        $status.Role | Should -BeExactly ''
+        $status.RoleFrom | Should -BeExactly ''
+        $null -eq $status.AdDescription | Should -BeTrue
+        $text = @(($status | Out-String -Width 250) -split "`r?`n")
+        $text | Should -Contain 'Tier     : PROD, from the configuration'
+        $text | Should -Contain 'Role     : (none)'
+        $text | Should -Contain 'AD Desc  : (none cached)'
+    }
+
+    It 'takes the role from a newly cached AD Description, and finds the banners drawn without it until the periodic job draws them again' {
+        Write-TestFile $global:UsaDeployRoot 'var/lib/usabanner/ad-description' "LAB : Web front end`n"
+        $status = Get-ReadOnlyStatus
+        $status.Tier | Should -BeExactly 'PROD'
+        $status.TierFrom | Should -BeExactly 'configuration'
+        $status.Role | Should -BeExactly 'Web front end'
+        $status.RoleFrom | Should -BeExactly 'AD Description'
+        $status.AdDescription | Should -BeExactly 'LAB : Web front end'
+        $text = @(($status | Out-String -Width 250) -split "`r?`n")
+        $text | Should -Contain 'Role     : Web front end, from the AD Description'
+        $text | Should -Contain 'AD Desc  : "LAB : Web front end"'
+        (Get-Check $status 'drawn for this host').Detail | Should -BeExactly 'drawn from another AD Description: the periodic job draws the banners again within 15 minutes'
         $status.Healthy | Should -BeFalse
         $null = InModuleScope UsaBanner { Update-UsaBannerDrawing }
         Get-Problem (Get-UsaBanner) | Should -BeNullOrEmpty
@@ -299,6 +329,17 @@ Describe 'Get-UsaBanner on Windows Server' {
         $status.Deployed | Should -BeFalse
         $status.Healthy | Should -BeFalse
         (Get-Check $status 'configuration').State | Should -BeExactly 'missing'
+    }
+
+    It 'says where the tier and the role came from, with the AD Description the periodic job cached; a login draws it, so nothing is stale' {
+        Write-TestFile $global:UsaWinRoot 'ProgramData/UsagiTools/Banner/ad-description' "LAB : Line-of-business apps`n"
+        $status = Get-ReadOnlyStatus
+        $status.Tier | Should -BeExactly 'PROD'
+        $status.TierFrom | Should -BeExactly 'configuration'
+        $status.Role | Should -BeExactly 'Line-of-business apps'
+        $status.RoleFrom | Should -BeExactly 'AD Description'
+        $status.AdDescription | Should -BeExactly 'LAB : Line-of-business apps'
+        Get-Problem $status | Should -BeNullOrEmpty
     }
 
     It 'names the banner of this repository''s Install-ManatechBanner.ps1 on a host that has it' {

@@ -630,6 +630,23 @@ Describe 'linux/sample.sh' -Skip:$IsWindows {
         @(Get-ChildItem -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner') -Force | ForEach-Object { $_.Name } | Sort-Object) | Should -BeExactly @('fqdn', 'samples.tsv', 'slow.tsv')
     }
 
+    It 'reads the AD Description with <Case>' -ForEach @(
+        @{ Case = 'ad-description.sh beside it on a host with a machine keytab, and goes on when no domain controller answers'; Keytab = $true; Ran = $true }
+        @{ Case = 'nothing on a host with no machine keytab: one outside a domain'; Keytab = $false; Ran = $false }
+    ) {
+        # A copy of the job beside a stand-in that says it ran, and fails as it does when no
+        # domain controller answers (75).
+        $copy = Join-Path $TestDrive ([guid]::NewGuid().ToString())
+        $null = New-Item -ItemType Directory -Path $copy
+        Copy-Item -LiteralPath $Sampler, (Join-Path (Split-Path $Sampler) 'facts.sh') -Destination $copy
+        [System.IO.File]::WriteAllText((Join-Path $copy 'ad-description.sh'), "echo ad-description.sh >>`"`$STUB_LOG`"`nexit 75`n")
+        $variant = New-Variant $(if ($Keytab) { @{ 'root/etc/krb5.keytab' = "key`n" } } else { @{} })
+        $null = Invoke-Collector @variant -Program (Join-Path $copy 'sample.sh')
+        $LASTEXITCODE | Should -Be 0
+        @(Get-Content -LiteralPath $Log) -contains 'ad-description.sh' | Should -Be $Ran
+        Test-Path -LiteralPath (Join-Path $variant.Root 'var/lib/usabanner/slow.tsv') | Should -BeTrue
+    }
+
     It 'keeps the memory''s kind and speed: <Case>' -ForEach @(
         @{ Case = 'none from a virtual machine''s firmware'; Dmi = $null; Expected = '' }
         @{ Case = 'the first module with a type, at its configured speed'; Dmi = (@(

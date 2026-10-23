@@ -95,6 +95,8 @@ BeforeAll {
             $config = Get-UsaBannerConfigDefault
             $config['company'] = 'Contoso'
             $config['environment'] = 'LAB'
+            # The role is the configuration's (D29): each made-up host brings its own.
+            $config['role'] = [string]$Facts['Role']
             $config['vlans'] = @(
                 [ordered]@{ name = 'Management'; tag = 10; cidr = '10.20.10.0/24'; color = 'Blue'; short = 'Mgmt' }
                 [ordered]@{ name = 'Servers'; tag = 40; cidr = '10.20.40.0/22'; color = 'Teal' }
@@ -202,6 +204,18 @@ Describe 'the panel' {
         $lines = Invoke-PostLogin -Facts @{ Name = 'h-vsl-web1.ad.example'; Ip = '10.20.40.80' }
         $rows = @($lines | Where-Object { $_ -match '^\| ' })
         @($rows | ForEach-Object { ($_ -replace '^\|\s+', '' -split '\s+')[0] }) | Should -BeExactly @('schema', 'vlan', 'tier')
+    }
+
+    It 'draws the role beside the tier, where Linux''s frame has it drawn ahead' {
+        $rows = @(Invoke-PostLogin -Facts (Get-Facts web) | Where-Object { $_ -match '^\| ' })
+        @($rows | ForEach-Object { ($_ -replace '^\|\s+', '' -split '\s+')[0] })[0..4] | Should -BeExactly @('schema', 'vlan', 'tier', 'role', 'os')
+    }
+
+    It 'takes the role from the configuration alone: a Role among the facts draws nothing' {
+        $lines = InModuleScope UsaBanner {
+            @(Get-UsaBannerPostLogon -Config (Get-UsaBannerConfigDefault) -Os ubuntu -Facts @{ Name = 'h-vsl-web1.ad.example'; Role = 'Web front end' } -Mode none)
+        }
+        ($lines -join "`n") | Should -Not -Match '\|  role |Web front end'
     }
 
     It 'cuts a value too wide for its row, ending it in ~' {

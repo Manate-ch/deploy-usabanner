@@ -16,8 +16,11 @@
 #   | /usr/local/share/usabanner/              | the login renderer and the |
 #   |                                          | periodic job (linux/)      |
 #   | /var/lib/usabanner/                      | the frame, the services,   |
-#   |                                          | what was drawn, and the    |
-#   |                                          | record of the deploy       |
+#   |                                          | what was drawn, the record |
+#   |                                          | of the deploy, and the     |
+#   |                                          | periodic job's files: the  |
+#   |                                          | samples, the slow facts    |
+#   |                                          | and the AD Description     |
 #   | /etc/systemd/system/usabanner-sample.*   | the periodic job, every 15 |
 #   |                                          | minutes (D17)              |
 #   | /etc/systemd/system/usabanner-update.*   | the update job, once a     |
@@ -37,7 +40,7 @@ $script:UsaLinuxEtc = '/etc/usabanner'
 $script:UsaLinuxShare = '/usr/local/share/usabanner'
 $script:UsaLinuxState = '/var/lib/usabanner'
 $script:UsaLinuxModules = '/usr/local/share/powershell/Modules'
-$script:UsaLinuxScripts = @('facts.sh', 'postlogin.awk', 'postlogin.sh', 'redraw.sh', 'sample.sh', 'update.sh')
+$script:UsaLinuxScripts = @('ad-description.sh', 'facts.sh', 'postlogin.awk', 'postlogin.sh', 'redraw.sh', 'sample.sh', 'update.sh')
 $script:UsaLinuxMotd = '/etc/update-motd.d/05-usabanner'
 $script:UsaLinuxIssue = '/etc/issue.d/50-usabanner.issue'
 $script:UsaLinuxDropIn = '/etc/ssh/sshd_config.d/00-usabanner.conf'
@@ -376,15 +379,18 @@ function New-UsaBannerLinuxDrawing {
     A host's banners, drawn as the files that hold them.
     .DESCRIPTION
     In:  the configuration, the OS (ubuntu, or linux for any other), the
-         host's name and primary address, and the SHA-256 of the
-         configuration file.
+         host's name and primary address, the SHA-256 of the configuration
+         file, and the cached AD Description and the SHA-256 of its file
+         ('' for none: Read-UsaBannerLinuxAdCache).
     Out: the text of each file, LF line ends: Frame, the banner after login
-         (LoginFrame.ps1); Issue, the console's, whose host name and address
-         agetty fills in; IssueNet, the SSH banner, plain ASCII; LoginEnv,
-         the services facts.sh watches; Drawn, the name, address and
-         configuration the banners were drawn with, which linux/redraw.sh
-         compares. The banners before login end in a blank line, as today's,
-         so the prompt does not touch the box.
+         (LoginFrame.ps1), with the tier and role the configuration and the
+         AD Description give (Resolve-UsaBannerHostConfig); Issue, the
+         console's, whose host name and address agetty fills in; IssueNet,
+         the SSH banner, plain ASCII; LoginEnv, the services facts.sh
+         watches; Drawn, the name, address, configuration and AD Description
+         the banners were drawn with, which linux/redraw.sh compares. The
+         banners before login end in a blank line, as today's, so the prompt
+         does not touch the box.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
@@ -393,10 +399,13 @@ function New-UsaBannerLinuxDrawing {
         [Parameter(Mandatory)][ValidateSet('ubuntu', 'linux')][string]$Os,
         [Parameter(Mandatory)][string]$Name,
         [AllowEmptyString()][string]$Ip = '',
-        [Parameter(Mandatory)][string]$ConfigSum
+        [Parameter(Mandatory)][string]$ConfigSum,
+        [AllowEmptyString()][string]$Description = '',
+        [AllowEmptyString()][string]$DescriptionSum = ''
     )
     $look = Resolve-UsaBannerLoginLook -Config $Config
-    $frame = @(New-UsaBannerLoginFrame -Config $Config -Os $Os -Name $Name -Ip $Ip -Mode $look.Mode -AsciiOnly:$look.AsciiOnly)
+    $hostConfig = (Resolve-UsaBannerHostConfig -Config $Config -Description $Description).Config
+    $frame = @(New-UsaBannerLoginFrame -Config $hostConfig -Os $Os -Name $Name -Ip $Ip -Mode $look.Mode -AsciiOnly:$look.AsciiOnly)
     $issue = @(Get-UsaBannerPreInit -Config $Config -Os $Os)
     $net = @(Get-UsaBannerPreLogon -Config $Config -Os $Os -Facts @{ HostName = ($Name -split '\.')[0]; Ip = $Ip })
     $services = $Config['services']
@@ -406,8 +415,22 @@ function New-UsaBannerLinuxDrawing {
         Issue    = ($issue -join "`n") + "`n`n"
         IssueNet = ($net -join "`n") + "`n`n"
         LoginEnv = "USABANNER_SERVICES=$watched`n"
-        Drawn    = "$Name`t$Ip`t$ConfigSum`n"
+        Drawn    = "$Name`t$Ip`t$ConfigSum`t$DescriptionSum`n"
     }
+}
+
+function Read-UsaBannerLinuxAdCache {
+    # In:  the host's root
+    # Out: @{ Text; Sum }: the AD Description the periodic job cached
+    #      (Read-UsaBannerAdDescription), $null for none, and the SHA-256 of
+    #      its file, '' for none
+    # Why: the banners are drawn with the one, and linux/redraw.sh compares
+    #      the other, as it compares the configuration's
+    param([AllowEmptyString()][string]$Root = '')
+    $path = "$Root$script:UsaLinuxState/ad-description"
+    $text = Read-UsaBannerAdDescription -Path $path
+    if ($null -eq $text) { return @{ Text = $null; Sum = '' } }
+    @{ Text = $text; Sum = (Get-UsaBannerSha256 -Bytes ([System.IO.File]::ReadAllBytes($path))) }
 }
 
 function Write-UsaBannerLinuxDrawing {
@@ -895,7 +918,8 @@ function Invoke-UsaBannerLinuxDeploy {
     $utf8 = [System.Text.UTF8Encoding]::new($false)
     $configBytes = $utf8.GetBytes((ConvertTo-UsaBannerConfigJson -Config $Config))
     $facts = Get-UsaBannerHostFacts -Services @()
-    $drawing = New-UsaBannerLinuxDrawing -Config $Config -Os 'ubuntu' -Name ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -ConfigSum (Get-UsaBannerSha256 -Bytes $configBytes)
+    $ad = Read-UsaBannerLinuxAdCache -Root $root
+    $drawing = New-UsaBannerLinuxDrawing -Config $Config -Os 'ubuntu' -Name ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -ConfigSum (Get-UsaBannerSha256 -Bytes $configBytes) -Description $ad.Text -DescriptionSum $ad.Sum
     $configPath = "$script:UsaLinuxEtc/usabanner.json"
     $settings = ''
     if ([System.IO.File]::Exists("$root$configPath")) {
@@ -926,10 +950,11 @@ function Update-UsaBannerDrawing {
     Draws this host's banners again, from its own configuration.
     .DESCRIPTION
     linux/redraw.sh runs it after a sample of the periodic job, when the
-    host's name, address or configuration file is no longer what the
-    banners were drawn with: a VM made from a template and renamed, an
-    address that moved, an edit of /etc/usabanner/usabanner.json. It
-    rewrites only the drawn files that change, and says which.
+    host's name, address, configuration file or cached AD Description is no
+    longer what the banners were drawn with: a VM made from a template and
+    renamed, an address that moved, an edit of
+    /etc/usabanner/usabanner.json, a Description changed in AD. It rewrites
+    only the drawn files that change, and says which.
     Throws when the configuration cannot be read: the banners stay as they
     were, and the periodic job's run fails, which the banner's health
     lines show.
@@ -942,7 +967,8 @@ function Update-UsaBannerDrawing {
     $config = Read-UsaBannerConfig -Path $path
     $facts = Get-UsaBannerHostFacts -Services @()
     $os = Get-UsaBannerHostOs -OnWindows $false -OsReleasePath "$root/etc/os-release"
-    $drawing = New-UsaBannerLinuxDrawing -Config $config -Os $os -Name ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -ConfigSum (Get-UsaBannerSha256 -Bytes ([System.IO.File]::ReadAllBytes($path)))
+    $ad = Read-UsaBannerLinuxAdCache -Root $root
+    $drawing = New-UsaBannerLinuxDrawing -Config $config -Os $os -Name ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -ConfigSum (Get-UsaBannerSha256 -Bytes ([System.IO.File]::ReadAllBytes($path))) -Description $ad.Text -DescriptionSum $ad.Sum
     Write-UsaBannerLinuxDrawing -Root $root -Drawing $drawing -Created $null
 }
 

@@ -21,13 +21,18 @@ function Show-UsaBanner {
     setting it leaves out; without -Path, the defaults alone.
 
     -Facts is what the banner shows about the host, as a hashtable: Name
-    (the host name, with its domain), Ip, Os, Role, Uptime, Cpu, Memory,
-    Disks, Sessions, Time, Ipv4, Updates, Reboot, Services, Problems and
-    Checked, in the shapes UsaBanner\Private\PostLogin.ps1 gives. A fact
-    left out gets no row. Without -Facts, the banner shows this host's own:
-    on Linux, what UsaBanner/linux/facts.sh collects; on Windows, what the
-    module reads from CIM, the registry and .NET. The SSH banner and the
-    console show the name without its domain.
+    (the host name, with its domain), Ip, Os, Uptime, Cpu, Memory, Disks,
+    Sessions, Time, Ipv4, Updates, Reboot, Services, Problems and Checked,
+    in the shapes UsaBanner\Private\PostLogin.ps1 gives. A fact left out
+    gets no row. Without -Facts, the banner shows this host's own: on Linux,
+    what UsaBanner/linux/facts.sh collects; on Windows, what the module
+    reads from CIM, the registry and .NET. The SSH banner and the console
+    show the name without its domain.
+
+    The tier and the role are the configuration's environment and role.
+    Where it leaves them unset, this host's own banner, drawn without
+    -Facts, takes them from the AD Description the periodic job cached, as
+    "PROD : Web front end" gives both.
 
     -ColorMode is as for Show-UsaBannerArt; auto also takes the mode the
     configuration sets for this host. -Glyphs auto reads USABANNER_GLYPHS,
@@ -107,6 +112,11 @@ function Show-UsaBanner {
             return Get-UsaBannerConsoleBanner -Config $config -Os $hostOs -HostName $shortName -Ip $ip -Mode $consoleMode
         }
         $ascii = (Resolve-UsaBannerGlyphs -Requested $Glyphs -HostGlyphs ([string]$config['glyphs'])) -eq 'ascii'
+        # Made-up facts are no host's: they take the configuration's tier
+        # and role alone.
+        $description = ''
+        if (-not $Facts) { $description = [string](Read-UsaBannerAdDescription) }
+        $config = (Resolve-UsaBannerHostConfig -Config $config -Description $description).Config
         Get-UsaBannerPostLogon -Config $config -Os $hostOs -Facts $hostFacts -Mode $mode -AsciiOnly:$ascii
     }
 }

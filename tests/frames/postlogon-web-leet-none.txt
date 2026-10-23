@@ -18,8 +18,8 @@
 |  5CH3M4    HQ / Virtual / Server / Linux                     |
 |  VL4N      40  Servers  (10.20.40.0/22)                      |
 |  713R       LAB   L4RG3R-5C4L3 73571NG                       |
-|  05        Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic       |
 |  R0L3      Web front end                                     |
+|  05        Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic       |
 |  UP71M3    12d 6h 40m                                        |
 |  CPU       12%  24h 3-71%  4 cores @ 2.4 GHz                 |
 |  M3M0RY    ━━━━━━──── 57%  4.5 of 7.8 GiB  DDR4  24h 48-66%  |

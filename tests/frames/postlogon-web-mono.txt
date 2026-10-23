@@ -18,8 +18,8 @@
 |  ⎋[1mschema   ⎋[0m HQ / Virtual / Server / Linux                     |
 |  ⎋[1mvlan     ⎋[0m 40  Servers  (10.20.40.0/22)                      |
 |  ⎋[1mtier     ⎋[0m ⎋[1;7m LAB ⎋[0m  larger-scale testing                       |
-|  ⎋[1mos       ⎋[0m Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic       |
 |  ⎋[1mrole     ⎋[0m Web front end                                     |
+|  ⎋[1mos       ⎋[0m Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic       |
 |  ⎋[1muptime   ⎋[0m 12d 6h 40m                                        |
 |  ⎋[1mcpu      ⎋[0m 12%  24h 3-71%  4 cores @ 2.4 GHz                 |
 |  ⎋[1mmemory   ⎋[0m ━━━━━━──── 57%  4.5 of 7.8 GiB  DDR4  24h 48-66%  |

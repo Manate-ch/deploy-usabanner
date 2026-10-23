@@ -77,6 +77,10 @@ BeforeDiscovery {
         @{ Case = 'an update notice alone, nothing checked'; Machine = 'alone'; Change = @{}; Mode = '256'; Ascii = $true }
         @{ Case = 'two notices under problems, an address cut, HighContrast'; Machine = 'troubled'; Change = @{ preset = 'HighContrast' }; Mode = '16'; Ascii = $false }
         @{ Case = 'two notices under problems, no colour'; Machine = 'troubled'; Change = @{}; Mode = 'none'; Ascii = $false }
+        # The role is drawn ahead, beside the tier (D29): the frame's rows, then awk's.
+        @{ Case = 'the lab host with a role'; Machine = 'lab'; Change = @{ role = 'Web front end' }; Mode = 'truecolor'; Ascii = $false }
+        @{ Case = 'a busy host with a role longer than its row, uwu'; Machine = 'busy'; Change = @{ role = 'Line-of-business applications for the finance and payroll teams'; voice = 'uwu' }; Mode = '16'; Ascii = $true }
+        @{ Case = 'a host with no facts yet, with a role'; Machine = 'bare'; Change = @{ role = 'Kiosk'; environment = 'PUB' }; Mode = '256'; Ascii = $false }
     )
     $script:Pairs = @(foreach ($awk in $Awks) { foreach ($case in $Cases) { $case + @{ Awk = $awk; Lines = $Records[$case.Machine] } } })
 }
