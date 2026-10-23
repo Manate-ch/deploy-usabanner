@@ -240,6 +240,23 @@ function Format-UsaBannerSize {
     [string]::Format($invariant, '{0:0.0} of {1:0.0} GiB', $Used / 1GB, $Size / 1GB)
 }
 
+function Read-UsaBannerNotice {
+    # In:  the file of the update channel's notice (D14)
+    # Out: its lines as linux/facts.sh gives them: a tab as a space, no
+    #      control character, an empty line passed over; nothing without
+    #      the file
+    # Why: the update job leaves the notice the banner after login shows,
+    #      and its text must not reach a terminal as an escape
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+    foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
+        $text = $line.Replace("`t", ' ') -replace '[\x00-\x1F\x7F]', ''
+        if ($text) { $text }
+    }
+}
+
 function Get-UsaBannerWindowsFacts {
     <#
     .SYNOPSIS
@@ -263,7 +280,8 @@ function Get-UsaBannerWindowsFacts {
     the configuration's, default or the names, and -Ignore the services the
     sweep of automatic ones leaves out. -Hide is a regex of adapter names to
     leave out: by default the NAT adapters of WSL, the Default Switch and
-    containers. -Now is the moment the facts describe, for tests.
+    containers. The notices are the lines of the update channel's notice
+    (D14), in -NoticePath. -Now is the moment the facts describe, for tests.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -273,6 +291,7 @@ function Get-UsaBannerWindowsFacts {
         [datetimeoffset]$Now = [datetimeoffset]::Now,
         [string]$SamplePath = (Get-UsaBannerDataPath -Name 'samples.tsv' -OnWindows $true),
         [string]$SlowPath = (Get-UsaBannerDataPath -Name 'slow.tsv' -OnWindows $true),
+        [string]$NoticePath = (Get-UsaBannerDataPath -Name 'notice' -OnWindows $true),
         [object]$Services = 'default',
         [AllowEmptyCollection()][string[]]$Ignore = @()
     )
@@ -353,5 +372,7 @@ function Get-UsaBannerWindowsFacts {
     Add-UsaBannerSampleRange -Facts $facts -Path $SamplePath -Now $Now
     Add-UsaBannerSlowFacts -Facts $facts -Path $SlowPath -Now $Now
     Add-UsaBannerWinHealth -Facts $facts -ServiceList $serviceList -TimeSource $timeSource -Services $Services -PartOfDomain $system.PartOfDomain -Ignore $Ignore
+    $notices = @(Read-UsaBannerNotice -Path $NoticePath)
+    if ($notices.Count) { $facts['Notices'] = $notices }
     $facts
 }

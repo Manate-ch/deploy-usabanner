@@ -9,6 +9,8 @@
 #   +------------------------------+
 #   (ok) all clear   services ...       health: each problem, or all clear
 #
+#   This banner has an update ...       the notices: lines about the banner
+#
 # The facts come in as a hashtable, as Get-UsaBannerHostFacts gathers them
 # (Facts.ps1); a fact left out gets no row.
 #
@@ -31,6 +33,7 @@
 #   | Services | @{ Text; Level }                                       |
 #   | Problems | @(@{ Level; Text }): what the health lines report      |
 #   | Checked  | the checks that ran, named after all clear             |
+#   | Notices  | lines about the banner itself, as D14's update notice  |
 #   +----------+--------------------------------------------------------+
 #
 # Min and Max are the last 24 hours' (D17); the range is drawn only when both
@@ -455,6 +458,32 @@ function New-UsaBannerHealth {
     $block
 }
 
+function New-UsaBannerNotice {
+    <#
+    .SYNOPSIS
+    The notices under the health lines: lines about the banner itself, as
+    the update channel's (D14).
+    .DESCRIPTION
+    Out: a block no wider than 64 columns: each notice two columns in, in
+         the labels' style, wrapped between words; an address too long for
+         a line is cut, as a long word in a problem is. With no notice, the
+         block is empty.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Facts,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Palette
+    )
+    $block = New-UsaBannerBlock
+    foreach ($notice in @(@($Facts['Notices']) | Where-Object { $_ })) {
+        foreach ($text in @(ConvertTo-UsaBannerWrapped -Text ([string]$notice) -Width ($script:UsaBannerWidth - 2))) {
+            Add-UsaBannerLine -Block $block -Spans @((New-UsaBannerSpan -Text '  '), (New-UsaBannerSpan -Text $text -Style $Palette.Label))
+        }
+    }
+    $block
+}
+
 function New-UsaBannerWelcome {
     <#
     .SYNOPSIS
@@ -492,7 +521,8 @@ function New-UsaBannerPostLogin {
          (Resolve-UsaBannerPreset), and -AsciiOnly for a client that is
          not UTF-8.
     Out: the block, 64 columns wide: the art, the welcome line when there is
-         a company, the tier strip, the panel, and the health lines.
+         a company, the tier strip, the panel, the health lines, and the
+         notices, each of the last two after a blank line where it has any.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -514,6 +544,7 @@ function New-UsaBannerPostLogin {
     # Held to the left: the stack centres each block as a whole.
     $welcome = if ($company) { Join-UsaBannerStack -Blocks @(New-UsaBannerWelcome -Company $company -Palette $Palette -Mode $Mode -Voice $voice) -Width $script:UsaBannerWidth } else { $null }
     $health = Join-UsaBannerStack -Blocks @(New-UsaBannerHealth -Facts $Facts -Palette $Palette -Glyphs $glyphs -Voice $voice) -Width $script:UsaBannerWidth
+    $notice = Join-UsaBannerStack -Blocks @(New-UsaBannerNotice -Facts $Facts -Palette $Palette) -Width $script:UsaBannerWidth
     Join-UsaBannerStack -Align center -Width $script:UsaBannerWidth -Blocks @(
         $art
         $blank
@@ -523,6 +554,8 @@ function New-UsaBannerPostLogin {
         (New-UsaBannerPanel -Config $Config -Facts $Facts -Palette $Palette -Glyphs $glyphs -AsciiOnly:$AsciiOnly)
         $(if ($health.Lines.Count) { $blank })
         $(if ($health.Lines.Count) { $health })
+        $(if ($notice.Lines.Count) { $blank })
+        $(if ($notice.Lines.Count) { $notice })
     )
 }
 

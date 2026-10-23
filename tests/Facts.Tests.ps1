@@ -325,6 +325,21 @@ Describe 'linux/facts.sh' -Skip:$IsWindows {
         Select-Record (Invoke-Collector @variant) name | Should -BeExactly "name`th-vsl-web1 ad.example"
     }
 
+    It 'gives the update channel''s notice last, a record a line: <Case>' -ForEach @(
+        @{ Case = 'as the update job writes it'; Notice = "This banner has an update available. See https://releases.example.com/usabanner for more info!`n"; Expected = @("notice`tThis banner has an update available. See https://releases.example.com/usabanner for more info!") }
+        @{ Case = 'each line, an empty one passed over, the last without its newline'; Notice = "first`n`nsecond"; Expected = @("notice`tfirst", "notice`tsecond") }
+        @{ Case = 'a tab as a space, without a control character'; Notice = "an`tupdate$([char]27)[31m is out`r`n"; Expected = @("notice`tan update[31m is out") }
+        @{ Case = 'none without the file'; Notice = $null; Expected = @() }
+    ) {
+        $change = @{}
+        if ($null -ne $Notice) { $change['root/var/lib/usabanner/notice'] = $Notice }
+        $variant = New-Variant $change
+        $records = @(Invoke-Collector @variant)
+        $notices = @($records | Where-Object { $_.StartsWith("notice`t") })
+        $notices | Should -BeExactly $Expected
+        if ($notices.Count) { $records[(-$notices.Count)..-1] | Should -BeExactly $notices }
+    }
+
     It 'counts the sessions who lists: <Case>' -ForEach @(
         @{ Case = 'none'; Who = ''; Expected = "sessions`t0" }
         @{ Case = 'none given when who fails'; Who = $null; Expected = '' }
@@ -703,6 +718,12 @@ Describe 'ConvertFrom-UsaBannerFactRecord' {
         '{0}|{1}' -f $facts.Services.Text, $facts.Services.Level | Should -BeExactly 'cron inactive; ssh active|bad'
         @($facts.Problems | ForEach-Object { '{0}|{1}' -f $_.Level, $_.Text }) -join ',' | Should -BeExactly 'bad|cron is inactive,warn|/var is 88% full'
         $facts.Checked | Should -BeExactly @('services', 'disks <85%')
+    }
+
+    It 'reads each notice as text, in order, passing over one without its text' {
+        $facts = InModuleScope UsaBanner { ConvertFrom-UsaBannerFactRecord -Line @("notice`tfirst", "notice`t", 'notice', "check`treboot", "notice`tsecond") }
+        $facts.Notices | Should -BeExactly @('first', 'second')
+        $facts.Checked | Should -BeExactly @('reboot')
     }
 
     It 'passes over an empty line and a kind it does not know' {

@@ -289,3 +289,60 @@ Describe 'the welcome line and the health lines' {
         foreach ($line in $lines[$first..($lines.Count - 1)]) { $line.Length | Should -BeLessOrEqual 64 }
     }
 }
+
+Describe 'the notices (D14)' {
+    BeforeAll {
+        $script:Notice = 'This banner has an update available. See https://git.example.com/contoso/usabanner/-/releases for more info!'
+    }
+
+    It 'is <Name>: the update channel''s notice under the health lines, as its golden frame shows' -ForEach @(
+        @{ Name = 'postlogon-web-notice-none'; Mode = 'none' }
+        @{ Name = 'postlogon-web-notice-truecolor'; Mode = 'truecolor' }
+    ) {
+        $facts = Get-Facts web
+        $facts.Notices = @($Notice)
+        Assert-UsaBannerGoldenFrame -Name $Name -Lines (Invoke-PostLogin -Facts $facts -Mode $Mode)
+    }
+
+    It 'come last, after a blank line under all clear, two columns in, wrapped between words' {
+        $facts = Get-Facts web
+        $facts.Notices = @($Notice)
+        $lines = @(Invoke-PostLogin -Facts $facts)
+        $lines[-4..-1] | Should -BeExactly @(
+            ''
+            '  This banner has an update available. See'
+            '  https://git.example.com/contoso/usabanner/-/releases for more'
+            '  info!'
+        )
+        [array]::IndexOf($lines, @($lines | Where-Object { $_ -like '*all clear*' })[0]) | Should -BeLessThan ($lines.Count - 4)
+    }
+
+    It 'come after a blank line under the panel where nothing was checked' {
+        $lines = @(Invoke-PostLogin -Facts @{ Name = 'h-vsl-web1.ad.example'; Ip = '10.20.40.80'; Notices = @($Notice) })
+        $lines[-5] | Should -Match '^\+-+\+$'
+        $lines[-4..-1] | Should -BeExactly @('', '  This banner has an update available. See', '  https://git.example.com/contoso/usabanner/-/releases for more', '  info!')
+    }
+
+    It 'cut an address too long for a line across lines, within 64 columns' {
+        $facts = Get-Facts db -Problems
+        $address = 'https://releases.example.com/contoso/' + ('a' * 70) + '/usabanner'
+        $facts.Notices = @("This banner has an update available. See $address for more info!")
+        $lines = @(Invoke-PostLogin -Facts $facts -Mode truecolor)
+        foreach ($line in $lines) { Measure-Visible $line | Should -BeLessOrEqual 64 }
+        $plain = @($lines[-4..-1] | ForEach-Object { $_ -replace "$([char]27)\[[0-9;]*m", '' })
+        $plain | Should -BeExactly @(
+            '  This banner has an update available. See'
+            "  $($address.Substring(0, 62))"
+            "  $($address.Substring(62)) for"
+            '  more info!'
+        ) -Because 'the address is 117 characters: a line of 62, then the 55 left, which take " for" and no more'
+    }
+
+    It 'draw nothing, not even the blank line, without a notice' {
+        $facts = Get-Facts web
+        $without = @(Invoke-PostLogin -Facts $facts)
+        $facts.Notices = @()
+        @(Invoke-PostLogin -Facts $facts) | Should -BeExactly $without
+        $without[-1] | Should -Not -BeNullOrEmpty
+    }
+}

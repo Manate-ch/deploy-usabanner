@@ -651,7 +651,9 @@ function Set-UsaBannerWindowsTask {
     # Out: a line for each change: the sample task registered where it is
     #      missing or runs something else, and a first sample on a host with
     #      none yet; the update task the same way where the configuration
-    #      turns the update channel on, and unregistered where it is off
+    #      turns the update channel on, and unregistered where it is off,
+    #      the notice it left deleted with it: no task is left to take it
+    #      away, and the banner after login would show it for good
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param([Parameter(Mandatory)][string]$Data, [Parameter(Mandatory)][System.Collections.IDictionary]$Config)
@@ -678,6 +680,7 @@ function Set-UsaBannerWindowsTask {
             Unregister-UsaBannerTask -Name $update.Name
             "unregistered the task $($update.Path)$($update.Name): the update channel is off"
         }
+        Remove-UsaBannerHostFile -Path ([System.IO.Path]::Combine($Data, 'notice')) -What "the update job's notice"
         return
     }
     if ((-not $have -or $have.Execute -ne $update.Execute -or $have.Arguments -ne $update.Arguments) -and
