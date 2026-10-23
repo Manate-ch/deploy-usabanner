@@ -215,6 +215,9 @@ Describe 'Get-UsaBannerWindowsFacts' {
         [System.IO.File]::WriteAllText($file, "This banner has an update available. See https://releases.example.com/usabanner for more info!`r`n`r`nan`tupdate$([char]27)[31m is out")
         $facts = (Invoke-WindowsFacts $Recorded['Server 2025'] -Arguments @{ NoticePath = $file }).Facts
         $facts.Notices | Should -BeExactly @('This banner has an update available. See https://releases.example.com/usabanner for more info!', 'an update[31m is out')
+        # -BeExactly cannot see the ESC: on Linux, -ceq compares as ICU
+        # does, which ignores it. A regex sees it.
+        @($facts.Notices | Where-Object { $_ -match '[\x00-\x1F\x7F]' }) | Should -BeNullOrEmpty
     }
 
     It 'names a host in a domain with its domain in lower case, keeping its own name''s case' {

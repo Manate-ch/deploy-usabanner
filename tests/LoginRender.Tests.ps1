@@ -84,6 +84,7 @@ BeforeDiscovery {
 BeforeAll {
     $repoRoot = Split-Path $PSScriptRoot -Parent
     Import-Module (Join-Path $repoRoot 'UsaBanner' 'UsaBanner.psd1') -Force
+    . (Join-Path $PSScriptRoot 'Golden.ps1')
     $script:PostLogin = Join-Path $repoRoot 'UsaBanner' 'linux' 'postlogin.sh'
 
     function New-TestConfig {
@@ -145,7 +146,7 @@ Describe 'linux/postlogin.sh' -Skip:(-not (Get-Command sh -ErrorAction SilentlyC
     It 'draws what the module draws: <Case>, under <Awk>' -ForEach $Pairs {
         $drawn = Invoke-BothWays -Config (New-TestConfig -Change $Change) -Lines $Lines -Mode $Mode -Ascii $Ascii -Awk $Awk
         $drawn.Module.Count | Should -BeGreaterThan 0
-        ($drawn.Login -join "`n") | Should -BeExactly ($drawn.Module -join "`n")
+        Show-UsaBannerEscape $drawn.Login | Should -BeExactly (Show-UsaBannerEscape $drawn.Module)
     }
 
     It 'prints nothing when there is no frame yet' {
