@@ -73,6 +73,11 @@ $script:UsaPanelGlyphs = @{
     Ascii   = @{ Full = '#'; Empty = '.'; Sep = '-'; Ok = '[ok]'; Warn = '[!!]'; Bad = '[XX]' }
 }
 
+# The widest a row's label is drawn: a disk's mount point can be far longer
+# (a Kubernetes volume's is), and is then cut, ending in ~, so the row keeps
+# room for its value.
+$script:UsaLabelMax = 24
+
 function Resolve-UsaBannerPreset {
     <#
     .SYNOPSIS
@@ -235,6 +240,27 @@ function Get-UsaBannerBadgeText {
     [string]$Vlan['tag']
 }
 
+function Get-UsaBannerPanelEdge {
+    <#
+    .SYNOPSIS
+    The style of the panel's border.
+    .DESCRIPTION
+    The preset's own when it fixes one; else the colour of the host's type
+    code, as today's BORDER_BY=type; else the tier's. The login frame
+    (LoginFrame.ps1) draws its rows' sides in it too.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Palette,
+        [System.Collections.IDictionary]$Identity,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$TierRow
+    )
+    if ($Palette.FixedEdge) { return $Palette.Edge }
+    if ($Identity -and $Identity.Rows['type']['color']) { return Get-UsaBannerDataStyle -Color ([string]$Identity.Rows['type']['color']) -Palette $Palette }
+    Get-UsaBannerDataStyle -Color $TierRow.Color -Palette $Palette
+}
+
 function New-UsaBannerPanel {
     <#
     .SYNOPSIS
@@ -275,7 +301,9 @@ function New-UsaBannerPanel {
         # Out: nothing; the row joins the panel
         # Why: every row is a voiced label, then a value cut to the room left
         param([string]$Label, [object[]]$Value, [object[]]$Detail = @())
-        $labelText = (Get-UsaBannerVoiceLabel -Label $Label -Voice $voice).PadRight(9)
+        $labelText = Get-UsaBannerVoiceLabel -Label $Label -Voice $voice
+        if ($labelText.Length -gt $script:UsaLabelMax) { $labelText = $labelText.Substring(0, $script:UsaLabelMax - 1) + '~' }
+        $labelText = $labelText.PadRight(9)
         $room = $inside - $labelText.Length - 1
         $spans = @($Value) + @($Detail)
         if ((Measure-UsaBannerLine -Spans $spans) -gt $room) { $spans = @(Limit-UsaBannerLine -Spans @($Value) -Width $room) }
@@ -361,9 +389,7 @@ function New-UsaBannerPanel {
         }
     }
 
-    $edge = if ($Palette.FixedEdge) { $Palette.Edge }
-    elseif ($identity -and $identity.Rows['type']['color']) { Get-UsaBannerDataStyle -Color ([string]$identity.Rows['type']['color']) -Palette $Palette }
-    else { Get-UsaBannerDataStyle -Color $tierRow.Color -Palette $Palette }
+    $edge = Get-UsaBannerPanelEdge -Palette $Palette -Identity $identity -TierRow $tierRow
     $border = $Config['border']
     $char = if ($border['char']) { [string]$border['char'] } else { 'o' }
     $set = Get-UsaBannerBorderSet -Name ([string]$border['set']) -Char $char -AsciiOnly:$AsciiOnly
