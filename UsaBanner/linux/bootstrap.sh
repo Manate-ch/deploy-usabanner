@@ -14,10 +14,13 @@
 # neither wget nor curl. On a host joined to AD (one with /etc/krb5.keytab) it
 # installs ldap-utils, krb5-user and libsasl2-modules-gssapi-mit too, where any
 # is missing: the periodic job reads the computer object's Description with
-# them (D29). krb5-config is told first not to add servers to krb5.conf, which
-# on a first install it would for a realm found by DNS alone; it then leaves
-# the file as the join wrote it. A failed install there is a warning: the
-# banner deploys, and takes the tier and role from AD once the tools are in.
+# them (D29). krb5-config leaves krb5.conf as the join wrote it: it adds a
+# realm block only with a list of the realm's servers, which an install
+# without a terminal is never asked for. It is told not to add servers all
+# the same, so a list answered or preseeded before stays out of the file
+# (krb5-config 2.7's config and postinst scripts, read 2026-10-24). A failed
+# install there is a warning: the banner deploys, and takes the tier and
+# role from AD once the tools are in.
 # Packages stay when the banner is removed: they may serve more than the
 # banner. PowerShell's own logging stays as Microsoft ships it.
 #
