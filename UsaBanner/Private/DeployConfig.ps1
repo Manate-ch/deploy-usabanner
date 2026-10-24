@@ -157,8 +157,10 @@ function New-UsaBannerDeployConfig {
     Throws on a flag the table does not have, on art the module does not
     have, on -LegalText with another template or without text, on a custom
     template left without text, on None or default given with something
-    else, on an update channel turned on without a source, and when the
-    result breaks the schema: each problem with the flag that set it.
+    else, on an update channel turned on without a source, when the result
+    breaks the schema: each problem with the flag that set it; and on
+    -BorderChar when the border set is not OneChar, the one set that draws
+    with it.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.IDictionary])]
@@ -246,6 +248,10 @@ function New-UsaBannerDeployConfig {
             if ($flag -and $Flags.Contains($flag)) { "-${flag}: $problem" } else { $problem }
         }
         throw ("UsaBanner: these settings are not valid:`n  " + ($named -join "`n  "))
+    }
+    # Only the OneChar set draws border.char: beside any other set the flag would be kept and never drawn.
+    if ($Flags.Contains('BorderChar') -and [string]$config['border']['set'] -cne 'OneChar') {
+        throw "UsaBanner: -BorderChar is the character the OneChar border set draws with, and the border set is $($config['border']['set']): give -Border OneChar too, or leave -BorderChar out."
     }
     $config
 }
