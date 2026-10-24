@@ -59,22 +59,29 @@ Describe 'bootstrap.sh' -Skip:$IsWindows {
         $script:Log = Join-Path $Work 'calls.log'
         foreach ($folder in $Bin, $Spare, (Join-Path $Root 'etc')) { $null = New-Item -ItemType Directory -Path $folder -Force }
         # The tools bootstrap.sh and the stand-ins use, as they are.
-        foreach ($tool in 'sed', 'tr', 'dirname', 'mktemp', 'rm', 'cp') {
+        foreach ($tool in 'sed', 'tr', 'dirname', 'mktemp', 'rm', 'cp', 'cat') {
             $null = New-Item -ItemType SymbolicLink -Path (Join-Path $Bin $tool) -Target (Get-Command -Name $tool -CommandType Application)[0].Source
         }
         Write-StandIn $Bin 'id' 'printf ''%s\n'' "${STUB_UID:-0}"' -Quiet
-        # apt-get installs a package by putting its stand-in on the PATH.
+        # apt-get installs a package by putting its stand-in on the PATH; a downloaded .deb must
+        # hold something. The lock-timeout option before the verb is skipped.
         Write-StandIn $Bin 'apt-get' -Frontend -Body @'
+[ "$1" = -o ] && shift 2
 case $1:$3 in
 install:powershell)
 	[ -n "${STUB_FAIL_INSTALL:-}" ] && exit 100
 	cp "$STUB_SPARE/pwsh" "$STUB_BIN/pwsh"
 	;;
 install:wget) cp "$STUB_SPARE/wget" "$STUB_BIN/wget" ;;
+install:*.deb) [ -s "$3" ] || exit 100 ;;
+install:*) [ -n "${STUB_FAIL_AD:-}" ] && exit 100 ;;
 esac
 exit 0
 '@
-        Write-StandIn $Bin 'dpkg' '[ -s "$2" ]'
+        # dpkg-query answers "ii " for each package STUB_AD_HAVE names, and nothing for the rest.
+        Write-StandIn $Bin 'dpkg-query' 'case " ${STUB_AD_HAVE:-} " in *" $3 "*) printf ''ii '' ;; esac'
+        # debconf-set-selections logs what it is given, below its call.
+        Write-StandIn $Bin 'debconf-set-selections' 'cat >>"$STUB_LOG"'
         Write-StandIn $Spare 'pwsh' 'exit "${STUB_PWSH_EXIT:-0}"'
         Write-StandIn $Spare 'wget' "[ -n `"`${STUB_FAIL_DOWNLOAD:-}`" ] && exit 8`nprintf 'deb\n' >`"`$3`""
         Write-StandIn $Spare 'curl' "[ -n `"`${STUB_FAIL_DOWNLOAD:-}`" ] && exit 22`nprintf 'deb\n' >`"`$3`""
@@ -98,12 +105,14 @@ exit 0
         $result = Invoke-Bootstrap -Arguments @('-Company', 'Contoso')
         $result.ExitCode | Should -Be 0
         $deb = ($result.Calls[0] -split $Tab)[3]
-        $deb | Should -BeLike "$Work/*"
+        $deb | Should -BeLike "$Work/*.deb"
+        # Each apt-get waits up to 10 minutes for the package lock, as at boot unattended-upgrades may hold it.
+        $apt = "apt-get${Tab}-o${Tab}DPkg::Lock::Timeout=600"
         $result.Calls | Should -Be @(
             "curl${Tab}-fsSL${Tab}-o${Tab}$deb${Tab}$Url"
-            "dpkg${Tab}-i${Tab}$deb"
-            "apt-get${Tab}update${Tab}DEBIAN_FRONTEND=noninteractive"
-            "apt-get${Tab}install${Tab}-y${Tab}powershell${Tab}DEBIAN_FRONTEND=noninteractive"
+            "$apt${Tab}install${Tab}-y${Tab}$deb${Tab}DEBIAN_FRONTEND=noninteractive"
+            "$apt${Tab}update${Tab}DEBIAN_FRONTEND=noninteractive"
+            "$apt${Tab}install${Tab}-y${Tab}powershell${Tab}DEBIAN_FRONTEND=noninteractive"
             "pwsh${Tab}-NoProfile${Tab}-NonInteractive${Tab}-File${Tab}$Here/bootstrap.ps1${Tab}-Company${Tab}Contoso"
         )
         $deb | Should -Not -Exist
@@ -120,9 +129,10 @@ exit 0
     It 'installs wget first where the host has neither wget nor curl' {
         $result = Invoke-Bootstrap
         $result.ExitCode | Should -Be 0
-        @($result.Calls | ForEach-Object { ($_ -split $Tab)[0..1] -join ' ' }) | Should -Be @(
-            'apt-get update', 'apt-get install', 'wget -q', 'dpkg -i', 'apt-get update', 'apt-get install', 'pwsh -NoProfile')
-        ($result.Calls[1] -split $Tab)[3] | Should -BeExactly 'wget'
+        # A program and its first word; apt-get's verb, past its lock option.
+        @($result.Calls | ForEach-Object { $f = $_ -split $Tab; if ($f[0] -eq 'apt-get') { "apt-get $($f[3])" } else { "$($f[0]) $($f[1])" } }) | Should -Be @(
+            'apt-get update', 'apt-get install', 'wget -q', 'apt-get install', 'apt-get update', 'apt-get install', 'pwsh -NoProfile')
+        ($result.Calls[1] -split $Tab)[5] | Should -BeExactly 'wget'
     }
 
     It 'stops, naming the address, where Microsoft publishes no package for the release; and leaves no download behind' {
@@ -161,6 +171,50 @@ exit 0
     It 'ends with the deploy''s own exit code' {
         Copy-Item -LiteralPath (Join-Path $Spare 'pwsh') -Destination $Bin
         (Invoke-Bootstrap -Variables @('STUB_PWSH_EXIT=1')).ExitCode | Should -Be 1
+    }
+
+    Context 'on a host joined to AD (one with /etc/krb5.keytab)' {
+        BeforeEach {
+            Copy-Item -LiteralPath (Join-Path $Spare 'pwsh') -Destination $Bin
+            [System.IO.File]::WriteAllText((Join-Path $Root 'etc/krb5.keytab'), 'keytab')
+            $script:Apt = "apt-get${Tab}-o${Tab}DPkg::Lock::Timeout=600"
+            $script:Deploy = "pwsh${Tab}-NoProfile${Tab}-NonInteractive${Tab}-File${Tab}$Here/bootstrap.ps1${Tab}-Company${Tab}Contoso"
+        }
+
+        It 'installs the AD tools that are missing, krb5-config told first to add no servers to krb5.conf, then deploys' {
+            $result = Invoke-Bootstrap -Arguments @('-Company', 'Contoso') -Variables @('STUB_AD_HAVE=krb5-user')
+            $result.ExitCode | Should -Be 0
+            $result.Calls | Should -Be @(
+                "dpkg-query${Tab}-W${Tab}-f=`${db:Status-Abbrev}${Tab}ldap-utils"
+                "dpkg-query${Tab}-W${Tab}-f=`${db:Status-Abbrev}${Tab}krb5-user"
+                "dpkg-query${Tab}-W${Tab}-f=`${db:Status-Abbrev}${Tab}libsasl2-modules-gssapi-mit"
+                "debconf-set-selections$Tab"
+                'krb5-config krb5-config/add_servers boolean false'
+                "$Apt${Tab}update${Tab}DEBIAN_FRONTEND=noninteractive"
+                "$Apt${Tab}install${Tab}-y${Tab}ldap-utils${Tab}libsasl2-modules-gssapi-mit${Tab}DEBIAN_FRONTEND=noninteractive"
+                $Deploy
+            )
+            $result.Output | Should -Contain "bootstrap.sh: installing the AD tools the periodic job reads the computer's Description with: ldap-utils libsasl2-modules-gssapi-mit"
+        }
+
+        It 'installs nothing where all three are there' {
+            $result = Invoke-Bootstrap -Arguments @('-Company', 'Contoso') -Variables @('STUB_AD_HAVE=ldap-utils krb5-user libsasl2-modules-gssapi-mit')
+            $result.ExitCode | Should -Be 0
+            @($result.Calls | Where-Object { $_ -notlike "dpkg-query$Tab*" }) | Should -Be @($Deploy)
+        }
+
+        It 'deploys all the same when they do not install, and says the tier and role wait for them' {
+            $result = Invoke-Bootstrap -Arguments @('-Company', 'Contoso') -Variables @('STUB_FAIL_AD=1')
+            $result.ExitCode | Should -Be 0
+            $result.Calls[-1] | Should -BeExactly $Deploy
+            ($result.Output -join "`n") | Should -Match 'could not install ldap-utils krb5-user libsasl2-modules-gssapi-mit: the banner deploys, and takes its tier and role from the AD Description once they are installed'
+        }
+
+        It 'looks for no AD tools on a host without a machine keytab' {
+            [System.IO.File]::Delete((Join-Path $Root 'etc/krb5.keytab'))
+            $result = Invoke-Bootstrap -Arguments @('-Company', 'Contoso')
+            $result.Calls | Should -Be @($Deploy)
+        }
     }
 }
 
