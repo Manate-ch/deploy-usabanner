@@ -1921,7 +1921,22 @@ package for every host leaves the tier and the role as what differs per host.
   (`ProductType = 2 OR ProductType = 3`).
   - It runs a Windows PowerShell 5.1 runner from NETLOGON, which hands over
     to pwsh: `Deploy-UsaBanner -Path <package> -ReplaceOldBanner`.
-  - A deploy that changes nothing writes nothing, so a refresh costs little.
+  - **It deploys only when one is due** (amended 2026-10-24): the package or
+    a file of the module differs from the last deploy's (SHA-256), the
+    banner's record is gone, the old banner is on the host, or the last deploy
+    was a day ago. Otherwise a refresh adds a line to the runner's log and
+    starts no pwsh.
+    - Why: with no logging policy set, PowerShell writes the whole text of a
+      script that holds a word on its list of suspicious content to its
+      Operational log (event 4104). An import of the module compiles a dozen
+      such files, about 0.6 MB of log (computed from the files, 2026-10-24),
+      and a lab Server 2025's 15 MB PowerShell 7 log held 25 minutes (measured,
+      2026-10-23). At every refresh, a DC (every 5 minutes) would keep under two
+      hours.
+    - The check that runs at every refresh holds none of those words. The
+      deploy, which does, is read only for a deploy, and logged then.
+    - The cost: a change made by hand on a host is put right within a day, not
+      at the next refresh.
   - With no pwsh, the runner logs that and ends. deploy-usawinssh's policy
     installs PowerShell 7 (D18, D21), and the banner's own MSI step comes
     later in M6.
