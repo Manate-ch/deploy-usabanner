@@ -81,9 +81,9 @@ Describe 'an AD Description, as a tier and a role' {
         @{ Case = 'a character outside the BMP becomes one ?'; Desc = 'PROD: web ' + [char]::ConvertFromUtf32(0x1F600); Role = 'web ?' }
         @{ Case = 'a control character becomes ?'; Desc = 'PROD: web' + [char]7; Role = 'web?' }
     ) {
-        $role = (Read-Description $Desc).Role
-        $role | Should -BeExactly $Role
-        $role | Should -MatchExactly '^[ -~]*$'
+        $got = (Read-Description $Desc).Role
+        $got | Should -BeExactly $Role
+        $got | Should -MatchExactly '^[ -~]*$'
     }
 }
 
