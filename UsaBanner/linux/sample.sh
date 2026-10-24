@@ -2,7 +2,8 @@
 # sample.sh - the periodic job (docs/DECISIONS.md, D17), every 15 minutes as
 # root. It samples this host's CPU, memory and disks for the banner's 24-hour
 # range, and keeps what is too slow to read at a login: the host's FQDN,
-# which could wait on DNS, and the slow facts.
+# which could wait on DNS, its AD Description, which waits on a domain
+# controller, and the slow facts.
 #
 #   +-----------------------------------+------------------------------------+
 #   | File, under /var/lib/usabanner    | Holds                              |
@@ -18,6 +19,9 @@
 #   |                                   | kind; or updates, how many wait    |
 #   |                                   | and how many of those for security |
 #   | fqdn                              | the name hostname -f gives         |
+#   | ad-description                    | the host's AD Description, which   |
+#   |                                   | ad-description.sh reads on a host  |
+#   |                                   | joined to a domain (D29)           |
 #   +-----------------------------------+------------------------------------+
 #
 # Samples older than 24 hours are dropped at every run, and slow.tsv is
@@ -65,6 +69,15 @@ fi
 		($1 == "cpu" || $1 == "memory") && $2 ~ /^[0-9]+$/ { print t, $1, $2 }
 		$1 == "disk" && $3 ~ /^[0-9]+$/ { print t, $1, $2, $3 }'
 } >"$dir/samples.tsv.$$" && mv -f "$dir/samples.tsv.$$" "$dir/samples.tsv"
+
+# The AD Description, for the tier and the role (D29), on a host joined to a
+# domain: one with a machine keytab. After the sample, so its CPU reading
+# does not count it. A domain controller that does not answer is no failure
+# of this job: ad-description.sh keeps the last Description, and says why in
+# the journal.
+if [ -e "$root/etc/krb5.keytab" ]; then
+	sh "$here/ad-description.sh" || :
+fi
 
 # The slow facts, for the logins of the next 24 hours.
 {

@@ -36,6 +36,7 @@ Describe 'Deploy-UsaBanner on a stock Ubuntu host' -Skip:$IsWindows {
             'etc/issue.d/50-usabanner.issue'           = '644'
             'etc/ssh/sshd_config.d/00-usabanner.conf'  = '644'
             'etc/update-motd.d/05-usabanner'           = '755'
+            'usr/local/share/usabanner/ad-description.sh' = '644'
             'usr/local/share/usabanner/facts.sh'       = '644'
             'usr/local/share/usabanner/postlogin.awk'  = '644'
             'usr/local/share/usabanner/postlogin.sh'   = '644'
@@ -49,7 +50,7 @@ Describe 'Deploy-UsaBanner on a stock Ubuntu host' -Skip:$IsWindows {
             'etc/systemd/system/usabanner-sample.timer'   = '644'
         }
         foreach ($path in $expected.Keys) { Get-Mode $root $path | Should -Be $expected[$path] -Because $path }
-        foreach ($file in 'facts.sh', 'postlogin.awk', 'postlogin.sh', 'redraw.sh', 'sample.sh') {
+        foreach ($file in 'ad-description.sh', 'facts.sh', 'postlogin.awk', 'postlogin.sh', 'redraw.sh', 'sample.sh') {
             (Get-FileHash -LiteralPath (Join-Path $root "usr/local/share/usabanner/$file")).Hash | Should -Be (Get-FileHash -LiteralPath (Join-Path $moduleRoot 'linux' $file)).Hash -Because $file
         }
         (Get-FileHash -LiteralPath (Join-Path $root 'etc/update-motd.d/05-usabanner')).Hash | Should -Be (Get-FileHash -LiteralPath (Join-Path $moduleRoot 'linux' '05-usabanner')).Hash
@@ -308,11 +309,49 @@ Describe 'Deploy-UsaBanner on a stock Ubuntu host' -Skip:$IsWindows {
         [System.IO.File]::ReadAllText((Join-Path $root 'etc/usabanner/issue.net')) | Should -Match 'cw-vsl-web2'
     }
 
-    It 'records the SHA-256 of the configuration as sha256sum prints it, for redraw.sh to compare' {
+    It 'records the SHA-256 of the configuration as sha256sum prints it, for redraw.sh to compare, and none for an AD Description where none is cached' {
         $null = Deploy-UsaBanner -Company Contoso
         $root = $global:UsaDeployRoot
         $sum = (@(& sha256sum (Join-Path $root 'etc/usabanner/usabanner.json')) -split ' ')[0]
-        [System.IO.File]::ReadAllText((Join-Path $root 'var/lib/usabanner/drawn')) | Should -BeExactly "h-vsl-web1.ad.example$($script:Tab)10.20.40.80$($script:Tab)$sum`n"
+        [System.IO.File]::ReadAllText((Join-Path $root 'var/lib/usabanner/drawn')) | Should -BeExactly "h-vsl-web1.ad.example$($script:Tab)10.20.40.80$($script:Tab)$sum$($script:Tab)`n"
+    }
+
+    It 'records the SHA-256 of the cached AD Description as sha256sum prints it, for redraw.sh to compare' {
+        $root = $global:UsaDeployRoot
+        Write-TestFile $root 'var/lib/usabanner/ad-description' "PROD : Web front end`n"
+        $null = Deploy-UsaBanner -Company Contoso
+        $sum = (@(& sha256sum (Join-Path $root 'etc/usabanner/usabanner.json')) -split ' ')[0]
+        $adSum = (@(& sha256sum (Join-Path $root 'var/lib/usabanner/ad-description')) -split ' ')[0]
+        [System.IO.File]::ReadAllText((Join-Path $root 'var/lib/usabanner/drawn')) | Should -BeExactly "h-vsl-web1.ad.example$($script:Tab)10.20.40.80$($script:Tab)$sum$($script:Tab)$adSum`n"
+    }
+
+    It 'draws the tier and the role the cached AD Description gives, where the configuration leaves them unset' {
+        $root = $global:UsaDeployRoot
+        Write-TestFile $root 'var/lib/usabanner/ad-description' "PROD : Web front end`n"
+        $null = Deploy-UsaBanner -Company Contoso -ColorMode none -Glyphs ascii
+        $frame = [System.IO.File]::ReadAllText((Join-Path $root 'var/lib/usabanner/postlogin.frame'))
+        $frame | Should -Match "(?m)^H`t +P R O D +$"
+        $frame | Should -Match "(?m)^H`t\|  role      Web front end +\|$"
+    }
+
+    It 'draws the configuration''s own tier and role over the AD Description''s' {
+        $root = $global:UsaDeployRoot
+        Write-TestFile $root 'var/lib/usabanner/ad-description' "PROD : Web front end`n"
+        $null = Deploy-UsaBanner -Company Contoso -Environment LAB -Role 'Build agents' -ColorMode none -Glyphs ascii
+        $frame = [System.IO.File]::ReadAllText((Join-Path $root 'var/lib/usabanner/postlogin.frame'))
+        $frame | Should -Match "(?m)^H`t +L A B +$"
+        $frame | Should -Match "(?m)^H`t\|  role      Build agents +\|$"
+        $frame | Should -Not -Match 'P R O D|Web front end'
+    }
+
+    It 'draws the banners again when the cached AD Description changes, and only those it is in' {
+        $root = $global:UsaDeployRoot
+        Write-TestFile $root 'var/lib/usabanner/ad-description' "PROD : Web front end`n"
+        $null = Deploy-UsaBanner -Company Contoso -PreLogon HostName
+        Write-TestFile $root 'var/lib/usabanner/ad-description' "LAB : Web front end`n"
+        $lines = @(InModuleScope UsaBanner { Update-UsaBannerDrawing })
+        @($lines | ForEach-Object { ($_ -split ':')[0] }) | Should -Be @('rewrote /var/lib/usabanner/postlogin.frame', 'rewrote /var/lib/usabanner/drawn')
+        [System.IO.File]::ReadAllText((Join-Path $root 'var/lib/usabanner/postlogin.frame')) | Should -Match 'L A B'
     }
 }
 
@@ -447,13 +486,19 @@ Describe 'the scripts a deploy installs' -Skip:$IsWindows {
         }
 
         function New-DrawnHost {
-            # In:  the name and address the banners were drawn with
+            # In:  the name and address the banners were drawn with, and the
+            #      AD Description cached then (none by default)
             # Out: a host folder with a configuration, and the drawn record that matches it
-            param([string]$Name = 'h-vsl-web1.ad.example', [string]$Ip = '10.20.40.80')
+            param([string]$Name = 'h-vsl-web1.ad.example', [string]$Ip = '10.20.40.80', [string]$Description)
             $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
             Write-TestFile $root 'etc/usabanner/usabanner.json' "{`"version`":1,`"company`":`"Contoso`"}`n"
             $sum = (@(& sha256sum (Join-Path $root 'etc/usabanner/usabanner.json')) -split ' ')[0]
-            Write-TestFile $root 'var/lib/usabanner/drawn' "$Name`t$Ip`t$sum`n"
+            $adSum = ''
+            if ($Description) {
+                Write-TestFile $root 'var/lib/usabanner/ad-description' "$Description`n"
+                $adSum = (@(& sha256sum (Join-Path $root 'var/lib/usabanner/ad-description')) -split ' ')[0]
+            }
+            Write-TestFile $root 'var/lib/usabanner/drawn' "$Name`t$Ip`t$sum`t$adSum`n"
             $root
         }
     }
@@ -478,6 +523,22 @@ Describe 'the scripts a deploy installs' -Skip:$IsWindows {
         $root = New-DrawnHost
         Write-TestFile $root 'etc/usabanner/usabanner.json' "{`"version`":1,`"company`":`"Contoso LLC`"}`n"
         Invoke-Redraw $root @("name`th-vsl-web1.ad.example", "ip`t10.20.40.80") | Should -Not -BeNullOrEmpty
+    }
+
+    It 'redraw.sh does nothing while the cached AD Description is the one drawn' {
+        Invoke-Redraw (New-DrawnHost -Description 'PROD : Web front end') @("name`th-vsl-web1.ad.example", "ip`t10.20.40.80") | Should -BeNullOrEmpty
+    }
+
+    It 'redraw.sh has the module draw the banners again when the cached AD Description <Case>' -ForEach @(
+        @{ Case = 'changes'; Before = 'PROD : Web front end'; After = 'LAB : Web front end' }
+        @{ Case = 'is first cached'; Before = ''; After = 'PROD : Web front end' }
+        @{ Case = 'is gone'; Before = 'PROD : Web front end'; After = $null }
+    ) {
+        $root = New-DrawnHost -Description $Before
+        $cache = Join-Path $root 'var/lib/usabanner/ad-description'
+        if ($null -eq $After) { Remove-Item -LiteralPath $cache }
+        else { Write-TestFile $root 'var/lib/usabanner/ad-description' "$After`n" }
+        Invoke-Redraw $root @("name`th-vsl-web1.ad.example", "ip`t10.20.40.80") | Should -Be @('-NoProfile', '-NonInteractive', '-Command', '& (Import-Module UsaBanner -PassThru) { Update-UsaBannerDrawing }')
     }
 
     It 'redraw.sh does nothing on a host whose banners were never drawn' {

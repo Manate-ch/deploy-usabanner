@@ -241,7 +241,8 @@ function New-UsaBannerSampleTaskSpec {
     In:  the pwsh.exe it runs.
     Out: @{ Path; Name; Execute; Arguments; Description; Schedule }. As
          SYSTEM, 2 minutes after a start and every 15 minutes, it runs
-         Update-UsaBannerSample in the module: a sample and the slow facts.
+         Update-UsaBannerSample in the module: a sample, the AD Description
+         and the slow facts.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]

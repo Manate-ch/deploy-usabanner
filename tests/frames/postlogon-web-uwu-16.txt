@@ -18,8 +18,8 @@
 ⎋[34m|⎋[0m  ⎋[36mscheemy  ⎋[0m HQ / Virtual / Server / Linux                     ⎋[34m|⎋[0m
 ⎋[34m|⎋[0m  ⎋[36mvwan     ⎋[0m 40  Servers  (10.20.40.0/22)                      ⎋[34m|⎋[0m
 ⎋[34m|⎋[0m  ⎋[36mtiew     ⎋[0m ⎋[1;30;43m LAB ⎋[0m⎋[90m  wawgew-scawe testing⎋[0m                       ⎋[34m|⎋[0m
-⎋[34m|⎋[0m  ⎋[36mos-chan  ⎋[0m Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic       ⎋[34m|⎋[0m
 ⎋[34m|⎋[0m  ⎋[36mwowe     ⎋[0m Web front end                                     ⎋[34m|⎋[0m
+⎋[34m|⎋[0m  ⎋[36mos-chan  ⎋[0m Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic       ⎋[34m|⎋[0m
 ⎋[34m|⎋[0m  ⎋[36mupwime   ⎋[0m 12d 6h 40m                                        ⎋[34m|⎋[0m
 ⎋[34m|⎋[0m  ⎋[36mcpu-kun  ⎋[0m ⎋[32m12%⎋[0m⎋[90m  24h 3-71%⎋[0m  4 cores @ 2.4 GHz                 ⎋[34m|⎋[0m
 ⎋[34m|⎋[0m  ⎋[36mmewmowy  ⎋[0m ⎋[32m━━━━━━⎋[0m⎋[90m────⎋[0m ⎋[32m57%⎋[0m  4.5 of 7.8 GiB  DDR4⎋[90m  24h 48-66%⎋[0m  ⎋[34m|⎋[0m

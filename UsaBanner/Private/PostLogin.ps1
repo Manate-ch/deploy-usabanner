@@ -20,7 +20,6 @@
 #   | Name     | the host name with its domain: the panel's title       |
 #   | Ip       | the primary IPv4 address: the VLAN it is in            |
 #   | Os       | text, as 'Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic' |
-#   | Role     | text                                                   |
 #   | Uptime   | text, as '12d 6h 40m'                                  |
 #   | Cpu      | @{ Now; Min; Max; Text }: percentages, and the model   |
 #   | Memory   | @{ Pct; Min; Max; Text; Kind }                         |
@@ -35,6 +34,10 @@
 #   | Checked  | the checks that ran, named after all clear             |
 #   | Notices  | lines about the banner itself, as D14's update notice  |
 #   +----------+--------------------------------------------------------+
+#
+# The tier and the role are the configuration's environment and role, which
+# Resolve-UsaBannerHostConfig fills from the host's AD Description (D29); the
+# role row, after the tier's, is drawn only for a role that is not empty.
 #
 # Min and Max are the last 24 hours' (D17); the range is drawn only when both
 # are known. Memory warns from 90% used, a disk and the CPU from 85%, and
@@ -354,7 +357,11 @@ function New-UsaBannerPanel {
     if ($identity) { & $addRow 'schema' @(New-UsaBannerSpan -Text $identity.Decoded -Style $Palette.Value) }
     if ($vlan) { & $addRow 'vlan' @(New-UsaBannerSpan -Text "$($vlan['tag'])  $($vlan['name'])  ($($vlan['cidr']))" -Style $Palette.Value) }
     & $addRow 'tier' @(New-UsaBannerSpan -Text " $tier " -Style (Get-UsaBannerDataStyle -Color $tierRow.Color -Palette $Palette -Background -Bold)) @(New-UsaBannerSpan -Text "  $(ConvertTo-UsaBannerVoiced -Text $tierRow.Meaning -Voice $voice)" -Style $Palette.Dim)
-    foreach ($fact in 'Os', 'Role', 'Uptime') {
+    # Beside the tier, which comes from the same place. On Linux it is drawn
+    # ahead with the rows above it (LoginFrame.ps1): no login draws it.
+    $role = [string]$Config['role']
+    if ($role) { & $addRow 'role' @(New-UsaBannerSpan -Text $role -Style $Palette.Value) }
+    foreach ($fact in 'Os', 'Uptime') {
         if ($Facts[$fact]) { & $addRow $fact.ToLowerInvariant() @(New-UsaBannerSpan -Text ([string]$Facts[$fact]) -Style $Palette.Value) }
     }
     $cpu = $Facts['Cpu']

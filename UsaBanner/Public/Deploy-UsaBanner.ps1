@@ -74,7 +74,14 @@ function Deploy-UsaBanner {
     The company name, for "Welcome to <company>": printable ASCII, 48
     characters at most.
     .PARAMETER Environment
-    The tier: UNSET, DEV-TEST, LAB, PROD or PUB.
+    The tier: UNSET, DEV-TEST, LAB, PROD or PUB. UNSET, the default, takes
+    the tier from this host's AD Description, as "PROD : Web front end"
+    gives PROD.
+    .PARAMETER Role
+    What this host is for, in a few words, shown after login: printable
+    ASCII, 64 characters at most. Empty, the default, takes the role from
+    this host's AD Description, as "PROD : Web front end" gives Web front
+    end.
     .PARAMETER BannerImage
     The art: a piece of the module's art (Show-UsaBannerArt -List), or os
     for the pictogram in the host's OS colour.
@@ -145,6 +152,8 @@ function Deploy-UsaBanner {
 
         [ValidateSet('UNSET', 'DEV-TEST', 'LAB', 'PROD', 'PUB')]
         [string]$Environment,
+
+        [string]$Role,
 
         [ValidateNotNullOrEmpty()]
         [string]$BannerImage,

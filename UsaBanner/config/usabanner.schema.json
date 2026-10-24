@@ -18,7 +18,7 @@
       "maxLength": 48
     },
     "environment": {
-      "description": "The tier the host belongs to; UNSET draws a grey badge until it is set.",
+      "description": "The tier the host belongs to. UNSET takes the tier from the host's AD Description, as \"PROD : Web front end\" gives PROD; with none there, it draws a grey badge.",
       "enum": [
         "UNSET",
         "DEV-TEST",
@@ -26,6 +26,11 @@
         "PROD",
         "PUB"
       ]
+    },
+    "role": {
+      "description": "What the host is for, in a few words, shown after login. Empty takes the role from the host's AD Description, as \"PROD : Web front end\" gives Web front end.",
+      "$ref": "#/$defs/ascii",
+      "maxLength": 64
     },
     "art": {
       "type": "object",
