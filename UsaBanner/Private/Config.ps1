@@ -71,21 +71,25 @@ function Test-UsaBannerConfig {
     /vlans/0/tag. Test-Json words a key the schema does not have as "All
     values fail against the false schema"; that one becomes "not a setting
     UsaBanner knows". Text that is not JSON gives Test-Json's own message.
+    Test-Json's answer decides: text it calls not valid always has a
+    problem here, named by Find-UsaBannerSchemaProblem when Test-Json's own
+    records name none (ConfigSchema.ps1 says when).
     #>
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory)][string]$Json)
     $schema = Get-Content -LiteralPath (Join-Path -Path $script:UsaBannerRoot -ChildPath 'config' -AdditionalChildPath 'usabanner.schema.json') -Raw
-    $found = @()
-    $null = Test-Json -Json $Json -Schema $schema -ErrorVariable found -ErrorAction SilentlyContinue
-    foreach ($record in $found) {
-        $text = $record.ToString()
-        if ($text -match "^The JSON is not valid with the schema: (?<what>.*) at '(?<where>[^']*)'$") {
-            $what = if ($Matches.what -like 'All values fail against the false schema*') { 'not a setting UsaBanner knows' } else { $Matches.what }
-            "$($Matches.where): $what"
-        }
-        else { $text }
-    }
+    $check = Invoke-UsaBannerSchemaCheck -Json $Json -Schema $schema
+    if ($check.Valid) { return }
+    $named = @(ConvertFrom-UsaBannerSchemaError -Records $check.Errors)
+    # Records that are not about the schema say the text is not JSON at all: there is nothing to look into.
+    if (@($named | Where-Object { $_ -notmatch '^(/[^:]*)?: ' }).Count) { return $named }
+    $options = [System.Text.Json.JsonDocumentOptions]@{ CommentHandling = [System.Text.Json.JsonCommentHandling]::Skip; AllowTrailingCommas = $true }
+    $root = [System.Text.Json.Nodes.JsonNode]::Parse($schema)
+    $value = $null
+    try { $value = [System.Text.Json.Nodes.JsonNode]::Parse($Json, [System.Text.Json.Nodes.JsonNodeOptions]::new(), $options) }
+    catch { return @($named) + @(if (-not $named.Count) { "/: not valid against the schema, though Test-Json does not say why" }) }
+    Find-UsaBannerSchemaProblem -Value $value -Schema $root -Root $root
 }
 
 function ConvertTo-UsaBannerDataFile {

@@ -123,6 +123,32 @@ Describe 'reading and writing a configuration' {
         $problems[0] | Should -BeLike '/environment: *'
     }
 
+    It 'names each problem where it is, under a $ref, in a list or in an object in an object, when Test-Json names only those near the top' {
+        # Test-Json as PowerShell 7.6.8's (measured 2026-10-24): false for any problem, and a record only
+        # for one at most one step below the part it checks; so whichever PowerShell runs this test.
+        Mock -ModuleName UsaBanner Invoke-UsaBannerSchemaCheck {
+            $records = @()
+            $valid = Test-Json -Json $Json -Schema $Schema -ErrorVariable records -ErrorAction SilentlyContinue
+            @{ Valid = [bool]$valid; Errors = @($records | Where-Object { $_.ToString() -match "at '(/[^/']*)?'$" }) }
+        }
+        $json = '{"version":1,"environment":"STAGING","company":"Caf' + [char]0x00E9 + '","preLogon":{"IP":true},' +
+            '"vlans":[{"name":"Servers","tag":5000,"cidr":"10.20.30.0/24"}],"legal":{"template":"custom","text":["ok","' + [char]0x00A7 + ' 1030"]}}'
+        $problems = @(InModuleScope UsaBanner -Parameters @{ Json = $json } { param($Json) Test-UsaBannerConfig -Json $Json })
+        @($problems | ForEach-Object { ($_ -split ': ')[0] } | Sort-Object) | Should -Be @('/company', '/environment', '/legal/text/1', '/preLogon/IP', '/vlans/0/tag') -Because ($problems -join '; ')
+        $problems | Should -Contain '/preLogon/IP: not a setting UsaBanner knows'
+    }
+
+    It 'refuses a configuration Test-Json calls not valid, even when it names no problem at all' {
+        Mock -ModuleName UsaBanner Invoke-UsaBannerSchemaCheck { @{ Valid = $false; Errors = @() } }
+        $path = Join-Path $TestDrive 'unnamed.json'
+        Set-Content -LiteralPath $path -Value '{"version":1,"company":"Contoso"}'
+        $message = ''
+        try { InModuleScope UsaBanner -Parameters @{ Path = $path } { param($Path) Read-UsaBannerConfig -Path $Path } }
+        catch { $message = $_.Exception.Message }
+        $message | Should -BeLike '*is not a valid configuration*'
+        $message | Should -BeLike '*/company: not valid against the schema, though Test-Json does not say why*'
+    }
+
     It 'writes nothing when the configuration is not valid' {
         $path = Join-Path $TestDrive 'keep.json'
         Set-Content -LiteralPath $path -Value 'the old file' -NoNewline
