@@ -29,9 +29,9 @@ Describe 'the defaults' {
         @{ Key = 'glyphs'; Value = 'auto'; Why = 'the client''s locale decides' }
         @{ Key = 'voice'; Value = 'plain'; Why = 'a meme voice is a deliberate change, never a default' }
     ) {
-        $value = InModuleScope UsaBanner { Get-UsaBannerConfigDefault }
-        foreach ($part in $Key.Split('.')) { $value = $value[$part] }
-        $value | Should -Be $Value
+        $got = InModuleScope UsaBanner { Get-UsaBannerConfigDefault }
+        foreach ($part in $Key.Split('.')) { $got = $got[$part] }
+        $got | Should -Be $Value
     }
 }
 

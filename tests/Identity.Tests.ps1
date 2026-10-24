@@ -155,9 +155,9 @@ Describe 'the tiers' {
         @{ Tier = 'PROD'; Color = 'Blue'; Meaning = 'production' }
         @{ Tier = 'PUB'; Color = 'Pink'; Meaning = 'public-facing' }
     ) {
-        $tier = InModuleScope UsaBanner -Parameters @{ Tier = $Tier } { param($Tier) Get-UsaBannerTier -Name $Tier }
-        $tier.Color | Should -BeExactly $Color
-        $tier.Meaning | Should -BeExactly $Meaning
+        $got = InModuleScope UsaBanner -Parameters @{ Tier = $Tier } { param($Tier) Get-UsaBannerTier -Name $Tier }
+        $got.Color | Should -BeExactly $Color
+        $got.Meaning | Should -BeExactly $Meaning
     }
 
     It 'refuse a tier that is not one' {
