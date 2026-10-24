@@ -191,6 +191,156 @@ function Test-UsaBannerFolderAcl {
     $true
 }
 
+# The rights that let whoever holds them swap a folder, or what it holds, or
+# give themselves the right to: DELETE, FILE_DELETE_CHILD, WRITE_DAC,
+# WRITE_OWNER and GENERIC_ALL. Only these accounts may hold them on the
+# banner's folders: SYSTEM, Administrators and TrustedInstaller.
+$script:UsaSwapRights = 0x10000 -bor 0x40 -bor 0x40000 -bor 0x80000 -bor 0x10000000
+$script:UsaTrustedSids = @('S-1-5-18', 'S-1-5-32-544', 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
+
+function Get-UsaBannerFolderSecurity {
+    <#
+    .SYNOPSIS
+    A folder's owner and the entries of its ACL, as plain values.
+    .DESCRIPTION
+    In:  a folder.
+    Out: @{ Owner; OwnerName; Rules }: the owner's SID and its account's
+         name; a rule per entry, @{ Sid; Name; Allow; Rights; InheritOnly },
+         Rights the number Windows keeps. A SID with no account is its own
+         name. The tests mock this.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)][string]$Path)
+    $acl = Get-Acl -LiteralPath $Path
+    $nameOf = {
+        # In:  a SID
+        # Out: its account's name, or the SID when no account has it
+        param([System.Security.Principal.SecurityIdentifier]$Sid)
+        try { $Sid.Translate([System.Security.Principal.NTAccount]).Value } catch { $Sid.Value }
+    }
+    $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
+    $rules = foreach ($rule in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+        @{
+            Sid         = $rule.IdentityReference.Value
+            Name        = & $nameOf $rule.IdentityReference
+            Allow       = $rule.AccessControlType -eq 'Allow'
+            Rights      = [int]$rule.FileSystemRights
+            InheritOnly = [bool]($rule.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly)
+        }
+    }
+    @{ Owner = $owner.Value; OwnerName = & $nameOf $owner; Rules = @($rules) }
+}
+
+function Test-UsaBannerFolderRisk {
+    <#
+    .SYNOPSIS
+    Why someone other than Administrators and SYSTEM could swap a folder, or
+    what it holds; nothing when no one could.
+    .DESCRIPTION
+    In:  what Get-UsaBannerFolderSecurity says of the folder.
+    Out: a reason each: an owner other than SYSTEM, Administrators or
+         TrustedInstaller, who may change the ACL whatever it says; an entry
+         that allows anyone else to delete or rename the folder or what is
+         in it, or to change its ACL or owner. An inherit-only entry, as
+         CREATOR OWNER's in ProgramData, grants nothing on the folder
+         itself; a deny entry is not counted on.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][hashtable]$Security)
+    if ($Security.Owner -notin $script:UsaTrustedSids) { "it is owned by $($Security.OwnerName)" }
+    foreach ($rule in @($Security.Rules)) {
+        if (-not $rule.Allow -or $rule.InheritOnly -or $rule.Sid -in $script:UsaTrustedSids) { continue }
+        if ($rule.Rights -band $script:UsaSwapRights) { "$($rule.Name) may delete or rename what is in it, or change who may" }
+    }
+}
+
+function Find-UsaBannerFolderLink {
+    <#
+    .SYNOPSIS
+    The links in and under a folder: junctions, symbolic links and any other
+    reparse point.
+    .DESCRIPTION
+    In:  a folder.
+    Out: the folder's own path when it is a link; else each link under it.
+         A link is not entered.
+    Why: icacls /T goes through a junction, so it would set the owner and
+         the ACL of whatever the link points at.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Path)
+    $isLink = { param([System.IO.FileSystemInfo]$Item) [bool]($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) }
+    $root = [System.IO.DirectoryInfo]::new($Path)
+    if (& $isLink $root) { return $root.FullName }
+    $todo = [System.Collections.Generic.Stack[System.IO.DirectoryInfo]]::new()
+    $todo.Push($root)
+    while ($todo.Count) {
+        foreach ($item in $todo.Pop().EnumerateFileSystemInfos()) {
+            if (& $isLink $item) { $item.FullName }
+            elseif ($item -is [System.IO.DirectoryInfo]) { $todo.Push($item) }
+        }
+    }
+}
+
+function Get-UsaBannerFolderDanger {
+    <#
+    .SYNOPSIS
+    Why someone other than Administrators and SYSTEM could put a link where
+    the deploy and the periodic job write as SYSTEM; nothing when no one
+    could.
+    .DESCRIPTION
+    In:  a folder that exists; -Tree to look for links under it too.
+    Out: a reason each: the folder is a link; Test-UsaBannerFolderRisk's
+         reasons; with -Tree, each link under it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Path, [switch]$Tree)
+    if ([System.IO.DirectoryInfo]::new($Path).Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        return 'it is a link (a junction or a symbolic link)'
+    }
+    Test-UsaBannerFolderRisk -Security (Get-UsaBannerFolderSecurity -Path $Path)
+    if ($Tree) {
+        foreach ($link in @(Find-UsaBannerFolderLink -Path $Path)) { "it holds a link, which icacls /T would go through: $link" }
+    }
+}
+
+function Assert-UsaBannerDataFolderSafe {
+    <#
+    .SYNOPSIS
+    Refuses the banner's own folder, and the folder it is in, when someone
+    other than Administrators and SYSTEM could have swapped either, or could.
+    .DESCRIPTION
+    In:  the banner's own folder (ProgramData\UsagiTools\Banner), and the
+         folders the deploy made.
+    Out: nothing; throws, saying what to do, when Get-UsaBannerFolderDanger
+         finds a reason: in the folder it is in (UsagiTools); in the
+         banner's own folder and under it. Under the folder it is in too,
+         when the deploy made that folder: its ACL is set next.
+    Why: the deploy and the periodic job write in the banner's folder as
+         SYSTEM, and icacls /T sets its ACL. Whoever made UsagiTools before
+         the first deploy owns it, and could swap the banner's folder for a
+         link to anywhere, after the deploy as well as before it.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path, [AllowNull()][System.Collections.Generic.List[string]]$Created)
+    $parent = [System.IO.Path]::GetDirectoryName($Path)
+    $ours = $null -ne $Created -and $Created.Contains($parent)
+    $places = @(
+        @{ Path = $parent; What = 'the folder the banner''s own folder is in'; Tree = $ours }
+        @{ Path = $Path; What = 'the banner''s own folder'; Tree = $true }
+    )
+    foreach ($place in $places) {
+        if (-not [System.IO.Directory]::Exists($place.Path)) { continue }
+        $danger = @(Get-UsaBannerFolderDanger -Path $place.Path -Tree:$place.Tree)
+        if ($danger.Count) {
+            throw "UsaBanner: $($place.Path), $($place.What), is not safe for a folder SYSTEM writes in: $($danger -join '; '). Whoever could change it could have the deploy and the periodic job write wherever a link points, so nothing is changed. See who made it and what it holds, delete it, then deploy again."
+        }
+    }
+}
+
 function Get-UsaBannerTask {
     # In:  one of the banner's tasks, by name, in \UsagiTools\; or the old
     #      banner's, with -Path \
@@ -551,7 +701,11 @@ function Set-UsaBannerDataFolder {
     Out: a line for each change. Owner Administrators, so no one who made
          the folder first keeps an owner's right to change its ACL;
          inheritance off; SYSTEM and Administrators full control, Users read
-         and execute; whatever is in it already inherits that ACL.
+         and execute; whatever is in it already inherits that ACL. The
+         folder it is in (UsagiTools) gets the same ACL, on itself alone,
+         when the deploy made it; one the deploy did not make is left as it
+         is. Assert-UsaBannerDataFolderSafe refuses either folder first when
+         someone else could swap it.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -559,10 +713,23 @@ function Set-UsaBannerDataFolder {
         [Parameter(Mandatory)][string]$Path,
         [AllowNull()][System.Collections.Generic.List[string]]$Created
     )
+    Assert-UsaBannerDataFolderSafe -Path $Path -Created $Created
     if (-not [System.IO.Directory]::Exists($Path)) {
         if (-not $PSCmdlet.ShouldProcess($Path, 'Make the banner''s own folder')) { return }
         New-UsaBannerHostFolder -Root '' -Path $Path -Created $Created -Mode $null
         "made ${Path}: the banner's own folder"
+    }
+    # With its ACL, ProgramData lets any user make a folder in UsagiTools, so a
+    # name the banner takes later could be taken first.
+    $parent = [System.IO.Path]::GetDirectoryName($Path)
+    if ($null -ne $Created -and $Created.Contains($parent) -and -not (Test-UsaBannerFolderAcl -Path $parent) -and
+        $PSCmdlet.ShouldProcess($parent, 'Set its owner to Administrators, and its ACL: Administrators and SYSTEM full control, Users read and execute, nothing inherited (the folder alone)')) {
+        $owner = Invoke-UsaBannerNative -FilePath 'icacls.exe' -ArgumentList $parent, '/setowner', '*S-1-5-32-544', '/Q'
+        $grant = Invoke-UsaBannerNative -FilePath 'icacls.exe' -ArgumentList $parent, '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-32-545:(OI)(CI)RX', '/Q'
+        if ($owner.ExitCode -ne 0 -or $grant.ExitCode -ne 0) {
+            throw "UsaBanner: icacls could not set the ACL of ${parent}, so nothing more is changed: $(@($owner.Output) + @($grant.Output) -join ' ')"
+        }
+        "set the ACL of ${parent}: Administrators and SYSTEM may change it, Users read it"
     }
     if (Test-UsaBannerFolderAcl -Path $Path) { return }
     if (-not $PSCmdlet.ShouldProcess($Path, 'Set its owner to Administrators, and its ACL: Administrators and SYSTEM full control, Users read and execute, nothing inherited')) { return }
@@ -787,6 +954,8 @@ function Invoke-UsaBannerWindowsDeploy {
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Config, [switch]$ReplaceOld)
     $layout = Get-UsaBannerWindowsLayout
     Assert-UsaBannerWindowsHost -Layout $layout -Command 'Deploy-UsaBanner' -RefuseOldInstall:(-not $ReplaceOld)
+    # Before anything changes, and before the record in the folder is read.
+    Assert-UsaBannerDataFolderSafe -Path $layout.Data
     $recordPath = [System.IO.Path]::Combine($layout.Data, 'deploy.json')
     $record = Read-UsaBannerDeployRecord -Path $recordPath
     $created = [System.Collections.Generic.List[string]]::new()
@@ -852,6 +1021,8 @@ function Invoke-UsaBannerWindowsRemove {
     param()
     $layout = Get-UsaBannerWindowsLayout
     Assert-UsaBannerWindowsHost -Layout $layout -Command 'Remove-UsaBanner'
+    # The record says which folders to delete: one read through a link could name any.
+    Assert-UsaBannerDataFolderSafe -Path $layout.Data
     $record = Read-UsaBannerDeployRecord -Path ([System.IO.Path]::Combine($layout.Data, 'deploy.json'))
 
     foreach ($name in $script:UsaTaskName, $script:UsaUpdateTaskName) {

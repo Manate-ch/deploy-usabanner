@@ -34,7 +34,10 @@ function Deploy-UsaBanner {
       reads too;
     - %ProgramData%\UsagiTools\Banner, which only Administrators and SYSTEM
       may change: the configuration, as JSON and as the data file each
-      login reads, the SSH banner, and the record of the deploy;
+      login reads, the SSH banner, and the record of the deploy. It and
+      UsagiTools are refused, before anything changes, where they are a
+      link, or someone else owns them or may delete what is in them: the
+      deploy and the periodic job write there as SYSTEM;
     - a block in each PowerShell's all-users profile, which shows the
       banner after an interactive SSH login, never at the console;
     - sshd_config's Banner line, checked with sshd -t; sshd is not

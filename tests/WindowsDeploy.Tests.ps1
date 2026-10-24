@@ -62,6 +62,85 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         @($acl | Where-Object { $_ -match '/grant' -and $_ -match ' /T ' }) | Should -BeNullOrEmpty
     }
 
+    It 'gives UsagiTools the banner''s ACL when the deploy made it, on the folder alone, and once' {
+        $parent = Join-Path $Root 'ProgramData/UsagiTools'
+        $lines = @(Deploy-UsaBanner -Company Contoso)
+        $global:UsaWinCalls | Should -Contain "icacls.exe $parent /setowner *S-1-5-32-544 /Q"
+        $global:UsaWinCalls | Should -Contain "icacls.exe $parent /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /Q"
+        $lines | Should -Contain "set the ACL of ${parent}: Administrators and SYSTEM may change it, Users read it"
+        $global:UsaWinCalls.Clear()
+        $again = @(Deploy-UsaBanner -Company Contoso)
+        @($global:UsaWinCalls | Where-Object { $_ -like "icacls.exe $parent *" }) | Should -BeNullOrEmpty
+        $again | Should -Not -Contain "set the ACL of ${parent}: Administrators and SYSTEM may change it, Users read it"
+    }
+
+    It 'leaves the ACL of a UsagiTools it did not make as it is' {
+        $parent = Join-Path $Root 'ProgramData/UsagiTools'
+        $null = New-Item -ItemType Directory -Path $parent -Force
+        $null = Deploy-UsaBanner -Company Contoso
+        @($global:UsaWinCalls | Where-Object { $_ -like "icacls.exe $parent *" }) | Should -BeNullOrEmpty
+        Join-Path $Data 'usabanner.json' | Should -Exist
+    }
+
+    It 'refuses a UsagiTools someone else could change, and changes nothing: <Case>' -ForEach @(
+        @{ Case = 'a user made it, so owns it'; Owner = 'S-1-5-21-1-2-3-1104'; Extra = $null; Why = '*UsagiTools, the folder the banner''s own folder is in, is not safe*it is owned by CONTOSO\eve*' }
+        @{ Case = 'a user may delete what is in it'; Owner = 'S-1-5-32-544'; Why = '*CONTOSO\eve may delete or rename what is in it*'
+            Extra = @{ Sid = 'S-1-5-21-1-2-3-1104'; Name = 'CONTOSO\eve'; Allow = $true; Rights = 0x1301BF; InheritOnly = $false } }
+        @{ Case = 'Everyone has full control'; Owner = 'S-1-5-32-544'; Why = '*Everyone may delete or rename what is in it*'
+            Extra = @{ Sid = 'S-1-1-0'; Name = 'Everyone'; Allow = $true; Rights = 0x1F01FF; InheritOnly = $false } }
+    ) {
+        $parent = Join-Path $Root 'ProgramData/UsagiTools'
+        $null = New-Item -ItemType Directory -Path $parent -Force
+        $global:UsaWinSecurity[$parent] = @{
+            Owner     = $Owner
+            OwnerName = $(if ($Owner -eq 'S-1-5-32-544') { 'BUILTIN\Administrators' } else { 'CONTOSO\eve' })
+            Rules     = @(@{ Sid = 'S-1-5-18'; Name = 'NT AUTHORITY\SYSTEM'; Allow = $true; Rights = 0x1F01FF; InheritOnly = $false }) + @(if ($Extra) { $Extra })
+        }
+        $before = @(Get-WindowsHostState $Root)
+        { Deploy-UsaBanner -Company Contoso } | Should -Throw $Why
+        @(Get-WindowsHostState $Root) | Should -Be $before
+        @($global:UsaWinCalls) | Should -BeNullOrEmpty
+    }
+
+    It 'refuses a link where the banner''s folders are, and changes nothing: <Case>' -ForEach @(
+        @{ Case = 'UsagiTools is a link'; Link = 'ProgramData/UsagiTools'; Why = '*UsagiTools, the folder the banner''s own folder is in, is not safe*it is a link*' }
+        @{ Case = 'the banner''s folder is a link'; Link = 'ProgramData/UsagiTools/Banner'; Why = '*Banner, the banner''s own folder, is not safe*it is a link*' }
+        @{ Case = 'the banner''s folder holds a link'; Link = 'ProgramData/UsagiTools/Banner/deep/x'; Why = '*Banner, the banner''s own folder, is not safe*it holds a link, which icacls /T would go through*deep/x*' }
+    ) {
+        # Where a link would send the deploy, as SYSTEM: a folder of the host's own that must stay as it is.
+        $target = Join-Path $Root 'Windows/System32/config'
+        $null = New-Item -ItemType Directory -Path $target -Force
+        [System.IO.File]::WriteAllText((Join-Path $target 'SAM'), 'the host''s own')
+        $at = Join-Path $Root $Link
+        $null = New-Item -ItemType Directory -Path (Split-Path $at) -Force
+        $null = New-Item -ItemType SymbolicLink -Path $at -Target $target
+        $before = @(Get-WindowsHostState $Root)
+        { Deploy-UsaBanner -Company Contoso } | Should -Throw $Why
+        @(Get-WindowsHostState $Root) | Should -Be $before
+        @($global:UsaWinCalls) | Should -BeNullOrEmpty
+        @(Get-ChildItem -LiteralPath $target -Force | ForEach-Object { $_.Name }) | Should -Be @('SAM')
+    }
+
+    It 'has the step that runs icacls /T refuse a link under the banner''s folder on its own' {
+        # A link could appear after the deploy's first check: the step that sets the ACL checks again.
+        $null = New-Item -ItemType Directory -Path (Join-Path $Data 'inner') -Force
+        $null = New-Item -ItemType SymbolicLink -Path (Join-Path $Data 'inner/x') -Target (Join-Path $Root 'Windows')
+        { InModuleScope UsaBanner -Parameters @{ Path = $Data } { param($Path) Set-UsaBannerDataFolder -Path $Path -Created ([System.Collections.Generic.List[string]]::new()) } } |
+            Should -Throw '*it holds a link, which icacls /T would go through*inner/x*'
+        @($global:UsaWinCalls) | Should -BeNullOrEmpty
+    }
+
+    It 'has Remove-UsaBanner refuse a UsagiTools a user owns, before it reads the record or deletes anything' {
+        $null = Deploy-UsaBanner -Company Contoso
+        $parent = Join-Path $Root 'ProgramData/UsagiTools'
+        $global:UsaWinSecurity[$parent] = @{ Owner = 'S-1-5-21-1-2-3-1104'; OwnerName = 'CONTOSO\eve'; Rules = @() }
+        $global:UsaWinCalls.Clear()
+        { Remove-UsaBanner } | Should -Throw '*it is owned by CONTOSO\eve*'
+        Join-Path $Data 'deploy.json' | Should -Exist
+        $global:UsaWinTasks.Keys | Should -Contain 'UsaBanner sample'
+        @($global:UsaWinCalls) | Should -BeNullOrEmpty
+    }
+
     It 'deletes the copy an earlier deploy recorded, of another version, and leaves one no deploy recorded' {
         # The lab (2026-10-23): a deploy of another version left the earlier copy, so Import-Module loaded the
         # newer of the two and Remove-UsaBanner, which reads the record, never took the older.
@@ -395,5 +474,61 @@ Describe 'Remove-UsaBanner on Windows Server' {
             $other = 'C:\Program Files\WindowsPowerShell\Modules\UsaBannerOther\0.1.0'
             { Remove-UsaBannerWindowsFolder -Path $other -Allowed $other -What 'another module' } | Should -Throw '*is not one of the banner''s own folders*'
         }
+    }
+}
+
+Describe 'who could swap the banner''s folders' {
+    BeforeAll {
+        function New-Rule {
+            # In:  a SID, a name, the rights as Windows keeps them, and -Deny or -InheritOnly
+            # Out: an ACL entry as Get-UsaBannerFolderSecurity gives it
+            param([string]$Sid, [string]$Name, [int]$Rights, [switch]$Deny, [switch]$InheritOnly)
+            @{ Sid = $Sid; Name = $Name; Allow = -not $Deny; Rights = $Rights; InheritOnly = [bool]$InheritOnly }
+        }
+        $script:System = New-Rule 'S-1-5-18' 'NT AUTHORITY\SYSTEM' 0x1F01FF
+        $script:Admins = New-Rule 'S-1-5-32-544' 'BUILTIN\Administrators' 0x1F01FF
+    }
+
+    It 'finds no one in: <Case>' -ForEach @(
+        @{ Case = 'the banner''s own ACL'; Owner = 'S-1-5-32-544'; Rules = @(@{ Sid = 'S-1-5-32-545'; Name = 'BUILTIN\Users'; Allow = $true; Rights = 0x1200A9; InheritOnly = $false }) }
+        @{ Case = 'what ProgramData passes down: Users may add, not delete; CREATOR OWNER inherit-only'; Owner = 'S-1-5-32-544'; Rules = @(
+                @{ Sid = 'S-1-5-32-545'; Name = 'BUILTIN\Users'; Allow = $true; Rights = 0x116; InheritOnly = $false }
+                @{ Sid = 'S-1-3-0'; Name = 'CREATOR OWNER'; Allow = $true; Rights = 0x10000000; InheritOnly = $true }) }
+        @{ Case = 'owned by SYSTEM'; Owner = 'S-1-5-18'; Rules = @() }
+        @{ Case = 'owned by TrustedInstaller'; Owner = 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'; Rules = @() }
+        @{ Case = 'a deny entry, which is not counted on either way'; Owner = 'S-1-5-32-544'; Rules = @(@{ Sid = 'S-1-1-0'; Name = 'Everyone'; Allow = $false; Rights = 0x1F01FF; InheritOnly = $false }) }
+    ) {
+        $security = @{ Owner = $Owner; OwnerName = 'the owner'; Rules = @($System, $Admins) + @($Rules) }
+        @(InModuleScope UsaBanner -Parameters @{ Security = $security } { param($Security) Test-UsaBannerFolderRisk -Security $Security }) | Should -BeNullOrEmpty
+    }
+
+    It 'names who could, and how: <Case>' -ForEach @(
+        @{ Case = 'a user who owns it'; Owner = 'S-1-5-21-1-2-3-1104'; Rules = @(); Expected = @('it is owned by CONTOSO\eve') }
+        @{ Case = 'DELETE'; Owner = 'S-1-5-32-544'; Rules = @(@{ Sid = 'S-1-5-21-1-2-3-1104'; Name = 'CONTOSO\eve'; Allow = $true; Rights = 0x10000; InheritOnly = $false }); Expected = @('CONTOSO\eve may delete or rename what is in it, or change who may') }
+        @{ Case = 'FILE_DELETE_CHILD'; Owner = 'S-1-5-32-544'; Rules = @(@{ Sid = 'S-1-5-21-1-2-3-1104'; Name = 'CONTOSO\eve'; Allow = $true; Rights = 0x40; InheritOnly = $false }); Expected = @('CONTOSO\eve may delete or rename what is in it, or change who may') }
+        @{ Case = 'WRITE_DAC'; Owner = 'S-1-5-32-544'; Rules = @(@{ Sid = 'S-1-5-32-545'; Name = 'BUILTIN\Users'; Allow = $true; Rights = 0x40000; InheritOnly = $false }); Expected = @('BUILTIN\Users may delete or rename what is in it, or change who may') }
+        @{ Case = 'WRITE_OWNER'; Owner = 'S-1-5-32-544'; Rules = @(@{ Sid = 'S-1-5-32-545'; Name = 'BUILTIN\Users'; Allow = $true; Rights = 0x80000; InheritOnly = $false }); Expected = @('BUILTIN\Users may delete or rename what is in it, or change who may') }
+        @{ Case = 'GENERIC_ALL on the folder itself'; Owner = 'S-1-5-32-544'; Rules = @(@{ Sid = 'S-1-5-11'; Name = 'NT AUTHORITY\Authenticated Users'; Allow = $true; Rights = 0x10000000; InheritOnly = $false }); Expected = @('NT AUTHORITY\Authenticated Users may delete or rename what is in it, or change who may') }
+        @{ Case = 'an owner and an entry both'; Owner = 'S-1-5-21-1-2-3-1104'; Rules = @(@{ Sid = 'S-1-1-0'; Name = 'Everyone'; Allow = $true; Rights = 0x1F01FF; InheritOnly = $false }); Expected = @('it is owned by CONTOSO\eve', 'Everyone may delete or rename what is in it, or change who may') }
+    ) {
+        $security = @{ Owner = $Owner; OwnerName = 'CONTOSO\eve'; Rules = @($System, $Admins) + @($Rules) }
+        @(InModuleScope UsaBanner -Parameters @{ Security = $security } { param($Security) Test-UsaBannerFolderRisk -Security $Security }) | Should -Be $Expected
+    }
+
+    It 'finds each link under a folder, and does not go into one' {
+        # No link leads back up: Pester's own clean-up of TestDrive follows links.
+        $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
+        $elsewhere = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
+        $third = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
+        $null = New-Item -ItemType Directory -Path (Join-Path $root 'a/b'), (Join-Path $elsewhere 'c'), $third -Force
+        [System.IO.File]::WriteAllText((Join-Path $third 'plain.txt'), '')
+        $null = New-Item -ItemType SymbolicLink -Path (Join-Path $root 'a/b/to-elsewhere') -Target $elsewhere
+        $null = New-Item -ItemType SymbolicLink -Path (Join-Path $root 'a/file-link') -Target (Join-Path $third 'plain.txt')
+        # Inside the link's target: found only if the search went through the link.
+        $null = New-Item -ItemType SymbolicLink -Path (Join-Path $elsewhere 'c/deeper') -Target $third
+        $found = @(InModuleScope UsaBanner -Parameters @{ Path = $root } { param($Path) Find-UsaBannerFolderLink -Path $Path }) | Sort-Object
+        $found | Should -Be @((Join-Path $root 'a/b/to-elsewhere'), (Join-Path $root 'a/file-link'))
+        @(InModuleScope UsaBanner -Parameters @{ Path = (Join-Path $root 'a/b/to-elsewhere') } { param($Path) Find-UsaBannerFolderLink -Path $Path }) | Should -Be @((Join-Path $root 'a/b/to-elsewhere'))
+        @(InModuleScope UsaBanner -Parameters @{ Path = $elsewhere } { param($Path) Find-UsaBannerFolderLink -Path $Path }) | Should -Be @((Join-Path $elsewhere 'c/deeper'))
     }
 }
