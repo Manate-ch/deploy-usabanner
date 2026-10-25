@@ -21,6 +21,9 @@ function Remove-UsaBanner {
     off (sshd -t checks it; restart sshd yourself); puts the logon notice
     back as it was, where it still holds the banner's text; deletes
     %ProgramData%\UsagiTools\Banner and the module's copy the deploy made.
+    It refuses, before anything changes, where UsagiTools or Banner is a
+    link, or someone else owns it or may delete what is in it, as the
+    deploy does: the record it reads there says what to delete.
 
     PowerShell itself stays: it may serve more than the banner.
 

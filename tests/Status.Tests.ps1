@@ -328,6 +328,14 @@ Describe 'Get-UsaBanner on Windows Server' {
     It 'names what broke: <Case>' -ForEach @(
         @{ Case = 'the folder''s ACL changed'; Check = 'folder acl'; State = 'differs'; Detail = '*does not have the banner''s ACL, so others may change the banners every login shows: Deploy-UsaBanner sets it again'
             Break = { $global:UsaWinAcl = $false } }
+        @{ Case = 'UsagiTools owned by a user'; Check = 'folder acl'; State = 'invalid'; Detail = '*ProgramData/UsagiTools: it is owned by CONTOSO\eve. Whoever that is could have the periodic job, as SYSTEM, write wherever a link points*'
+            Break = { $global:UsaWinSecurity["$global:UsaWinRoot/ProgramData/UsagiTools"] = @{ Owner = 'S-1-5-21-1-2-3-1104'; OwnerName = 'CONTOSO\eve'; Rules = @() } } }
+        @{ Case = 'a link in the banner''s folder'; Check = 'folder acl'; State = 'invalid'; Detail = '*Banner: it holds a link, which icacls /T would go through: *Banner/elsewhere. *'
+            Break = {
+                $target = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
+                $null = New-Item -ItemType Directory -Path $target
+                $null = New-Item -ItemType SymbolicLink -Path (Join-Path $global:UsaWinRoot 'ProgramData/UsagiTools/Banner/elsewhere') -Target $target
+            } }
         @{ Case = 'a profile''s block taken out'; Check = 'banner after login'; State = 'missing'; Detail = '*Windows/System32/WindowsPowerShell/v1.0/profile.ps1 has no block'
             Break = { [System.IO.File]::WriteAllText((Join-Path $global:UsaWinRoot 'Windows/System32/WindowsPowerShell/v1.0/profile.ps1'), "Set-Location C:\`r`n") } }
         @{ Case = 'sshd_config''s Banner line taken out'; Check = 'ssh banner'; State = 'missing'; Detail = '*ProgramData/ssh/sshd_config has no Banner line for it'

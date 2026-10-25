@@ -583,7 +583,12 @@ function Get-UsaBannerWindowsStatus {
     $record = Read-UsaBannerDeployRecord -Path ([System.IO.Path]::Combine($layout.Data, 'deploy.json'))
     $checks.Add((Get-UsaBannerWindowsNoticeCheck -Config $config -Record $record))
     $checks.Add((Get-UsaBannerWindowsJobCheck -Data $layout.Data))
-    if (Test-UsaBannerFolderAcl -Path $layout.Data) { $checks.Add((New-UsaBannerCheck -Check 'folder acl' -State 'ok' -Detail "$($layout.Data) is owned by Administrators: Administrators and SYSTEM may change it, Users read it")) }
+    $danger = @(foreach ($place in [System.IO.Path]::GetDirectoryName($layout.Data), $layout.Data) {
+            if (-not [System.IO.Directory]::Exists($place)) { continue }
+            foreach ($why in @(Get-UsaBannerFolderDanger -Path $place -Tree:($place -eq $layout.Data))) { "${place}: $why" }
+        })
+    if ($danger.Count) { $checks.Add((New-UsaBannerCheck -Check 'folder acl' -State 'invalid' -Detail "$($danger -join '; '). Whoever that is could have the periodic job, as SYSTEM, write wherever a link points; Deploy-UsaBanner refuses this folder until someone looks")) }
+    elseif (Test-UsaBannerFolderAcl -Path $layout.Data) { $checks.Add((New-UsaBannerCheck -Check 'folder acl' -State 'ok' -Detail "$($layout.Data) is owned by Administrators: Administrators and SYSTEM may change it, Users read it")) }
     else { $checks.Add((New-UsaBannerCheck -Check 'folder acl' -State 'differs' -Detail "$($layout.Data) does not have the banner's ACL, so others may change the banners every login shows: Deploy-UsaBanner sets it again")) }
     if ($common.Version) { $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'ok' -Detail "UsaBanner $($common.Version), for every user and the periodic job: $([System.IO.Path]::Combine($layout.Modules, 'UsaBanner', [string]$common.Version))")) }
     else { $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'missing' -Detail "there is no copy in $([System.IO.Path]::Combine($layout.Modules, 'UsaBanner')), where every login and the periodic job import it from")) }

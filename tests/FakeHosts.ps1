@@ -249,6 +249,12 @@ function Use-WindowsHost {
     $global:UsaWinTasks = @{}
     $global:UsaWinRunning = @{}
     $global:UsaWinAcl = $false
+    # UsagiTools, the folder the banner's own is in, once the deploy has set its ACL.
+    $global:UsaWinParentAcl = $false
+    # Each folder's owner and ACL entries, by path (Get-UsaBannerFolderSecurity). A folder not
+    # listed is Administrators', with what ProgramData passes down: Users may read, and add files
+    # and folders, not delete them; CREATOR OWNER's entry is inherit-only.
+    $global:UsaWinSecurity = @{}
     Mock -ModuleName UsaBanner Get-UsaBannerHostOs { 'windows' }
     Mock -ModuleName UsaBanner Get-UsaBannerWindowsPaths { @{ ProgramData = "$global:UsaWinRoot/ProgramData"; ProgramFiles = "$global:UsaWinRoot/ProgramFiles"; Windir = "$global:UsaWinRoot/Windows" } }
     Mock -ModuleName UsaBanner Get-UsaBannerWindowsBuild { 20348 }
@@ -269,7 +275,20 @@ function Use-WindowsHost {
         $global:UsaWinCalls.Add($(if ($Remove) { 'notice removed' } else { "notice set: $Caption" }))
         $global:UsaWinNotice = if ($Remove) { @{ Caption = ''; Text = ''; Exists = $false } } else { @{ Caption = $Caption; Text = $Text; Exists = $true } }
     }
-    Mock -ModuleName UsaBanner Test-UsaBannerFolderAcl { $global:UsaWinAcl -and [System.IO.Directory]::Exists($Path) }
+    Mock -ModuleName UsaBanner Test-UsaBannerFolderAcl {
+        $set = if ($Path -eq "$global:UsaWinRoot/ProgramData/UsagiTools") { $global:UsaWinParentAcl } else { $global:UsaWinAcl }
+        $set -and [System.IO.Directory]::Exists($Path)
+    }
+    Mock -ModuleName UsaBanner Get-UsaBannerFolderSecurity {
+        if ($global:UsaWinSecurity.ContainsKey($Path)) { return $global:UsaWinSecurity[$Path] }
+        @{ Owner = 'S-1-5-32-544'; OwnerName = 'BUILTIN\Administrators'; Rules = @(
+            @{ Sid = 'S-1-5-18'; Name = 'NT AUTHORITY\SYSTEM'; Allow = $true; Rights = 0x1F01FF; InheritOnly = $false }
+            @{ Sid = 'S-1-5-32-544'; Name = 'BUILTIN\Administrators'; Allow = $true; Rights = 0x1F01FF; InheritOnly = $false }
+            @{ Sid = 'S-1-5-32-545'; Name = 'BUILTIN\Users'; Allow = $true; Rights = 0x1200A9; InheritOnly = $false }
+            @{ Sid = 'S-1-5-32-545'; Name = 'BUILTIN\Users'; Allow = $true; Rights = 0x116; InheritOnly = $false }
+            @{ Sid = 'S-1-3-0'; Name = 'CREATOR OWNER'; Allow = $true; Rights = 0x10000000; InheritOnly = $true }
+        ) }
+    }
     Mock -ModuleName UsaBanner Get-UsaBannerTask { $global:UsaWinTasks[$Name] }
     Mock -ModuleName UsaBanner Register-UsaBannerTask {
         $global:UsaWinCalls.Add("task registered: $($Spec.Path)$($Spec.Name)")
@@ -288,9 +307,12 @@ function Use-WindowsHost {
         $global:UsaWinCalls.Add($call)
         if ($global:UsaWinAnswers.ContainsKey($call)) { return $global:UsaWinAnswers[$call] }
         if ($FilePath -eq 'icacls.exe' -and $ArgumentList -contains '/inheritance:r') {
-            # The ACL comes before any file: nothing is in the folder yet.
-            if (@([System.IO.Directory]::GetFiles($ArgumentList[0])).Count) { $global:UsaWinCalls.Add('ACL SET AFTER A FILE') }
-            $global:UsaWinAcl = $true
+            if ($ArgumentList[0] -eq "$global:UsaWinRoot/ProgramData/UsagiTools") { $global:UsaWinParentAcl = $true }
+            else {
+                # The ACL comes before any file: nothing is in the folder yet.
+                if (@([System.IO.Directory]::GetFiles($ArgumentList[0])).Count) { $global:UsaWinCalls.Add('ACL SET AFTER A FILE') }
+                $global:UsaWinAcl = $true
+            }
         }
         @{ ExitCode = 0; Output = @() }
     }
