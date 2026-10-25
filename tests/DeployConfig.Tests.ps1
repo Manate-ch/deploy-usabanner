@@ -56,7 +56,6 @@ Describe 'the configuration a deploy builds' {
         @{ Flag = 'Environment'; Given = 'PROD'; Setting = 'environment' }
         @{ Flag = 'BannerImage'; Given = 'tux'; Setting = 'art.name' }
         @{ Flag = 'Border'; Given = 'Rounded'; Setting = 'border.set' }
-        @{ Flag = 'BorderChar'; Given = '*'; Setting = 'border.char' }
         @{ Flag = 'BorderCap'; Given = '(^_^)'; Setting = 'border.cap' }
         @{ Flag = 'ColorPreset'; Given = 'HighContrast'; Setting = 'color.preset' }
         @{ Flag = 'ColorMode'; Given = '16'; Setting = 'color.mode' }
@@ -65,6 +64,24 @@ Describe 'the configuration a deploy builds' {
         @{ Flag = 'Voice'; Given = 'uwu'; Setting = 'voice' }
     ) {
         Get-Setting (New-DeployConfig @{ $Flag = $Given }) $Setting | Should -BeExactly $Given
+    }
+
+    It 'sets border.char from -BorderChar beside the OneChar set: <Case>' -ForEach @(
+        @{ Case = '-Border OneChar'; Flags = @{ Border = 'OneChar'; BorderChar = '*' }; File = $null }
+        @{ Case = 'a file whose set is OneChar'; Flags = @{ BorderChar = '*' }; File = '{"version":1,"border":{"set":"OneChar","char":"#"}}' }
+    ) {
+        $got = if ($File) { New-DeployConfig $Flags -Path (New-TextFile 'onechar.json' $File) } else { New-DeployConfig $Flags }
+        Get-Setting $got 'border.char' | Should -BeExactly '*'
+        Get-Setting $got 'border.set' | Should -BeExactly 'OneChar'
+    }
+
+    It 'refuses -BorderChar beside any other border set, naming both flags: <Case>' -ForEach @(
+        @{ Case = 'alone, over the default Classic'; Flags = @{ BorderChar = '*' }; File = $null; Set = 'Classic' }
+        @{ Case = 'with -Border Rounded'; Flags = @{ Border = 'Rounded'; BorderChar = '*' }; File = $null; Set = 'Rounded' }
+        @{ Case = 'over a file whose set is Double'; Flags = @{ BorderChar = '*' }; File = '{"version":1,"border":{"set":"Double"}}'; Set = 'Double' }
+    ) {
+        $got = Get-Failure { if ($File) { New-DeployConfig $Flags -Path (New-TextFile 'double.json' $File) } else { New-DeployConfig $Flags } }
+        $got | Should -BeLike "*-BorderChar is the character the OneChar border set draws with, and the border set is ${Set}: give -Border OneChar too, or leave -BorderChar out.*"
     }
 
     It 'spells a value from a list as the schema does: -<Flag> <Given> sets <Expected>' -ForEach @(

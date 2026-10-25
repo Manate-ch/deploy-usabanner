@@ -85,7 +85,9 @@ function Deploy-UsaBanner {
     The box's lines and corners. The Unicode sets show after login only,
     with Classic before login.
     .PARAMETER BorderChar
-    The character the OneChar set draws with.
+    The character the OneChar set draws with: given with -Border OneChar, or
+    a -Path file whose set is OneChar. With any other set it is refused, as
+    nothing would draw it.
     .PARAMETER BorderCap
     An ASCII face for the top line, such as (^_^).
     .PARAMETER ColorPreset
