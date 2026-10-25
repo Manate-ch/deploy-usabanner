@@ -20,6 +20,14 @@ function Get-UsaBanner {
     |               | when not; not installed (a firewall is not checked)   |
     | Services      | the services the banner after login watches, in their |
     |               | state now                                             |
+    | Tier          | the tier the banners show, and TierFrom where it came |
+    |               | from: configuration, AD Description, or '' for        |
+    |               | neither (then it is UNSET)                            |
+    | Role          | the role the banner after login shows, '' for none,   |
+    |               | and RoleFrom where it came from, as TierFrom          |
+    | AdDescription | this host's AD Description, as the periodic job last  |
+    |               | cached it; $null when none is cached (no domain, or   |
+    |               | not read yet)                                         |
     | Checks        | each part of the deploy: State, Check and Detail      |
     | Vlans         | the colour-to-VLAN rows: Tag, Name, Cidr, Color,      |
     |               | Short, and ThisHost for the one this host is in       |
@@ -31,14 +39,14 @@ function Get-UsaBanner {
     A check is ok; off, when a part is not in place for a reason outside
     the banner (no OpenSSH server, a logon notice someone else set, another
     shell for SSH logins); missing; differs, when it is not as a deploy
-    leaves it; stale, when it was drawn for another name, address or
-    configuration, when the periodic job has not sampled for 20 minutes, or
-    when sshd on Windows started before sshd_config last changed (a deploy
-    leaves its restart to you); invalid, when the configuration cannot be
-    read; or unknown, when this session cannot tell. On Ubuntu, which banner
-    sshd sends needs root to read; on Windows, a user may not see the
-    periodic job's task. Run it as root, or as an administrator, for every
-    answer.
+    leaves it; stale, when it was drawn for another name, address,
+    configuration or AD Description, when the periodic job has not sampled
+    for 20 minutes, or when sshd on Windows started before sshd_config last
+    changed (a deploy leaves its restart to you); invalid, when the
+    configuration cannot be read; or unknown, when this session cannot tell.
+    On Ubuntu, which banner sshd sends needs root to read; on Windows, a
+    user may not see the periodic job's task. Run it as root, or as an
+    administrator, for every answer.
 
     With -Moment, a banner as installed, a string per line:
 

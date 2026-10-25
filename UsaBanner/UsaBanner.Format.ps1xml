@@ -3,7 +3,9 @@
   UsaBanner.Format.ps1xml - how Get-UsaBanner's answer prints: a host as a
   list, with its checks, VLANs and settings a line each; a check or a VLAN
   alone as a table row. Windows PowerShell 5.1 loads this file too, so its
-  script blocks are 5.1 syntax.
+  script blocks are 5.1 syntax. No label is longer than Services and
+  Settings, eight characters, which a list pads every label to: so AD Desc,
+  not AdDescription.
 -->
 <Configuration>
   <ViewDefinitions>
@@ -36,6 +38,18 @@
               </ListItem>
               <ListItem>
                 <PropertyName>Services</PropertyName>
+              </ListItem>
+              <ListItem>
+                <Label>Tier</Label>
+                <ScriptBlock>if ($_.TierFrom) { '{0}, from the {1}' -f $_.Tier, $_.TierFrom } else { $_.Tier }</ScriptBlock>
+              </ListItem>
+              <ListItem>
+                <Label>Role</Label>
+                <ScriptBlock>if ($_.RoleFrom) { '{0}, from the {1}' -f $_.Role, $_.RoleFrom } else { '(none)' }</ScriptBlock>
+              </ListItem>
+              <ListItem>
+                <Label>AD Desc</Label>
+                <ScriptBlock>if ($null -eq $_.AdDescription) { '(none cached)' } else { '"{0}"' -f $_.AdDescription }</ScriptBlock>
               </ListItem>
               <ListItem>
                 <Label>Checks</Label>

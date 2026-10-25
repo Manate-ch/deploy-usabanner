@@ -7,6 +7,8 @@
 #   +--------------+----------------+--------------------------------------+
 #   | Company      | company        | the name, printable ASCII            |
 #   | Environment  | environment    | UNSET, DEV-TEST, LAB, PROD or PUB    |
+#   | Role         | role           | what the host is for, printable      |
+#   |              |                | ASCII                                |
 #   | BannerImage  | art.name       | a piece of the module's art, or os   |
 #   | Border       | border.set     | a border set (D6)                    |
 #   | BorderChar   | border.char    | the character OneChar draws with     |
@@ -31,6 +33,7 @@
 $script:UsaDeployFlags = [ordered]@{
     Company      = 'company'
     Environment  = 'environment'
+    Role         = 'role'
     BannerImage  = 'art.name'
     Border       = 'border.set'
     BorderChar   = 'border.char'

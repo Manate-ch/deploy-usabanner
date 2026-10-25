@@ -9,10 +9,11 @@ BeforeAll {
     . (Join-Path $PSScriptRoot 'Golden.ps1')
     $esc = [string][char]27
 
-    # The web host of PostLogin.Tests, all clear.
+    # The web host of PostLogin.Tests, all clear. Its role is in the
+    # configuration (D29).
     $facts = @{
         Name = 'h-vsl-web1.ad.example'; Ip = '10.20.40.80'
-        Os = 'Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic'; Role = 'Web front end'; Uptime = '12d 6h 40m'
+        Os = 'Ubuntu 24.04.3 LTS, kernel 6.8.0-87-generic'; Uptime = '12d 6h 40m'
         Cpu = @{ Now = 12; Min = 3; Max = 71; Text = '4 cores @ 2.4 GHz' }
         Memory = @{ Pct = 57; Min = 48; Max = 66; Text = '4.5 of 7.8 GiB'; Kind = 'DDR4' }
         Disks = @(
@@ -34,7 +35,7 @@ BeforeAll {
         # Why: the command reads a file, as a host will
         param([string]$Name, [hashtable]$Change = @{})
         $config = [ordered]@{
-            version = 1; company = 'Contoso'; environment = 'LAB'
+            version = 1; company = 'Contoso'; environment = 'LAB'; role = 'Web front end'
             vlans = @(
                 [ordered]@{ name = 'Management'; tag = 10; cidr = '10.20.10.0/24'; color = 'Blue'; short = 'Mgmt' }
                 [ordered]@{ name = 'Servers'; tag = 40; cidr = '10.20.40.0/22'; color = 'Teal' }
@@ -111,6 +112,22 @@ Describe 'Show-UsaBanner' {
         ($lines -join "`n") | Should -Match '41d 2h 5m'
         $null = Show-UsaBanner -Path $lab -Facts $facts -Os ubuntu -ColorMode none
         Should -Invoke Get-UsaBannerHostFacts -ModuleName UsaBanner -Times 1 -Exactly
+    }
+
+    It 'takes this host''s tier and role from its cached AD Description without -Facts, where the configuration leaves them unset' {
+        Mock -ModuleName UsaBanner Get-UsaBannerHostFacts { @{ Name = 'cwpql-db2.ad.example'; Ip = '10.20.60.15' } }
+        Mock -ModuleName UsaBanner Read-UsaBannerAdDescription { 'PUB : Kiosk' }
+        $text = @(Show-UsaBanner -Path (New-ConfigFile 'unset.json' @{ environment = 'UNSET'; role = '' }) -Os linux -ColorMode none -Glyphs ascii) -join "`n"
+        $text | Should -Match 'P U B'
+        $text | Should -Match '\|  role      Kiosk +\|'
+    }
+
+    It 'leaves made-up facts to the configuration''s tier and role, and reads no cache' {
+        Mock -ModuleName UsaBanner Read-UsaBannerAdDescription { 'PUB : Kiosk' }
+        $text = @(Show-UsaBanner -Path (New-ConfigFile 'unset2.json' @{ environment = 'UNSET'; role = '' }) -Facts $facts -Os ubuntu -ColorMode none -Glyphs ascii) -join "`n"
+        $text | Should -Match 'U N S E T'
+        $text | Should -Not -Match 'Kiosk'
+        Should -Invoke Read-UsaBannerAdDescription -ModuleName UsaBanner -Times 0 -Exactly
     }
 
     It 'collects the facts watching the services the configuration names' {

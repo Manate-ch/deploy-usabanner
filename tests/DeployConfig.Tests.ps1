@@ -54,6 +54,7 @@ Describe 'the configuration a deploy builds' {
     It 'sets <Setting> from -<Flag>' -ForEach @(
         @{ Flag = 'Company'; Given = 'Contoso LLC'; Setting = 'company' }
         @{ Flag = 'Environment'; Given = 'PROD'; Setting = 'environment' }
+        @{ Flag = 'Role'; Given = 'Web front end'; Setting = 'role' }
         @{ Flag = 'BannerImage'; Given = 'tux'; Setting = 'art.name' }
         @{ Flag = 'Border'; Given = 'Rounded'; Setting = 'border.set' }
         @{ Flag = 'BorderCap'; Given = '(^_^)'; Setting = 'border.cap' }
@@ -159,6 +160,7 @@ Describe 'the configuration a deploy builds' {
 
     It 'names the flag of a value the schema refuses: <Case>' -ForEach @(
         @{ Case = 'a company name that is not ASCII'; Flags = @{ Company = 'Caf' + [char]0x00E9 }; Message = '*-Company: /company: *' }
+        @{ Case = 'a role that is not ASCII'; Flags = @{ Role = 'Caf' + [char]0x00E9 + ' kiosk' }; Message = '*-Role: /role: *' }
         @{ Case = 'a OneChar character that is two'; Flags = @{ BorderChar = 'ab' }; Message = '*-BorderChar: /border/char: *' }
         @{ Case = 'a cap too long for the top line'; Flags = @{ BorderCap = '(^_^) (^_^) (^_^)' }; Message = '*-BorderCap: /border/cap: *' }
         @{ Case = 'a service name with a space'; Flags = @{ Services = @('my service') }; Message = '*-Services: /services*' }
@@ -179,7 +181,7 @@ Describe 'the configuration a deploy builds' {
                 $node = $node['properties'][$part]
             }
         }
-        $settings.Count | Should -Be 18
+        $settings.Count | Should -Be 19
     }
 
     It 'turns the update channel on with -Update and the address of the releases with -UpdateSource' {

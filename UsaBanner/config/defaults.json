@@ -2,6 +2,7 @@
   "version": 1,
   "company": "",
   "environment": "UNSET",
+  "role": "",
   "art": {
     "name": "os"
   },

@@ -10,9 +10,9 @@
 #   |         | server, a logon notice someone else set, another SSH shell  |
 #   | missing | a part a deploy puts in place is not there                  |
 #   | differs | there, but not as a deploy leaves it                        |
-#   | stale   | out of date: drawn for another name, address or             |
-#   |         | configuration; no sample for 20 minutes; an sshd started    |
-#   |         | before sshd_config last changed                             |
+#   | stale   | out of date: drawn for another name, address,               |
+#   |         | configuration or AD Description; no sample for 20 minutes;  |
+#   |         | an sshd started before sshd_config last changed             |
 #   | invalid | the configuration cannot be read                            |
 #   | unknown | this session cannot tell: the check needs root, or an       |
 #   |         | administrator                                               |
@@ -101,10 +101,12 @@ function Get-UsaBannerSampleFinding {
 }
 
 function New-UsaBannerStatus {
-    # In:  what a host's checks found
+    # In:  what a host's checks found, and its cached AD Description ($null
+    #      for none)
     # Out: Get-UsaBanner's answer (Public\Get-UsaBanner.ps1 says what each
     #      property holds). The settings are those the configuration sets
-    #      otherwise than the defaults
+    #      otherwise than the defaults; the tier and the role, those the
+    #      banners show, with where each came from
     param(
         [string]$HostName,
         [string]$Ip,
@@ -114,11 +116,14 @@ function New-UsaBannerStatus {
         [object[]]$Checks = @(),
         [string]$Ssh,
         [string]$Services,
-        [AllowNull()][System.Collections.IDictionary]$Config
+        [AllowNull()][System.Collections.IDictionary]$Config,
+        [AllowNull()][object]$Description
     )
     $vlans = @()
     $settings = @()
+    $resolved = @{ Tier = ''; TierFrom = ''; Role = ''; RoleFrom = '' }
     if ($Config) {
+        $resolved = Resolve-UsaBannerHostConfig -Config $Config -Description ([string]$Description)
         $here = Find-UsaBannerVlan -Address $Ip -Vlans @($Config['vlans'])
         $vlans = @(foreach ($vlan in @($Config['vlans'])) {
                 if (-not $vlan) { continue }
@@ -144,6 +149,11 @@ function New-UsaBannerStatus {
         Healthy       = ($Deployed -and $faults.Count -eq 0)
         Ssh           = $Ssh
         Services      = $Services
+        Tier          = $resolved.Tier
+        TierFrom      = $resolved.TierFrom
+        Role          = $resolved.Role
+        RoleFrom      = $resolved.RoleFrom
+        AdDescription = $Description
         Checks        = @($Checks)
         Vlans         = $vlans
         Settings      = $settings
@@ -184,7 +194,7 @@ function Test-UsaBannerDrawnFile {
     if ($null -eq $have) { return @{ State = 'missing'; Text = "$Path is missing" } }
     if ($null -eq $Want) { return @{ State = 'unknown'; Text = "${Path}: what the configuration draws is not known" } }
     if ($have -ceq [string]$Want) { return @{ State = 'ok'; Text = '' } }
-    if ($Stale) { return @{ State = 'stale'; Text = "$Path was drawn for another name, address or configuration" } }
+    if ($Stale) { return @{ State = 'stale'; Text = "$Path was drawn for another name, address, configuration or AD Description" } }
     @{ State = 'differs'; Text = "$Path is not what the configuration draws: changed by hand, or drawn by another version of the module" }
 }
 
@@ -383,14 +393,16 @@ function Get-UsaBannerLinuxStatus {
     $facts = Get-UsaBannerHostFacts -Services $(if ($config) { $config['services'] } else { @() })
     $name = [string]$facts['Name']
     $ip = [string]$facts['Ip']
+    $ad = Read-UsaBannerLinuxAdCache -Root $root
     $drawing = $null
     $sum = ''
     if ($config) {
         $sum = Get-UsaBannerSha256 -Bytes ([System.IO.File]::ReadAllBytes("$root$configPath"))
-        $drawing = New-UsaBannerLinuxDrawing -Config $config -Os $os -Name $name -Ip $ip -ConfigSum $sum
+        $drawing = New-UsaBannerLinuxDrawing -Config $config -Os $os -Name $name -Ip $ip -ConfigSum $sum -Description $ad.Text -DescriptionSum $ad.Sum
     }
 
-    # What was drawn: the name, address and configuration redraw.sh compares.
+    # What was drawn: the name, address, configuration and AD Description
+    # redraw.sh compares.
     $drawn = Read-UsaBannerHostText -Root $root -Path "$script:UsaLinuxState/drawn"
     $stale = $false
     if ($null -eq $drawn) { $checks.Add((New-UsaBannerCheck -Check 'drawn for this host' -State 'missing' -Detail "$script:UsaLinuxState/drawn is missing: the banners were never drawn here")) }
@@ -398,10 +410,11 @@ function Get-UsaBannerLinuxStatus {
     elseif ($drawn -ceq $drawing['Drawn']) { $checks.Add((New-UsaBannerCheck -Check 'drawn for this host' -State 'ok' -Detail "drawn for $name ($ip)")) }
     else {
         $stale = $true
-        $was = @($drawn.TrimEnd("`n") -split "`t") + @('', '', '')
+        $was = @($drawn.TrimEnd("`n") -split "`t") + @('', '', '', '')
         $why = @(
             if ($was[0] -cne $name -or $was[1] -cne $ip) { "drawn for $($was[0]) ($($was[1])), and this host is $name ($ip)" }
             if ($was[2] -cne $sum) { 'drawn from another configuration' }
+            if ($was[3] -cne $ad.Sum) { 'drawn from another AD Description' }
         )
         if (-not $why.Count) { $why = @('drawn otherwise') }
         $checks.Add((New-UsaBannerCheck -Check 'drawn for this host' -State 'stale' -Detail "$($why -join '; '): the periodic job draws the banners again within 15 minutes"))
@@ -434,7 +447,7 @@ function Get-UsaBannerLinuxStatus {
     $checks.Add((Get-UsaBannerUpdateCheck -Config $config -State "$root$script:UsaLinuxState" -Found $job))
     $checks.Add((Get-UsaBannerOldBannerCheck -Found @(Find-UsaBannerLinuxOldInstall -Root $root)))
 
-    New-UsaBannerStatus @common -HostName $name -Ip $ip -Deployed $true -Checks $checks.ToArray() -Services (Get-UsaBannerServicesText -Facts $facts) -Config $config
+    New-UsaBannerStatus @common -HostName $name -Ip $ip -Deployed $true -Checks $checks.ToArray() -Services (Get-UsaBannerServicesText -Facts $facts) -Config $config -Description $ad.Text
 }
 
 function Get-UsaBannerWindowsSshCheck {
@@ -607,7 +620,8 @@ function Get-UsaBannerWindowsStatus {
     $checks.Add((Get-UsaBannerUpdateCheck -Config $config -State $layout.Data -Found $job))
     $checks.Add((Get-UsaBannerOldBannerCheck -Found @(Find-UsaBannerWindowsOldInstall -Layout $layout)))
 
-    New-UsaBannerStatus @common -HostName ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -Deployed $true -Checks $checks.ToArray() -Services (Get-UsaBannerServicesText -Facts $facts) -Config $config
+    $description = Read-UsaBannerAdDescription -Path ([System.IO.Path]::Combine($layout.Data, 'ad-description'))
+    New-UsaBannerStatus @common -HostName ([string]$facts['Name']) -Ip ([string]$facts['Ip']) -Deployed $true -Checks $checks.ToArray() -Services (Get-UsaBannerServicesText -Facts $facts) -Config $config -Description $description
 }
 
 function ConvertFrom-UsaBannerIssueText {

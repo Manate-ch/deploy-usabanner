@@ -146,20 +146,23 @@ function Update-UsaBannerSample {
     <#
     .SYNOPSIS
     The periodic job on Windows: this host's sample for the 24-hour range,
-    and its slow facts.
+    its AD Description, and its slow facts.
     .DESCRIPTION
     Every 15 minutes, as SYSTEM, from the task M4 installs; linux/sample.sh
-    is its twin on Linux. -Path, -SlowPath and -Now replace the files and the
-    time, for tests.
+    is its twin on Linux. -Path, -SlowPath, -AdPath and -Now replace the
+    files and the time, for tests.
     #>
     [CmdletBinding()]
     param(
         [string]$Path = (Get-UsaBannerDataPath -Name 'samples.tsv' -OnWindows $true),
         [string]$SlowPath = (Get-UsaBannerDataPath -Name 'slow.tsv' -OnWindows $true),
+        [string]$AdPath = (Get-UsaBannerDataPath -Name 'ad-description' -OnWindows $true),
         [datetimeoffset]$Now = [datetimeoffset]::Now
     )
     Add-UsaBannerSample -Facts (Get-UsaBannerWindowsFacts -SamplePath $Path -SlowPath $SlowPath -Now $Now) -Path $Path -Now $Now
     # The sample first: the search for updates keeps the Windows Update
-    # service busy, and a CPU reading taken after it would count that.
+    # service busy, and a CPU reading taken after it would count that. The AD
+    # Description between the two, as on Linux.
+    Update-UsaBannerAdDescription -Path $AdPath
     Write-UsaBannerSlowFacts -Path $SlowPath -Now $Now
 }
