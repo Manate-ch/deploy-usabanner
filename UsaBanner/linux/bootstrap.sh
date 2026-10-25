@@ -27,6 +27,12 @@
 # apt waits up to 10 minutes for the package lock: at boot, unattended-upgrades
 # may hold it, and a startup script that gave up would deploy only at the next.
 #
+# needrestart is suspended for these installs. apt runs it after each, and it
+# may restart the services that use a library an install upgraded: where the
+# MIT Kerberos libraries are older than krb5-user, which needs them at its own
+# version, installing it upgrades them, and sshd and sssd use them. A banner's
+# install restarts neither; they take the new libraries at their next restart.
+#
 # USABANNER_ROOT (tests only) prefixes /etc/os-release and /etc/krb5.keytab.
 
 root=${USABANNER_ROOT:-}
@@ -48,6 +54,10 @@ field() {
 
 [ "$(id -u)" = 0 ] || fail 'it installs PowerShell and deploys the banner, so it runs as root: sudo sh bootstrap.sh ...'
 [ "$(field ID)" = ubuntu ] || fail 'this host is not Ubuntu. Deploy-UsaBanner works on Ubuntu (24.04 and later) and Windows Server (2022 and later)'
+
+# needrestart's apt hook does nothing while this is set.
+NEEDRESTART_SUSPEND=1
+export NEEDRESTART_SUSPEND
 
 if ! command -v pwsh >/dev/null 2>&1; then
 	version=$(field VERSION_ID)

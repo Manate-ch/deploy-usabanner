@@ -19,10 +19,10 @@ Describe 'bootstrap.sh' -Skip:$IsWindows {
 
         function Write-StandIn {
             # In:  a folder, a program's name, what it does after logging its call; -Quiet for
-            #      one that logs nothing, -Frontend to log DEBIAN_FRONTEND too
+            #      one that logs nothing, -Frontend to log DEBIAN_FRONTEND and NEEDRESTART_SUSPEND too
             # Out: nothing; the folder holds the stand-in, executable
             param([string]$Folder, [string]$Name, [string]$Body = '', [switch]$Quiet, [switch]$Frontend)
-            $extra = if ($Frontend) { "${Tab}DEBIAN_FRONTEND=`${DEBIAN_FRONTEND:-}" } else { '' }
+            $extra = if ($Frontend) { "${Tab}DEBIAN_FRONTEND=`${DEBIAN_FRONTEND:-}${Tab}NEEDRESTART_SUSPEND=`${NEEDRESTART_SUSPEND:-}" } else { '' }
             $lines = @('#!/bin/sh')
             if (-not $Quiet) { $lines += "(IFS='$Tab'; printf '%s\n' `"`${0##*/}$Tab`$*$extra`") >>`"`$STUB_LOG`"" }
             $path = Join-Path $Folder $Name
@@ -106,13 +106,15 @@ exit 0
         $result.ExitCode | Should -Be 0
         $deb = ($result.Calls[0] -split $Tab)[3]
         $deb | Should -BeLike "$Work/*.deb"
-        # Each apt-get waits up to 10 minutes for the package lock, as at boot unattended-upgrades may hold it.
+        # Each apt-get waits up to 10 minutes for the package lock, as at boot unattended-upgrades may
+        # hold it, and runs with needrestart suspended, so that no service restarts for the banner.
         $apt = "apt-get${Tab}-o${Tab}DPkg::Lock::Timeout=600"
+        $aptEnv = "DEBIAN_FRONTEND=noninteractive${Tab}NEEDRESTART_SUSPEND=1"
         $result.Calls | Should -Be @(
             "curl${Tab}-fsSL${Tab}-o${Tab}$deb${Tab}$Url"
-            "$apt${Tab}install${Tab}-y${Tab}$deb${Tab}DEBIAN_FRONTEND=noninteractive"
-            "$apt${Tab}update${Tab}DEBIAN_FRONTEND=noninteractive"
-            "$apt${Tab}install${Tab}-y${Tab}powershell${Tab}DEBIAN_FRONTEND=noninteractive"
+            "$apt${Tab}install${Tab}-y${Tab}$deb${Tab}$aptEnv"
+            "$apt${Tab}update${Tab}$aptEnv"
+            "$apt${Tab}install${Tab}-y${Tab}powershell${Tab}$aptEnv"
             "pwsh${Tab}-NoProfile${Tab}-NonInteractive${Tab}-File${Tab}$Here/bootstrap.ps1${Tab}-Company${Tab}Contoso"
         )
         $deb | Should -Not -Exist
@@ -181,17 +183,18 @@ exit 0
             $script:Deploy = "pwsh${Tab}-NoProfile${Tab}-NonInteractive${Tab}-File${Tab}$Here/bootstrap.ps1${Tab}-Company${Tab}Contoso"
         }
 
-        It 'installs the AD tools that are missing, krb5-config told first to add no servers to krb5.conf, then deploys' {
+        It 'installs the AD tools that are missing, krb5-config told first to add no servers to krb5.conf and needrestart suspended, then deploys' {
             $result = Invoke-Bootstrap -Arguments @('-Company', 'Contoso') -Variables @('STUB_AD_HAVE=krb5-user')
             $result.ExitCode | Should -Be 0
+            $aptEnv = "DEBIAN_FRONTEND=noninteractive${Tab}NEEDRESTART_SUSPEND=1"
             $result.Calls | Should -Be @(
                 "dpkg-query${Tab}-W${Tab}-f=`${db:Status-Abbrev}${Tab}ldap-utils"
                 "dpkg-query${Tab}-W${Tab}-f=`${db:Status-Abbrev}${Tab}krb5-user"
                 "dpkg-query${Tab}-W${Tab}-f=`${db:Status-Abbrev}${Tab}libsasl2-modules-gssapi-mit"
                 "debconf-set-selections$Tab"
                 'krb5-config krb5-config/add_servers boolean false'
-                "$Apt${Tab}update${Tab}DEBIAN_FRONTEND=noninteractive"
-                "$Apt${Tab}install${Tab}-y${Tab}ldap-utils${Tab}libsasl2-modules-gssapi-mit${Tab}DEBIAN_FRONTEND=noninteractive"
+                "$Apt${Tab}update${Tab}$aptEnv"
+                "$Apt${Tab}install${Tab}-y${Tab}ldap-utils${Tab}libsasl2-modules-gssapi-mit${Tab}$aptEnv"
                 $Deploy
             )
             $result.Output | Should -Contain "bootstrap.sh: installing the AD tools the periodic job reads the computer's Description with: ldap-utils libsasl2-modules-gssapi-mit"
