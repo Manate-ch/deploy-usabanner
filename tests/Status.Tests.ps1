@@ -227,6 +227,18 @@ Describe 'Get-UsaBanner on Ubuntu' -Skip:$IsWindows {
         $check.Detail | Should -BeExactly 'sshd sends the Banner /etc/issue.net, not /etc/usabanner/issue.net: a file sshd reads before /etc/ssh/sshd_config.d/00-usabanner.conf sets one, and sshd takes the first'
     }
 
+    It 'leaves unknown, not differs, which banner sshd sends after a boot before sshd has started, and runs no sshd -T' {
+        # sshd -T will not run without /run/sshd, which sshd makes at its first start after a boot, and a check
+        # makes nothing.
+        [System.IO.Directory]::Delete((Join-Path $global:UsaDeployRoot 'run/sshd'))
+        $status = Get-ReadOnlyStatus
+        $check = Get-Check $status 'ssh banner'
+        $check.State | Should -BeExactly 'unknown'
+        $check.Detail | Should -BeExactly '/etc/ssh/sshd_config.d/00-usabanner.conf and /etc/usabanner/issue.net are in place; sshd has not started since the host booted (there is no /run/sshd), so sshd -T cannot say whether it sends it'
+        $global:UsaDeployCalls | Should -Not -Contain '/usr/sbin/sshd -T'
+        $status.Healthy | Should -BeTrue
+    }
+
     It 'leaves to root what only root can read, which banner sshd sends, and is healthy still' {
         Mock -ModuleName UsaBanner Test-UsaBannerPrivileged { $false }
         $status = Get-ReadOnlyStatus

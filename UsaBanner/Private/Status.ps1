@@ -238,7 +238,9 @@ function Get-UsaBannerLinuxSshCheck {
     # Out: the SSH banner's check: the drop-in and issue.net in place, and,
     #      as root, the Banner sshd -T says sshd sends. sshd -T reads files
     #      only root may read (cloud-init's drop-in is mode 600), so another
-    #      user's answer is unknown
+    #      user's answer is unknown. So is root's after a boot, until the
+    #      first connection starts sshd: -T needs /run/sshd, which sshd
+    #      makes, and a check makes nothing
     param(
         [AllowEmptyString()][string]$Root = '',
         [AllowNull()][System.Collections.IDictionary]$Drawing,
@@ -254,11 +256,16 @@ function Get-UsaBannerLinuxSshCheck {
     )
     if (@($found | Where-Object { $_.State -ne 'ok' }).Count -eq 0) {
         if (Test-UsaBannerPrivileged) {
-            $test = Invoke-UsaBannerNative -FilePath $script:UsaLinuxSshd -ArgumentList '-T'
-            $uses = @(@($test.Output) | Where-Object { $_ -match '^banner\s' } | ForEach-Object { ($_ -split '\s+', 2)[1] })
-            $banner = if ($uses.Count) { $uses[0] } else { 'none' }
-            if ($test.ExitCode -ne 0) { $found += @{ State = 'differs'; Text = "sshd -T refused the configuration: $(@($test.Output) -join ' ')" } }
-            elseif ($banner -ne $want) { $found += @{ State = 'differs'; Text = "sshd sends the Banner $banner, not ${want}: a file sshd reads before $script:UsaLinuxDropIn sets one, and sshd takes the first" } }
+            if (-not [System.IO.Directory]::Exists("$Root/run/sshd")) {
+                $found += @{ State = 'unknown'; Text = "$script:UsaLinuxDropIn and $want are in place; sshd has not started since the host booted (there is no /run/sshd), so sshd -T cannot say whether it sends it" }
+            }
+            else {
+                $test = Invoke-UsaBannerNative -FilePath $script:UsaLinuxSshd -ArgumentList '-T'
+                $uses = @(@($test.Output) | Where-Object { $_ -match '^banner\s' } | ForEach-Object { ($_ -split '\s+', 2)[1] })
+                $banner = if ($uses.Count) { $uses[0] } else { 'none' }
+                if ($test.ExitCode -ne 0) { $found += @{ State = 'differs'; Text = "sshd -T refused the configuration: $(@($test.Output) -join ' ')" } }
+                elseif ($banner -ne $want) { $found += @{ State = 'differs'; Text = "sshd sends the Banner $banner, not ${want}: a file sshd reads before $script:UsaLinuxDropIn sets one, and sshd takes the first" } }
+            }
         }
         else { $found += @{ State = 'unknown'; Text = "$script:UsaLinuxDropIn and $want are in place; sshd -T, which needs root, says whether sshd sends it" } }
     }
