@@ -413,6 +413,22 @@ Describe 'Remove-UsaBanner on Ubuntu' -Skip:$IsWindows {
         $lines | Should -Contain 'cleared the failed state of usabanner-sample.service: a run stopped part way, or one that failed, ends so'
     }
 
+    It 'stops and deletes the Group Policy runner''s publish watcher where the runner wrote one' {
+        $root = $global:UsaDeployRoot
+        $null = Deploy-UsaBanner -Company Contoso
+        # As linux/adsys-startup.sh writes them, the path unit enabled.
+        Write-TestFile $root 'etc/systemd/system/usabanner-publish.path' "[Path]`nPathChanged=/var/cache/adsys/sysvol/assets/GPT.INI`nUnit=usabanner-publish.service`n"
+        Write-TestFile $root 'etc/systemd/system/usabanner-publish.service' "[Service]`nType=oneshot`n"
+        $global:UsaDeployUnits.Enabled += 'usabanner-publish.path'
+        $global:UsaDeployCalls.Clear()
+        $lines = @(Remove-UsaBanner)
+        Get-Calls -Changes | Should -Contain 'systemctl disable --now usabanner-publish.path'
+        Get-Calls -Changes | Should -Contain 'systemctl stop usabanner-publish.service'
+        foreach ($unit in 'usabanner-publish.path', 'usabanner-publish.service') { Join-Path $root "etc/systemd/system/$unit" | Should -Not -Exist }
+        $lines | Should -Contain 'stopped usabanner-publish.path'
+        $lines | Should -Contain 'deleted /etc/systemd/system/usabanner-publish.path: a unit of the Group Policy publish watcher'
+    }
+
     It 'clears no failed state where no run was stopped' {
         $null = Deploy-UsaBanner -Company Contoso
         # The first sample has ended.
