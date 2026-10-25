@@ -1681,6 +1681,18 @@ stopped part way ended "Failed with result 'signal'" and, its unit file
 gone, stayed in systemctl's failed list, so Remove now clears the failed
 state of the jobs it stops.
 
+**A host this banner is on already (2026-10-25).** The lab's Group Policy
+window found the Ubuntu runner, which passes `-ReplaceOldBanner` at every
+deploy (D29), turning three things back on at each boot and each publish:
+the four stock MOTD scripts, landscape-sysinfo's statoverride and
+`motd-news.timer`'s mask. The deploy then turned them off again about a
+second later. The move off found them off, and could not tell this banner's
+change from the old banner's. What the deploy's record holds was turned off
+by this banner, so the move off now leaves it as it is. Where the old banner
+came back over this one, as its GPO puts it back at the next boot, the
+record still holds them: they stay off, and `Remove-UsaBanner` turns them
+back on as the record has them.
+
 ## D24. A LICENSE
 
 **Decided: MIT**, with the same text as deploy-usawinssh ("Copyright (c)
