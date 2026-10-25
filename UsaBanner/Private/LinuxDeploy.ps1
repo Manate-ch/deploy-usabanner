@@ -914,7 +914,7 @@ function Invoke-UsaBannerLinuxDeploy {
         if ($null -ne $old) { $settings = @(Compare-UsaBannerConfig -Old $old -New $Config) -join '; ' }
     }
 
-    if ($ReplaceOld) { Remove-UsaBannerLinuxOldInstall -Root $root }
+    if ($ReplaceOld) { Remove-UsaBannerLinuxOldInstall -Root $root -Record $record }
     Install-UsaBannerModuleCopy -Root $root -Record $record -Created $created
     foreach ($file in $script:UsaLinuxScripts) {
         Set-UsaBannerHostFile -Root $root -Path "$script:UsaLinuxShare/$file" -Bytes ([System.IO.File]::ReadAllBytes((Join-Path $script:UsaBannerRoot 'linux' $file))) -What 'the login renderer and the periodic job' -Created $created

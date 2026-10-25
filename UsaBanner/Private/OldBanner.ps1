@@ -34,6 +34,10 @@
 # delivers it again at the next boot or policy refresh, so its GPO comes off
 # the host first (D23); Get-UsaBanner's "old banner" check says when the old
 # banner is back.
+#
+# What the deploy's record holds of what --retire turns off, this banner
+# turned off, and it stays off: on a host this banner is on already, turning
+# it on would only have the deploy turn it off again, at every deploy.
 
 # The stock MOTD scripts install.sh --retire turns off (chmod -x).
 $script:UsaOldRetired = @('00-header', '10-help-text', '50-motd-news', '98-reboot-required')
@@ -105,7 +109,8 @@ function Remove-UsaBannerLinuxOldInstall {
     .SYNOPSIS
     Takes the old banner, this repository's install.sh, off this Ubuntu host.
     .DESCRIPTION
-    In:  the host's root.
+    In:  the host's root, and the record of this banner's deploys
+         (Read-UsaBannerDeployRecord).
     Out: a line for each change, in the order made. Under -WhatIf,
          PowerShell says each change instead, and nothing changes.
     Its jobs stop first, so they install nothing more while it goes. Then
@@ -120,10 +125,16 @@ function Remove-UsaBannerLinuxOldInstall {
     read before the unit goes. Where ADSys still applies a GPO that runs the
     old banner's startup script, a warning says it puts the old banner back
     at the next boot.
+    What the record holds of what --retire turned off, this banner turned
+    off, and it stays off: on a host this banner is on already, the deploy
+    would only turn it off again.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
-    param([AllowEmptyString()][string]$Root = '')
+    param(
+        [AllowEmptyString()][string]$Root = '',
+        [System.Collections.IDictionary]$Record = @{}
+    )
     $repo = Get-UsaBannerOldLinuxRepo -Root $Root
     foreach ($unit in $script:UsaOldJobs) {
         if ([System.IO.File]::Exists("$Root/etc/systemd/system/$unit") -and
@@ -140,13 +151,16 @@ function Remove-UsaBannerLinuxOldInstall {
         if ($reload.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl daemon-reload failed: $($reload.Output -join ' ')" }
     }
 
+    # What this banner's deploys turned off is on their record, and stays off (lab, 2026-10-25).
+    $ours = @(@($Record['retired']) + @($Record['statoverride']) | Where-Object { $_ } | ForEach-Object { [string]$_['path'] })
     foreach ($name in $script:UsaOldRetired) {
+        if ("/etc/update-motd.d/$name" -cin $ours) { continue }
         Enable-UsaBannerExecutable -Root $Root -Path "/etc/update-motd.d/$name" -What 'a stock MOTD script the old banner turned off'
     }
     $link = [System.IO.FileInfo]::new("$Root/etc/update-motd.d/50-landscape-sysinfo")
-    if ($link.LinkTarget) {
-        $target = $link.LinkTarget
-        if (-not $target.StartsWith('/')) { $target = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine('/etc/update-motd.d', $target)) }
+    $target = [string]$link.LinkTarget
+    if ($target -and -not $target.StartsWith('/')) { $target = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine('/etc/update-motd.d', $target)) }
+    if ($target -and $target -cnotin $ours) {
         $listed = Invoke-UsaBannerNative -FilePath 'dpkg-statoverride' -ArgumentList '--list', $target
         if ($listed.ExitCode -eq 0 -and [string](@($listed.Output) + '')[0] -match '^root root 0?644 ') {
             if ($PSCmdlet.ShouldProcess($target, 'Remove the dpkg statoverride the old banner put on it (root root 0644), and turn it back on')) {
@@ -163,8 +177,9 @@ function Remove-UsaBannerLinuxOldInstall {
             Enable-UsaBannerExecutable -Root $Root -Path $target -What 'the landscape-sysinfo MOTD script, which the old banner turned off'
         }
     }
+    $oursMasked = @(@($Record['masked']) | Where-Object { $_ -and [string]$_['unit'] -ceq 'motd-news.timer' }).Count -gt 0
     $state = [string](@((Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'is-enabled', 'motd-news.timer').Output) + '')[0]
-    if ($state -eq 'masked' -and $PSCmdlet.ShouldProcess('motd-news.timer', 'Unmask it, which the old banner masked, and start it, enabling it again where its package enabled it (systemctl unmask)')) {
+    if ($state -eq 'masked' -and -not $oursMasked -and $PSCmdlet.ShouldProcess('motd-news.timer', 'Unmask it, which the old banner masked, and start it, enabling it again where its package enabled it (systemctl unmask)')) {
         $unmasked = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'unmask', 'motd-news.timer'
         if ($unmasked.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl could not unmask motd-news.timer: $($unmasked.Output -join ' ')" }
         else {

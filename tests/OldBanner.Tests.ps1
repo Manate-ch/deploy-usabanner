@@ -192,6 +192,37 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Ubuntu' -Skip:$IsWindows {
         $global:UsaDeployUnits.Enabled | Should -BeNullOrEmpty
     }
 
+    It 'changes nothing on a host this banner is on already, and runs only what reads the host' {
+        # The lab (the Group Policy window, 2026-10-25): the Ubuntu runner passes -ReplaceOldBanner at every deploy
+        # (D29), and the move off turned the stock scripts, landscape-sysinfo and motd-news back on at each one, for
+        # the deploy to turn them off again a second later.
+        $null = Deploy-UsaBanner -Company Contoso
+        $before = Get-HostState $Root
+        $global:UsaDeployCalls.Clear()
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner)
+        $lines | Should -BeNullOrEmpty
+        Get-HostState $Root | Should -Be $before
+        Get-Calls -Changes | Should -BeNullOrEmpty
+    }
+
+    It 'leaves what this banner turned off as it is where the old banner came back over it, and Remove-UsaBanner leaves the host stock' {
+        # As the old banner's GPO puts it back at the next boot (D23). Its install.sh finds the stock scripts off
+        # already: dpkg-statoverride and systemctl mask add nothing a second time.
+        $before = Get-HostState $Root
+        $null = Deploy-UsaBanner -Company Contoso
+        Add-OldUbuntuBanner $Root
+        $units = $global:UsaDeployUnits
+        $units.Overrides = @($units.Overrides | Select-Object -Unique)
+        $units.Masked = @($units.Masked | Select-Object -Unique)
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner)
+        $lines | Should -Contain 'deleted /etc/update-motd.d/05-manatech-banner: the old banner after login'
+        @($lines | Where-Object { $_ -like 'turned back on *' -or $_ -like 'removed the dpkg statoverride *' -or $_ -like 'unmasked *' -or $_ -like 'turned off *' -or $_ -like 'masked *' }) | Should -BeNullOrEmpty
+        $null = Remove-UsaBanner
+        Get-HostState $Root | Should -Be $before
+        $units.Masked | Should -BeNullOrEmpty
+        $units.Overrides | Should -BeNullOrEmpty
+    }
+
     It 'changes nothing under -WhatIf, and runs only what reads the host' {
         Add-OldUbuntuBanner $Root
         $before = Get-HostState $Root
