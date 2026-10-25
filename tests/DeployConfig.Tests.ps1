@@ -147,9 +147,9 @@ Describe 'the configuration a deploy builds' {
         @{ Case = 'a service name with a space'; Flags = @{ Services = @('my service') }; Message = '*-Services: /services*' }
         @{ Case = 'legal text that is not ASCII'; Flags = @{ LegalText = @([char]0x00A7 + ' 1030') }; Message = '*-LegalText: /legal/text/0: *' }
     ) {
-        $message = Get-Failure { New-DeployConfig $Flags }
-        $message | Should -BeLike '*these settings are not valid*'
-        $message | Should -BeLike $Message
+        $got = Get-Failure { New-DeployConfig $Flags }
+        $got | Should -BeLike '*these settings are not valid*'
+        $got | Should -BeLike $Message
     }
 
     It 'maps every flag to a setting the schema has' {
