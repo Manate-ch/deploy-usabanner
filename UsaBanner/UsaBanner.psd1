@@ -12,7 +12,7 @@
     PowerShellVersion    = '5.1'
     CompatiblePSEditions = @('Desktop', 'Core')
     FormatsToProcess     = @('UsaBanner.Format.ps1xml')
-    FunctionsToExport    = @('Deploy-UsaBanner', 'Get-UsaBanner', 'New-UsaBannerArt', 'Remove-UsaBanner', 'Show-UsaBanner', 'Show-UsaBannerArt')
+    FunctionsToExport    = @('Deploy-UsaBanner', 'Deploy-UsaBannerGPO', 'Get-UsaBanner', 'New-UsaBannerArt', 'Remove-UsaBanner', 'Show-UsaBanner', 'Show-UsaBannerArt')
     CmdletsToExport      = @()
     VariablesToExport    = @()
     AliasesToExport      = @()

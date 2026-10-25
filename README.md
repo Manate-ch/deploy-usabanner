@@ -346,6 +346,66 @@ Not verified yet:
    pulls it (the update task). If `update.log` shows "dubious ownership", run
    `git config --system --add safe.directory C:/ProgramData/Manatech/repo`.
 
+## Group Policy, with the V1 module
+
+`Deploy-UsaBannerGPO` makes one Group Policy object, "UsaBanner", that puts the
+V1 module and one configuration (the package) on the domain's Windows servers
+and Ubuntu hosts, and keeps them current. It is for the V1 module in
+`UsaBanner/`; today's banner has its own publisher (next section), and a host
+must not get both, since each undoes the other at every refresh.
+
+Run it on a domain controller, or a domain member with the Group Policy
+Management tools, as someone who may edit Group Policy objects and write
+NETLOGON and SYSVOL. Windows PowerShell 5.1 hands the work to PowerShell 7. The
+package is built from the flags `Deploy-UsaBanner` takes, or from the
+configuration file `-Path` names; each host takes its tier and role from its
+own AD Description unless the package sets them. A package that turns the
+update channel on is refused: the GPO is the update path.
+
+A first run with `-WhatIf` changes nothing and says what it would do. Then a
+real one, which links the GPO where you name:
+
+    Import-Module ./UsaBanner/UsaBanner.psd1
+    Deploy-UsaBannerGPO -Company Contoso -Environment PROD -WhatIf
+    Deploy-UsaBannerGPO -Company Contoso -Environment PROD -LinkTarget 'OU=Servers,DC=ad,DC=example', 'OU=Linux,DC=ad,DC=example'
+
+A run reads and checks everything before it writes anything, then:
+
+- Stages on the PDC emulator, for Windows in `\\<pdc>\NETLOGON\UsaBanner` and for
+  Ubuntu in `\\<pdc>\SYSVOL\<domain>\Ubuntu\scripts\UsaBanner`: the package
+  (`usabanner.json`), the module folder, and a `.usabanner-gpo` file that marks
+  the folder as the command's. Ubuntu also gets `adsys-startup.sh`. Only files
+  that differ are written, each with LF line endings; files that are no longer in
+  the module are removed; a folder that holds files and has no mark is someone
+  else's, and the run stops before writing anything.
+- Makes the GPO, or overwrites the one of that name with warnings that say what
+  changes. Ubuntu needs the ADSys assets folder, `SYSVOL\<domain>\Ubuntu` with
+  a `GPT.INI` in it; without it the run warns and does the Windows half only.
+  The `Version` in that `GPT.INI` goes up when the Ubuntu copy changed, so ADSys
+  downloads it again.
+- Links the GPO at each `-LinkTarget`. Without one the links stay as they are,
+  and a GPO linked nowhere applies to no host: the run warns, and links nothing.
+- Warns while today's banner GPO is still linked and enabled anywhere, and when
+  no deploy-usawinssh GPO is linked (a server without PowerShell 7 gets no
+  banner until that policy installs it). Then it reads everything back, a line
+  each.
+
+Whoever can write NETLOGON and SYSVOL can change what runs as SYSTEM, or as root,
+on every host the GPO reaches: keep those rights narrow.
+
+What each OS does after that:
+
+- **Windows servers**, at their next policy refresh (or `gpupdate /force`): an
+  immediate task, "UsaBanner sync", runs once as SYSTEM, on servers and domain
+  controllers only. It runs `Sync-UsaBanner.ps1` from NETLOGON in Windows
+  PowerShell 5.1, which hands over to pwsh and deploys the package; a deploy that
+  changes nothing writes nothing. Its log is `%SystemRoot%\Logs\UsaBanner\sync.log`.
+- **Ubuntu hosts** (Ubuntu Pro, ADSys): `adsys-startup.sh` runs at boot as a
+  startup script and hands the deploy to a systemd unit. A path unit on ADSys's
+  copy of `GPT.INI` runs it again once ADSys has downloaded a new publish (it
+  refreshes every 90 minutes), so a new publish needs no reboot. The log is
+  `journalctl -t usabanner`.
+
 ## Group Policy delivery (domain hosts)
 
 For domain-joined hosts, the banner comes from SYSVOL instead of GitLab: no
