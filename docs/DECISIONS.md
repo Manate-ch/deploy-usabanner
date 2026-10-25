@@ -1,8 +1,9 @@
 # UsaBanner: decisions
 
 > Companion to [SPEC.md](SPEC.md). Each decision has an ID, the question, the
-> options, the recommendation and why, and what was decided. D1 to D26 are
-> decided, and the table below sums them up; D27 and D28 wait on your review.
+> options, the recommendation and why, and what was decided. D1 to D29 are
+> decided, and the table below sums them up. The review of !49 (2026-10-24)
+> signed off each one as a whole, the built ones as built.
 > Facts are tagged **[measured]** (on a test host), **[fetched]** (read at the
 > cited source on 2026-10-09, unless a date says otherwise) or **[known]**
 > (from experience, not re-checked).
@@ -36,6 +37,9 @@
 | D23 | as proposed |
 | D25 | meme voices for a lab VM (uwu, random, leet): the banner's own words, never its facts; `voice` is plain unless set, on any tier (2026-10-21) |
 | D26 | the facts as records, one a line, tab-separated, kind first; on Linux from `linux/facts.sh`, which the login renderer and the module both read; on Windows the module reads the same facts itself (2026-10-22) |
+| D27 | `Deploy-UsaBanner` takes each setting as a flag and builds the whole configuration, from the defaults or from `-Path`; a value the schema refuses names its flag (2026-10-24, as built) |
+| D28 | `Get-UsaBanner` checks each part a deploy puts in place; healthy means a login shows what the configuration draws, now (2026-10-24, as built) |
+| D29 | Group Policy first, M6 before M5: one GPO and one package, each host's tier and role from its AD Description, an immediate task on Windows servers and ADSys at boot on Ubuntu (2026-10-24) |
 
 ## Contents
 
@@ -54,7 +58,7 @@
 | D11 | The interactive UI: built in, or a module | decided: built in |
 | D12 | The Export-UsaBanner package format | decided: JSON |
 | D13 | GPO layering: one base, OU overrides | decided |
-| D14 | The update channel | decided: B; built, for your review |
+| D14 | The update channel | decided: B; built |
 | D15 | Windows Server 2019 | decided: 2022 and later |
 | D16 | Ubuntu: stop the apt prompts | decided; done 2026-10-11 |
 | D17 | Slow facts, and min/max over what window | decided: 24 h |
@@ -67,8 +71,9 @@
 | D24 | A LICENSE | decided: MIT |
 | D25 | Meme voices | decided: plain unless set |
 | D26 | The facts record | decided |
-| D27 | Deploy-UsaBanner's flags | built; for your review |
-| D28 | What Get-UsaBanner checks | built; for your review |
+| D27 | Deploy-UsaBanner's flags | decided; built |
+| D28 | What Get-UsaBanner checks | decided; built |
+| D29 | Group Policy delivery (M6): the first rollout | decided; built |
 
 ## D1. Where the code lives, and its name
 
@@ -156,7 +161,7 @@ in the host's mode and glyphs, which the deploy sets. A row's label is cut
 at 24 columns, ending in `~`: a Kubernetes volume's mount point made the
 panel too wide to draw.
 
-**The look at an Ubuntu login (M4, 2026-10-22), for your review.** pam_motd
+**The look at an Ubuntu login (M4, 2026-10-22), approved in !49.** pam_motd
 runs the scripts with no terminal and no locale, and every login gets the
 same text, so nothing can tell what the client shows. The host's settings
 decide alone: `color.mode` and `glyphs` (D6, D27). Where they say `auto`,
@@ -487,7 +492,7 @@ moment where this table says:
   today's `-SshOnly` did: not at the console, and not for scp, sftp or a
   command, which start PowerShell with `-Command`, `-File` or
   `-NonInteractive`.
-- **pre-init, for your review:** the logon notice is set only where none
+- **pre-init, approved in !49:** the logon notice is set only where none
   is set, or where the one set is the banner's own by its record. A notice
   someone else set, by hand or by a Group Policy, stays, and the deploy says
   so: a policy would set its own again at its next refresh anyway. Removal
@@ -957,12 +962,12 @@ folder alone, and whatever is in it already is reset to inherit it: with
 folder's `(OI)(CI)` ones, so no one could read it, and `icacls` still said
 it succeeded (measured on Server 2025 in the lab, 2026-10-23).
 
-**The channel, built (M4, 2026-10-23), for your review.** The setting is
+**The channel, built (M4, 2026-10-23), approved in !49.** The setting is
 `update`: `mode` off, notify or install, off unless `-Update` turns it on
 (your call, 2026-10-22); and `source`, the https address the releases'
 files are downloaded from (`-UpdateSource`).
 
-- **`source` has no default, for your call.** The default would be this
+- **`source` has no default, approved in !49.** The default would be this
   project's releases, and its address cannot go into public code until the
   public home exists (M7). Until then a host names its source itself.
 - **A release is two files**, built by `build/New-UsaBannerRelease.ps1`:
@@ -1387,7 +1392,7 @@ Microsoft Endpoint Configuration Manager" [fetched]. So 7.6 patches arrive
 the way Windows patches do, and `-UpdatePoSHMSI` mostly sets what a new host
 installs.
 
-**The Ubuntu bootstrap, built (M4, 2026-10-22), for your review.**
+**The Ubuntu bootstrap, built (M4, 2026-10-22), approved in !49.**
 `sudo sh UsaBanner/linux/bootstrap.sh -Company Contoso -Environment PROD`
 deploys from a copy of the module. Where `pwsh` is missing, it installs
 PowerShell as Microsoft's instructions do: `packages-microsoft-prod.deb` for
@@ -1826,7 +1831,7 @@ its fields separated by tabs, its kind first:
 
 ## D27. Deploy-UsaBanner's flags
 
-**Built (M4, 2026-10-22), for your review.** Until the walk-through (M5),
+**Built (M4, 2026-10-22), approved in !49.** Until the walk-through (M5),
 `Deploy-UsaBanner` takes the settings as flags, each setting one part of the
 configuration (D12):
 
@@ -1869,10 +1874,14 @@ configuration (D12):
   same [measured: PowerShell 7.6.6, 2026-10-22]. So the schema gives
   `services` no branches: a string must be `default`, and a list holds
   names.
+- **For the public release (M7, your ask in !49's review):** the README
+  gets a reference for these flags in the learn.microsoft.com style, with
+  jump links. It is generated from the commands' own help, and a test fails
+  when the README and the help drift apart.
 
 ## D28. What Get-UsaBanner checks
 
-**Built (M4, 2026-10-22), for your review.** `Get-UsaBanner` (§3.3) gives
+**Built (M4, 2026-10-22), approved in !49.** `Get-UsaBanner` (§3.3) gives
 one object for the host: its name and OS, the module's version, whether SSH
 is open, the services the banner watches in their state now, the VLAN rows
 with the one this host is in, the settings, and a check for each part a
@@ -1945,14 +1954,14 @@ package for every host leaves the tier and the role as what differs per host.
   - Ubuntu does as today's `ad-description.sh`: the machine keytab and
     `ldapsearch`. That needs `ldap-utils`, `krb5-user` and
     `libsasl2-modules-gssapi-mit`, which today's banner leaves to the admin.
-    **My call, for your review:** the bootstrap installs them on a joined
+    **My call, approved in !49:** the bootstrap installs them on a joined
     host (one with `/etc/krb5.keytab`), as it installs PowerShell.
   - The answer is cached. A DC that does not answer keeps the last one, as
     today. A change draws the banners again, as a new name or address does.
 - **`Get-UsaBanner` says where each one came from:** the configuration, the
   AD Description, or neither.
 
-**The policy (my defaults, for your review):**
+**The policy (my defaults, approved in !49):**
 - **One GPO**, named `UsaBanner` unless `-Name` says otherwise (D23). It is
   linked only where `-LinkTarget` says: a link is the admin's act, as today's
   `Publish-ManatechMotd.ps1` has it.
