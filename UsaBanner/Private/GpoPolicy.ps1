@@ -57,6 +57,12 @@ $script:UsaGpoMarkName = '.usabanner-gpo'
 $script:UsaGpoMarkText = "Made by Deploy-UsaBannerGPO (UsaBanner), for the GPO's Windows task and Ubuntu startup script.`n" +
     "Files here that are not in the module's payload are removed at the next publish.`n"
 
+# The file a publish puts in a copy before it writes anything there, and takes away when the copy
+# is done and, for Ubuntu, the GPT.INI Version is raised. One still there tells the next run that a
+# publish was cut short, so that it raises the Version even where every file is current: else ADSys
+# would never download what the cut-short run wrote.
+$script:UsaGpoPublishingName = '.usabanner-publishing'
+
 # What a GPO made here says about itself, in GPMC.
 $script:UsaGpoComment = 'UsaBanner: the login banners. An immediate task on Windows servers and an ADSys startup script on Ubuntu hosts run the deploy from the module and the package staged on the PDC emulator. Written by Deploy-UsaBannerGPO (UsaBanner); a publish overwrites changes made in GPMC.'
 

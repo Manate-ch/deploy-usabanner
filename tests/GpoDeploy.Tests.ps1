@@ -600,6 +600,68 @@ Describe 'Deploy-UsaBannerGPO, a changed package' {
     }
 }
 
+Describe 'Deploy-UsaBannerGPO, a publish cut short before the Ubuntu Version moved' {
+    BeforeAll {
+        $script:D = New-FakeDomain
+        Use-FakeDomain $script:D
+        $script:Ini = Join-Path $script:D.Ubuntu 'GPT.INI'
+        $script:Ubuntu = Join-Path $script:D.Ubuntu 'scripts' 'UsaBanner'
+        $null = Invoke-Gpo @{ Company = 'Contoso'; LinkTarget = @($script:ServersOu) }
+        # A GPT.INI that cannot be written stands for a run stopped there, when every file of both copies
+        # is written (the suite runs as a user other than root, whom the mode stops).
+        [System.IO.File]::SetUnixFileMode($script:Ini, [System.IO.UnixFileMode]'UserRead, GroupRead, OtherRead')
+        $script:Cut = Invoke-Gpo @{ Company = 'Contoso Ltd'; LinkTarget = @($script:ServersOu) }
+        $script:VersionAfterCut = Get-IniVersion $script:Ini
+        $script:FlagsAfterCut = @(@((Join-Path $script:D.Netlogon '.usabanner-publishing'), (Join-Path $script:Ubuntu '.usabanner-publishing')) | Where-Object { Test-Path -LiteralPath $_ })
+        $script:PackageAfterCut = [System.IO.File]::ReadAllText((Join-Path $script:Ubuntu 'usabanner.json'))
+        [System.IO.File]::SetUnixFileMode($script:Ini, [System.IO.UnixFileMode]'UserRead, UserWrite, GroupRead, OtherRead')
+        Set-OldTimes $script:D
+        $script:Before = Get-FileMap $script:D
+        $script:D.Writes.Clear()
+        $script:R = Invoke-Gpo @{ Company = 'Contoso Ltd'; LinkTarget = @($script:ServersOu) }
+        $script:After = Get-FileMap $script:D
+    }
+
+    It 'stops at the GPT.INI with the new package written, the Version where it was, and the Ubuntu copy marked as unfinished: the Windows copy, which waits for no Version, is done' {
+        $script:Cut.Error | Should -Not -BeNullOrEmpty
+        $script:PackageAfterCut | Should -BeLike '*"company": "Contoso Ltd"*'
+        $script:VersionAfterCut | Should -Be 8
+        $script:FlagsAfterCut | Should -Be @(Join-Path $script:Ubuntu '.usabanner-publishing')
+    }
+
+    It 'finishes it at the next run of the same package: the Version goes up, though no file of either copy is written again, and the GPO is not touched' {
+        $script:R.Error | Should -BeNullOrEmpty
+        Get-IniVersion $script:Ini | Should -Be 9
+        Get-Changed $script:Before $script:After | Should -Be @(
+            'SYSVOL/ad.example/Ubuntu/GPT.INI'
+            'SYSVOL/ad.example/Ubuntu/scripts/UsaBanner/.usabanner-publishing'
+        )
+        $script:D.Writes | Should -HaveCount 0
+    }
+
+    It 'says so, takes the marker away, and every read-back check is ok' {
+        $changes = Get-ChangeLine $script:R
+        $changes | Should -HaveCount 2
+        $changes[0] | Should -BeLike 'staged * for Ubuntu hosts: 0 file(s) written, 0 removed; the last publish here was cut short, and this one finishes it'
+        $changes[1] | Should -BeLike 'raised the Version in * from 8 to 9:*'
+        Join-Path $script:Ubuntu '.usabanner-publishing' | Should -Not -Exist
+        (Get-CheckLine $script:R) | Should -HaveCount 9
+        @(Get-CheckLine $script:R | Where-Object { $_ -notlike 'ok   *' }) | Should -HaveCount 0
+    }
+}
+
+Describe 'Deploy-UsaBannerGPO, a first publish cut short before any file' {
+    It 'takes a folder that holds only the marker of an unfinished publish as its own, not someone else''s, and finishes it' {
+        $d = New-FakeDomain
+        Use-FakeDomain $d
+        Write-TestFile (Join-Path $d.Netlogon '.usabanner-publishing') "started`n"
+        $r = Invoke-Gpo @{ Company = 'Contoso'; LinkTarget = @($script:ServersOu) }
+        $r.Error | Should -BeNullOrEmpty
+        (Get-ChangeLine $r)[0] | Should -BeLike 'staged * for Windows hosts: * file(s) written, 0 removed; the last publish here was cut short, and this one finishes it'
+        Join-Path $d.Netlogon '.usabanner-publishing' | Should -Not -Exist
+    }
+}
+
 Describe 'Deploy-UsaBannerGPO, what the staged copies hold' {
     BeforeEach {
         $script:D = New-FakeDomain

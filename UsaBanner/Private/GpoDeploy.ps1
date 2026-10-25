@@ -370,11 +370,13 @@ function Get-UsaBannerGpoTreePlan {
     What a copy's folder holds, against what it should.
     .DESCRIPTION
     In:  the folder on the share, and its payload (Get-UsaBannerGpoPayload).
-    Out: @{ Path; Foreign; Write; Remove }. Write lists the payload's files that
-         are missing or whose bytes differ; Remove the files the folder holds
-         that are not in the payload. Foreign is true when the folder holds
-         files and not the mark: it is someone else's, and nothing is removed
-         from it (Remove is empty).
+    Out: @{ Path; Foreign; Write; Remove; Unfinished }. Write lists the
+         payload's files that are missing or whose bytes differ; Remove the files
+         the folder holds that are not in the payload. Foreign is true when the
+         folder holds files and not the mark: it is someone else's, and nothing
+         is removed from it (Remove is empty). Unfinished is true when a publish
+         into it was cut short (it holds .usabanner-publishing, which neither
+         counts as someone else's file nor is pruned: the run takes it away last).
     Reads only.
     #>
     [CmdletBinding()]
@@ -387,6 +389,8 @@ function Get-UsaBannerGpoTreePlan {
         $held = @([System.IO.Directory]::GetFiles($Path, '*', [System.IO.SearchOption]::AllDirectories) |
                 ForEach-Object { [System.IO.Path]::GetRelativePath($Path, $_).Replace('\', '/') })
     }
+    $unfinished = $script:UsaGpoPublishingName -in $held
+    $held = @($held | Where-Object { $_ -ne $script:UsaGpoPublishingName })
     $foreign = $held.Count -gt 0 -and $script:UsaGpoMarkName -notin $held
     $write = @(foreach ($relative in $Payload.Keys) {
             $there = Get-UsaBannerGpoTreePath -Folder $Path -Relative $relative
@@ -394,7 +398,7 @@ function Get-UsaBannerGpoTreePlan {
         })
     $wanted = [System.Collections.Generic.HashSet[string]]::new([string[]]@($Payload.Keys), [System.StringComparer]::OrdinalIgnoreCase)
     $remove = @(if (-not $foreign) { $held | Where-Object { -not $wanted.Contains($_) } })
-    [pscustomobject]@{ Path = $Path; Foreign = $foreign; Write = $write; Remove = $remove }
+    [pscustomobject]@{ Path = $Path; Foreign = $foreign; Write = $write; Remove = $remove; Unfinished = $unfinished }
 }
 
 function Write-UsaBannerGpoTree {
@@ -623,6 +627,10 @@ function Invoke-UsaBannerGpoStaging {
     what is not the payload. When anything in the Ubuntu copy changed, the
     Version in its GPT.INI goes up by one, after every file is written: ADSys
     downloads again only when it moves.
+    A copy gets .usabanner-publishing before its first file, and loses it once
+    it is done: the Windows one after its files, the Ubuntu one after the
+    Version is raised. A run cut short anywhere between leaves it, and the next
+    run then raises the Version even where every file is current.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -630,11 +638,17 @@ function Invoke-UsaBannerGpoStaging {
     foreach ($tree in $Run.Trees) {
         $count = $tree.Plan.Write.Count
         $gone = $tree.Plan.Remove.Count
-        if ($count -eq 0 -and $gone -eq 0) { continue }
-        if ($PSCmdlet.ShouldProcess($tree.Path, "Stage the banner for $($tree.Label): $count file(s) to write, $gone to remove")) {
+        if ($count -eq 0 -and $gone -eq 0 -and -not $tree.Plan.Unfinished) { continue }
+        $finish = if ($tree.Plan.Unfinished) { '; the last publish here was cut short, and this one finishes it' } else { '' }
+        if ($PSCmdlet.ShouldProcess($tree.Path, "Stage the banner for $($tree.Label): $count file(s) to write, $gone to remove$finish")) {
+            $flag = Get-UsaBannerGpoTreePath -Folder $tree.Path -Relative $script:UsaGpoPublishingName
+            $null = [System.IO.Directory]::CreateDirectory($tree.Path)
+            [System.IO.File]::WriteAllText($flag, "A publish by Deploy-UsaBannerGPO started here at $([datetime]::UtcNow.ToString('u', [cultureinfo]::InvariantCulture)); it takes this file away when it is done.`n")
             Write-UsaBannerGpoTree -Path $tree.Path -Payload $tree.Payload -Plan $tree.Plan
+            # The Windows copy is done here; the Ubuntu one once its Version is raised, below.
+            if ($tree.Os -ne 'ubuntu') { [System.IO.File]::Delete($flag) }
             $tree.Changed = $true
-            "staged $($tree.Path) for $($tree.Label): $count file(s) written, $gone removed"
+            "staged $($tree.Path) for $($tree.Label): $count file(s) written, $gone removed$finish"
         }
     }
     if ($Run.Converted -and @($Run.Trees | Where-Object { $_.Changed }).Count) {
@@ -647,6 +661,8 @@ function Invoke-UsaBannerGpoStaging {
         $next = $was + 1
         if ($PSCmdlet.ShouldProcess($Run.AdsysIni, "Raise the Version from $was to ${next}, so that ADSys downloads the Ubuntu folder again")) {
             [System.IO.File]::WriteAllText($Run.AdsysIni, (Get-UsaBannerGpoGptIniText -Content $text -Version $next))
+            # The Ubuntu copy is done: ADSys will download it.
+            [System.IO.File]::Delete((Get-UsaBannerGpoTreePath -Folder $ubuntu[0].Path -Relative $script:UsaGpoPublishingName))
             $Run.AdsysVersion = $next
             "raised the Version in $($Run.AdsysIni) from $was to ${next}: ADSys downloads the Ubuntu folder again"
         }
