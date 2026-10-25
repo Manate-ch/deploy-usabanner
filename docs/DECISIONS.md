@@ -1915,7 +1915,9 @@ package for every host leaves the tier and the role as what differs per host.
     rollout needs no `Export-UsaBanner`;
   - the two runners, one per OS.
   Windows' copy goes in `NETLOGON\UsaBanner`, ADSys's in the domain's
-  `Ubuntu\scripts` folder. `GPT.INI`'s version is raised on each publish.
+  `Ubuntu\scripts` folder. The Version in the Ubuntu folder's `GPT.INI`
+  goes up by one when the Ubuntu copy changed, and when a publish into it was
+  cut short before it moved: ADSys downloads again only then.
 - **Windows: an ImmediateTaskV2.** It runs as SYSTEM at each policy refresh,
   on servers only, with the item-level target deploy-usawinssh uses
   (`ProductType = 2 OR ProductType = 3`).

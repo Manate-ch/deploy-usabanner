@@ -145,14 +145,16 @@ Lists the monitored services. Given a service name, returns `$true` or
 ### 3.7 Deploy-UsaBannerGPO
 
 - Much as today: offers to deploy a GPO when run against a domain controller.
-- The one real difference: it REQUIRES an `Export-UsaBanner` package as its
-  seed.
+- The package is a configuration file: `-Path` names one, or the flags build
+  one, as `Deploy-UsaBanner` builds it (D29). `Export-UsaBanner` (D12) comes
+  later; the first rollout needs none.
 - The package overwrites the existing config, so one base config can run
   company-wide. An OU that should differ gets its own package, matched
   through the one GPO's table of OUs. Enforced stays a manual tool, and an OU
   that blocks inheritance gets a direct link (D13).
-- Does NOT enable SSH on its own, and DOES require `deploy-usawinssh` to be
-  active in the domain (D21).
+- Does NOT enable SSH on its own. Its Windows servers need `deploy-usawinssh`
+  in the domain, which installs PowerShell 7 (D21): it warns while no GPO of
+  that tool is linked and enabled.
 
 ### 3.8 Enter-UsaPSSession
 
