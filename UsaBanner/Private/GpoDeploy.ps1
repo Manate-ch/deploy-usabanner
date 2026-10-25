@@ -510,6 +510,7 @@ function Get-UsaBannerGpoStagingPlan {
             throw "UsaBanner: $($tree.Path) already holds files, and it has no $script:UsaGpoMarkName in it, so this command did not make it: staging would remove what it does not recognise. Nothing was written. Move those files, or if all of them may go, put an empty file named $script:UsaGpoMarkName in the folder, and run this again."
         }
         $tree.Changed = $false
+        $tree.WouldChange = $false
     }
     $Run.Trees = $trees
 }
@@ -631,6 +632,8 @@ function Invoke-UsaBannerGpoStaging {
     it is done: the Windows one after its files, the Ubuntu one after the
     Version is raised. A run cut short anywhere between leaves it, and the next
     run then raises the Version even where every file is current.
+    Under -WhatIf nothing is written, and the raise is shown as well wherever
+    the Ubuntu copy would be written.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -650,11 +653,13 @@ function Invoke-UsaBannerGpoStaging {
             $tree.Changed = $true
             "staged $($tree.Path) for $($tree.Label): $count file(s) written, $gone removed$finish"
         }
+        # -WhatIf writes nothing, so a copy it would write is marked for the Version raise below to be shown.
+        elseif ($WhatIfPreference) { $tree.WouldChange = $true }
     }
     if ($Run.Converted -and @($Run.Trees | Where-Object { $_.Changed }).Count) {
         "$($Run.Converted) file(s) of the module have CRLF line endings in this clone (Git for Windows' core.autocrlf); they are staged as LF"
     }
-    $ubuntu = @($Run.Trees | Where-Object { $_.Os -eq 'ubuntu' -and $_.Changed })
+    $ubuntu = @($Run.Trees | Where-Object { $_.Os -eq 'ubuntu' -and ($_.Changed -or $_.WouldChange) })
     if ($ubuntu.Count) {
         $text = [System.IO.File]::ReadAllText($Run.AdsysIni)
         $was = [math]::Max(0, (Get-UsaBannerGpoGptIniVersion -Content $text))
@@ -682,7 +687,8 @@ function Invoke-UsaBannerGpoSettings {
     extension list, read again after the cmdlets, then the computer settings;
     the version goes up by one, AD first and then GPT.INI, when the file or
     the extension changed. Under -WhatIf the ScheduledTasks.xml it would write
-    is shown on the information stream.
+    is shown on the information stream, and the version raise is shown where
+    the file or the extension would change.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -744,6 +750,8 @@ function Invoke-UsaBannerGpoSettings {
         "switched on the computer settings of the GPO '$name'"
     }
 
+    # -WhatIf writes neither the task file nor the extension, so the raise is shown where either would change.
+    if ($WhatIfPreference -and (-not $Run.TasksSame -or $merged -cne $ext)) { $bump = $true }
     # AD first, then GPT.INI, to the same number: clients compare the AD one, and GPMC reports a
     # mismatch while the two differ.
     if ($bump -and $PSCmdlet.ShouldProcess($name, 'Raise the version by one, so that clients apply the GPO again')) {

@@ -1236,6 +1236,21 @@ Describe 'Deploy-UsaBannerGPO, the policies beside it' {
 }
 
 Describe 'Deploy-UsaBannerGPO -WhatIf' {
+    BeforeAll {
+        function Get-WhatIfLine {
+            # In:  the command's parameters, without -WhatIf
+            # Out: the "What if:" lines PowerShell writes for the command run with -WhatIf. They go to the
+            #      host, on no stream a redirection catches, so a transcript catches them
+            param([hashtable]$Parameters)
+            $transcript = Join-Path $TestDrive "whatif-$([guid]::NewGuid().ToString('n')).txt"
+            $null = Start-Transcript -LiteralPath $transcript
+            try { $r = Invoke-Gpo ($Parameters + @{ WhatIf = $true }) }
+            finally { $null = Stop-Transcript }
+            $r.Error | Should -BeNullOrEmpty
+            @(Get-Content -LiteralPath $transcript | Where-Object { $_ -like 'What if: *' })
+        }
+    }
+
     BeforeEach {
         $script:D = New-FakeDomain
         Use-FakeDomain $script:D
@@ -1273,6 +1288,37 @@ Describe 'Deploy-UsaBannerGPO -WhatIf' {
         $r.Warnings | Should -Contain '  computer settings: disabled -> enabled'
         @(Get-DomainState $script:D) | Should -Be $before
         $r.Lines | Should -HaveCount 0
+    }
+
+    It 'says that the Ubuntu GPT.INI Version and the GPO''s version would go up, which a run raises only after it writes' {
+        $said = @(Get-WhatIfLine @{ Company = 'Contoso' })
+        # The transcript holds what PowerShell said: the GPO it would make is there.
+        @($said | Where-Object { $_ -like '*"Make the GPO" on target "UsaBanner".' }) | Should -HaveCount 1
+        @($said | Where-Object { $_ -like '*"Raise the Version from 7 to 8, so that ADSys downloads the Ubuntu folder again" on target "*GPT.INI".' }) | Should -HaveCount 1
+        @($said | Where-Object { $_ -like '*"Raise the version by one, so that clients apply the GPO again" on target "UsaBanner".' }) | Should -HaveCount 1
+        Get-IniVersion (Join-Path $script:D.Ubuntu 'GPT.INI') | Should -Be 7
+    }
+
+    It 'says that only the Ubuntu Version would go up for a changed package, as the GPO keeps its settings' {
+        $null = Invoke-Gpo @{ Company = 'Contoso' }
+        $said = @(Get-WhatIfLine @{ Company = 'Contoso Ltd' })
+        @($said | Where-Object { $_ -like '*"Stage the banner for *' }) | Should -HaveCount 2
+        @($said | Where-Object { $_ -like '*"Raise the Version from 8 to 9, *' }) | Should -HaveCount 1
+        @($said | Where-Object { $_ -like '*"Raise the version by one, *' }) | Should -HaveCount 0
+    }
+
+    It 'says that the Ubuntu Version would go up after a publish cut short, though every file is current' {
+        $null = Invoke-Gpo @{ Company = 'Contoso' }
+        Write-TestFile (Join-Path $script:D.Ubuntu 'scripts' 'UsaBanner' '.usabanner-publishing') "started`n"
+        $said = @(Get-WhatIfLine @{ Company = 'Contoso' })
+        $said | Should -HaveCount 2
+        $said[0] | Should -BeLike '*"Stage the banner for Ubuntu hosts: 0 file(s) to write, 0 to remove; the last publish here was cut short, and this one finishes it" on target *'
+        $said[1] | Should -BeLike '*"Raise the Version from 8 to 9, *'
+    }
+
+    It 'says nothing for a run that would change nothing' {
+        $null = Invoke-Gpo @{ Company = 'Contoso' }
+        @(Get-WhatIfLine @{ Company = 'Contoso' }) | Should -HaveCount 0
     }
 
     It 'is the same run without -WhatIf that makes the GPO and returns its lines (the positive control for the cases above)' {
