@@ -265,4 +265,15 @@ Describe 'the module and PowerShell''s script block log (D30)' {
             Get-SuspiciousWord $statement | Should -Not -BeNullOrEmpty -Because "$($statement.Name) would be logged for nothing"
         }
     }
+
+    It 'calls no command of the Storage module: each fresh pwsh compiles that module''s generated code, which PowerShell logs whole' -ForEach @(@{ Files = @($loadedFiles | ForEach-Object { $_.File }) }) {
+        $storage = 'Get-PhysicalDisk', 'Get-Partition', 'Get-Disk', 'Get-Volume', 'Get-StoragePool', 'Get-VirtualDisk', 'Get-StorageSubSystem'
+        $calls = foreach ($file in $Files) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $moduleRoot $file), [ref]$null, [ref]$null)
+            foreach ($command in $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+                if ($storage -contains $command.GetCommandName()) { "${file}: $($command.Extent.Text)" }
+            }
+        }
+        @($calls) | Should -BeNullOrEmpty -Because 'Get-PhysicalDisk alone logged 1,645,005 characters on a lab Server 2025 (D30)'
+    }
 }

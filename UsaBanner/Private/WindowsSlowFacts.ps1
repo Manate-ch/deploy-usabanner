@@ -20,6 +20,12 @@ $script:UsaMemoryTypes = @{
 # in one or the other.
 $script:UsaVirtualHardware = '^Virtual Machine$|QEMU|KVM|^Standard PC \(|^Xen$|HVM domU|VMware|VirtualBox|innotek|Amazon EC2|Google Compute Engine|Parallels'
 
+# The MSFT_PhysicalDisk codes that decide a disk's kind (ConvertTo-UsaBannerDiskKind), named as the
+# Storage module names them [fetched 2026-10-26: learn.microsoft.com, MSFT_PhysicalDisk class,
+# updated 2024-07-11]. Any other code stays a number, and gives no kind.
+$script:UsaDiskMediaTypes = @{ 3 = 'HDD'; 4 = 'SSD' }
+$script:UsaDiskBusTypes = @{ 7 = 'USB'; 12 = 'SD'; 13 = 'MMC'; 17 = 'NVMe' }
+
 function Get-UsaBannerWinHardware {
     <#
     .SYNOPSIS
@@ -30,8 +36,10 @@ function Get-UsaBannerWinHardware {
          speed in MHz; each memory module as @{ Type; Configured; Rated },
          its SMBIOS type and speeds in MT/s; and each fixed drive's physical
          disk as @{ Name = 'C:'; MediaType; BusType }, a drive on no single
-         physical disk left out. $null when CIM cannot be read. The storage
-         cmdlets' first call is slow: the job's to pay, never a login's.
+         physical disk left out. $null when CIM cannot be read. The disks come
+         through CIM, not Get-PhysicalDisk and Get-Partition: those are the
+         Storage module's, whose generated code each fresh pwsh compiles, and
+         PowerShell logs all of it as event 4104 (docs/DECISIONS.md, D30).
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -44,19 +52,43 @@ function Get-UsaBannerWinHardware {
             })
     }
     catch { return $null }
-    $physical = @(Get-PhysicalDisk -ErrorAction SilentlyContinue)
-    $disks = @(foreach ($drive in [System.IO.DriveInfo]::GetDrives()) {
-            if ($drive.DriveType -ne [System.IO.DriveType]::Fixed) { continue }
-            $name = $drive.Name.TrimEnd('\')
-            $partition = Get-Partition -DriveLetter $name[0] -ErrorAction SilentlyContinue
-            if (-not $partition) { continue }
-            $under = @($physical | Where-Object { $_.DeviceId -eq [string]$partition.DiskNumber })
-            if ($under.Count -ne 1) { continue }
-            @{ Name = $name; MediaType = [string]$under[0].MediaType; BusType = [string]$under[0].BusType }
-        })
+    $storage = 'root/Microsoft/Windows/Storage'
+    $fixed = @([System.IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq [System.IO.DriveType]::Fixed } | ForEach-Object { $_.Name.TrimEnd('\') })
+    $partitions = @(Get-CimInstance -Namespace $storage -ClassName MSFT_Partition -ErrorAction SilentlyContinue)
+    $physical = @(Get-CimInstance -Namespace $storage -ClassName MSFT_PhysicalDisk -ErrorAction SilentlyContinue)
+    $disks = @(Select-UsaBannerWinDisk -Drive $fixed -Partition $partitions -PhysicalDisk $physical)
     @{
         Manufacturer = [string]$cs.Manufacturer; Model = [string]$cs.Model
         CpuName = [string]$cpu.Name; CpuMhz = [int]$cpu.MaxClockSpeed; Memory = $modules; Disks = $disks
+    }
+}
+
+function Select-UsaBannerWinDisk {
+    <#
+    .SYNOPSIS
+    Each fixed drive's physical disk, from what CIM gives.
+    .DESCRIPTION
+    In:  the fixed drives' names (C:), and the MSFT_Partition and
+         MSFT_PhysicalDisk instances.
+    Out: @{ Name = 'C:'; MediaType; BusType } for each drive on exactly one
+         partition of exactly one physical disk; MediaType and BusType named
+         where the code decides a disk's kind, else the code itself.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([string[]]$Drive = @(), [object[]]$Partition = @(), [object[]]$PhysicalDisk = @())
+    foreach ($name in $Drive) {
+        $parts = @($Partition | Where-Object { "$($_.DriveLetter)" -eq $name.Substring(0, 1) })
+        if ($parts.Count -ne 1) { continue }
+        $under = @($PhysicalDisk | Where-Object { [string]$_.DeviceId -eq [string]$parts[0].DiskNumber })
+        if ($under.Count -ne 1) { continue }
+        $media = [int]$under[0].MediaType
+        $bus = [int]$under[0].BusType
+        @{
+            Name      = $name
+            MediaType = $(if ($script:UsaDiskMediaTypes.ContainsKey($media)) { $script:UsaDiskMediaTypes[$media] } else { [string]$media })
+            BusType   = $(if ($script:UsaDiskBusTypes.ContainsKey($bus)) { $script:UsaDiskBusTypes[$bus] } else { [string]$bus })
+        }
     }
 }
 
