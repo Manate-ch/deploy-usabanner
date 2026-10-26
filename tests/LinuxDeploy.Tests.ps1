@@ -173,6 +173,30 @@ Describe 'Deploy-UsaBanner on a stock Ubuntu host' -Skip:$IsWindows {
         "$warned" | Should -BeLike '*sshd sends the Banner /etc/issue.net, not /etc/usabanner/issue.net*'
     }
 
+    It 'makes /run/sshd before it asks sshd -T, as after a boot before any connection, and warns of nothing' {
+        # The lab (2026-10-25): a deploy at boot, before any connection had started sshd, warned "sshd sends the
+        # Banner none". sshd -T, like -t, will not run without /run/sshd, which sshd makes when it starts.
+        $null = Deploy-UsaBanner -Company Contoso
+        [System.IO.Directory]::Delete((Join-Path $global:UsaDeployRoot 'run/sshd'))
+        Mock -ModuleName UsaBanner Invoke-UsaBannerNative -ParameterFilter { $FilePath -eq '/usr/sbin/sshd' -and "$ArgumentList" -ceq '-T' } {
+            $global:UsaDeployCalls.Add('/usr/sbin/sshd -T')
+            if ([System.IO.Directory]::Exists((Join-Path $global:UsaDeployRoot 'run/sshd'))) { return @{ ExitCode = 0; Output = @('port 22', 'banner /etc/usabanner/issue.net') } }
+            @{ ExitCode = 255; Output = @('Missing privilege separation directory: /run/sshd') }
+        }
+        $lines = @(Deploy-UsaBanner -Company Contoso -WarningVariable warned -WarningAction SilentlyContinue)
+        "$warned" | Should -BeNullOrEmpty
+        $lines | Should -BeNullOrEmpty
+        Join-Path $global:UsaDeployRoot 'run/sshd' | Should -Exist
+        Get-Calls | Should -Contain '/usr/sbin/sshd -T'
+    }
+
+    It 'warns in sshd''s own words when sshd -T fails, and names no Banner' {
+        Use-StockAnswers @{ '/usr/sbin/sshd -T' = @{ ExitCode = 255; Output = @('/etc/ssh/sshd_config line 7: Bad configuration option: Bogus') } }
+        $null = Deploy-UsaBanner -Company Contoso -WarningVariable warned -WarningAction SilentlyContinue
+        "$warned" | Should -BeLike '*sshd -T could not read the configuration, so which Banner sshd sends is not known: /etc/ssh/sshd_config line 7: Bad configuration option: Bogus*'
+        "$warned" | Should -Not -BeLike '*sends the Banner*'
+    }
+
     It 'adds no SSH banner where OpenSSH''s server is not installed, and says so' {
         $global:UsaDeployRoot = New-StockHost -NoSshd
         $lines = @(Deploy-UsaBanner -Company Contoso)

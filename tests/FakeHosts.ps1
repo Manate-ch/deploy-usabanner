@@ -101,7 +101,10 @@ function Use-StockAnswers {
     #      changes what later calls see; each call is logged in $global:UsaDeployCalls
     param([hashtable]$Answers = @{})
     $global:UsaDeployCalls = [System.Collections.Generic.List[string]]::new()
-    $global:UsaDeployAnswers = $Answers
+    # Case for case: sshd -t and sshd -T are different calls, and a hashtable, which ignores case,
+    # gave both the answer a test set for one.
+    $global:UsaDeployAnswers = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::Ordinal)
+    foreach ($key in $Answers.Keys) { $global:UsaDeployAnswers[$key] = $Answers[$key] }
     # Running: the services started and not yet stopped, as a run in progress. Disabled: units
     # an admin (or the first install.sh) disabled, which a stock host has enabled. Failed: a run
     # stopped part way, as systemd 255 leaves it ("Failed with result 'signal'", lab 2026-10-23),

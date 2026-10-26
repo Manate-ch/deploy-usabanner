@@ -751,6 +751,9 @@ function Set-UsaBannerSshBanner {
     Then ssh reloads, and sessions already open carry on. A Banner sshd
     reads before the drop-in (from another file, or from sshd_config above
     its Include) is someone else's: a warning names what sshd uses.
+    sshd -T, which says what sshd uses, needs /run/sshd as -t does, and
+    after a boot it is gone until the first connection starts sshd, so it is
+    made first. A -T that fails anyway is a warning in sshd's own words.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -783,7 +786,14 @@ function Set-UsaBannerSshBanner {
         else { Write-Warning "UsaBanner: systemctl could not reload ssh, so the SSH banner shows from its next start: $($reload.Output -join ' ')" }
     }
     if ($WhatIfPreference) { return }
-    $uses = @(@((Invoke-UsaBannerNative -FilePath $script:UsaLinuxSshd -ArgumentList '-T').Output) | Where-Object { $_ -match '^banner\s' } | ForEach-Object { ($_ -split '\s+', 2)[1] })
+    # A deploy at boot, before any connection had started sshd, warned "Banner none" (lab, 2026-10-25).
+    New-UsaBannerHostFolder -Root $Root -Path '/run/sshd' -Created $null
+    $read = Invoke-UsaBannerNative -FilePath $script:UsaLinuxSshd -ArgumentList '-T'
+    if ($read.ExitCode -ne 0) {
+        Write-Warning "UsaBanner: sshd -T could not read the configuration, so which Banner sshd sends is not known: $(@($read.Output) -join ' ')"
+        return
+    }
+    $uses = @(@($read.Output) | Where-Object { $_ -match '^banner\s' } | ForEach-Object { ($_ -split '\s+', 2)[1] })
     $banner = if ($uses.Count) { $uses[0] } else { 'none' }
     if ($banner -ne $want) {
         Write-Warning "UsaBanner: sshd sends the Banner $banner, not ${want}: a file sshd reads before $script:UsaLinuxDropIn sets one, and sshd takes the first."
