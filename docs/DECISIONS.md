@@ -2063,8 +2063,10 @@ module in each fresh pwsh, and `Get-PhysicalDisk` alone logged 120 blocks,
 `MSFT_PhysicalDisk` and `MSFT_Partition` with `Get-CimInstance`, which
 compiles no script, and name the codes that decide a disk's kind as the
 Storage module names them.
-- **With F and G, a sample run logs the module's 45,646 characters:** a 15
-  MB log keeps about 40 hours of the sample task alone [computed].
+- **With F and G, a sample run logs the module's 45,646 characters and
+  nothing else** [measured, the same host, 2026-10-26: 13 blocks, one per
+  file]: a 15 MB log keeps about 40 hours of the sample task alone
+  [computed].
 - **`tests/Loader.Tests.ps1` holds the module to calling none of the Storage
   module's commands.**
 
@@ -2083,6 +2085,13 @@ Storage module names them.
   Server 2025, 2026-10-26]. 5.1 does not flag that word. A test of an
   interactive login that does not read the command line needs a lab run
   first: for later.
+- **The scheduled-task commands:** the ScheduledTasks module is generated
+  code of the same kind. A fresh pwsh asking `Get-ScheduledTask` for one
+  task logged 20 blocks, 278,670 characters [measured, lab Server 2025,
+  2026-10-26]. Only a deploy (its move-off too), a removal and
+  `Get-UsaBanner` use them, and the runner deploys at most daily (E), so
+  they stay. The Task Scheduler's COM object would avoid them, as CIM did
+  for the disks: for later.
 
 ## Appendix A. Art mock-ups (rough)
 
