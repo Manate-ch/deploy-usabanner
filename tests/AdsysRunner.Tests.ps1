@@ -470,6 +470,7 @@ exit "$(cat "@@WORK@@/bootstrap-exit" 2>/dev/null || echo 0)"
             $service | Should -Contain "ExecStart=/bin/sh $Cache/adsys-startup.sh --if-new-version"
             $service | Should -Contain "ConditionPathExists=$Cache/adsys-startup.sh"
             $service | Should -Contain 'SyslogIdentifier=usabanner'
+            $service | Should -Contain 'Environment=USABANNER_STDERR_JOURNAL=1'
             foreach ($name in 'usabanner-publish.path', 'usabanner-publish.service') {
                 (Get-Content -LiteralPath (Join-Path $Units $name) -Raw) | Should -Not -Match $OldName
                 [System.IO.File]::GetUnixFileMode((Join-Path $Units $name)) | Should -Be $Mode644
@@ -647,6 +648,23 @@ exit "$(cat "@@WORK@@/bootstrap-exit" 2>/dev/null || echo 0)"
                 $fields[1] | Should -Be $said[$i]
             }
             $said[-1] | Should -Be 'usabanner: handed the deploy over to usabanner-gpo.service; follow it with: journalctl -t usabanner -f'
+        }
+        It 'says each step once under usabanner-publish.service, whose stderr the journal takes under the tag: to stderr alone' {
+            # A boot run writes the units, and sends its steps to the journal itself.
+            Invoke-Runner | Out-Null
+            $before = @(Get-Content -LiteralPath $JournalFile)
+            $before | Should -Not -BeNullOrEmpty
+            # The publish watcher's run, with the variables its service sets.
+            $environment = @(Get-Content -LiteralPath (Join-Path $Units 'usabanner-publish.service') | Where-Object { $_ -like 'Environment=*' } | ForEach-Object { $_.Substring('Environment='.Length) })
+            $environment | Should -Not -BeNullOrEmpty
+            Set-Version 8
+            $result = Invoke-Runner @('--if-new-version') $environment
+            $result.ExitCode | Should -Be 0 -Because (Get-Said $result)
+            @(Get-Calls 'systemd-run').Count | Should -Be 2
+            $said = @($result.Output | Where-Object { $_ -like 'usabanner: *' })
+            $result.Output.Count | Should -Be $said.Count -Because (Get-Said $result)
+            $said[-1] | Should -Match '^usabanner: handed the deploy over'
+            $result.Journal.Count | Should -Be $before.Count
         }
     }
 }
