@@ -17,6 +17,9 @@
 # QA is no tier this banner has, so it gives none. The configuration wins
 # where it says something: an environment other than UNSET, and a role that
 # is not empty. Where neither gives a tier, it is UNSET.
+#
+# Get-UsaBannerAdComputerDescription, which PowerShell logs whole at each
+# import, is in AdDescription.Logged.ps1 (docs/DECISIONS.md, D30).
 
 # Today's tier names, and the tier each is in this banner. STAGE is LAB, the
 # nearest by what it holds.
@@ -120,25 +123,6 @@ function Read-UsaBannerAdDescription {
     try { $lines = [System.IO.File]::ReadAllLines($Path) }
     catch [System.UnauthorizedAccessException], [System.IO.IOException] { return $null }
     if ($lines.Count) { $lines[0] } else { '' }
-}
-
-function Get-UsaBannerAdComputerDescription {
-    # In:  nothing: this computer's own name
-    # Out: the description of its computer object in AD, '' for none; throws
-    #      when AD cannot be asked, or has no such object
-    # Why: the one place that asks AD, which the tests stand in for. As
-    #      SYSTEM, the search runs as the computer account, which may read
-    #      its own object
-    [CmdletBinding()]
-    [OutputType([string])]
-    param()
-    $sam = "$([System.Environment]::MachineName)`$"
-    $searcher = [adsisearcher]"(&(objectCategory=computer)(sAMAccountName=$sam))"
-    $searcher.ClientTimeout = [timespan]::FromSeconds(20)
-    [void]$searcher.PropertiesToLoad.Add('description')
-    $found = $searcher.FindOne()
-    if ($null -eq $found) { throw "AD has no computer object named $sam" }
-    if ($found.Properties['description'].Count) { [string]$found.Properties['description'][0] } else { '' }
 }
 
 function Update-UsaBannerAdDescription {

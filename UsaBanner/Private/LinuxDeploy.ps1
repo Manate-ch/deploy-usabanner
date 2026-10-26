@@ -35,6 +35,9 @@
 # turned off, never deleted. /var/lib/usabanner/deploy.json records each
 # change made outside the banner's own files, and Remove-UsaBanner undoes
 # exactly those.
+#
+# Get-UsaBannerSha256, which PowerShell logs whole at each import, is in
+# LinuxDeploy.Logged.ps1 (docs/DECISIONS.md, D30).
 
 $script:UsaLinuxEtc = '/etc/usabanner'
 $script:UsaLinuxShare = '/usr/local/share/usabanner'
@@ -126,13 +129,6 @@ function ConvertTo-UsaBannerOctal {
     # Out: the mode in octal, as chmod takes it: 755
     param([System.IO.UnixFileMode]$Mode)
     [System.Convert]::ToString([int]$Mode, 8)
-}
-
-function Get-UsaBannerSha256 {
-    # In:  bytes
-    # Out: their SHA-256 in lower-case hex, as sha256sum prints it
-    param([byte[]]$Bytes)
-    [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($Bytes)).ToLowerInvariant()
 }
 
 function New-UsaBannerHostFolder {

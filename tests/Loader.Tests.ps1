@@ -13,6 +13,15 @@ BeforeDiscovery {
         }
     )
     $publicFiles = @(foreach ($f in Get-ChildItem -LiteralPath (Join-Path $moduleRoot 'Public') -Filter '*.ps1' -File) { @{ File = $f.Name } })
+    # Every file the module loads: each is one script to PowerShell, which logs it whole at each import
+    # when its suspicious-content check flags it (D30).
+    $loadedFiles = @(
+        @{ File = 'UsaBanner.psm1' }
+        foreach ($f in Get-ChildItem -LiteralPath (Join-Path $moduleRoot 'Bootstrap'), (Join-Path $moduleRoot 'Private'), (Join-Path $moduleRoot 'Public') -Filter '*.ps1' -File) {
+            @{ File = [System.IO.Path]::GetRelativePath($moduleRoot, $f.FullName) }
+        }
+    )
+    $loggedFiles = @($loadedFiles | Where-Object { $_.File -like '*.Logged.ps1' })
 }
 
 BeforeAll {
@@ -211,5 +220,49 @@ Describe 'the hand-off to pwsh' {
         $raw = Get-Content -LiteralPath $stderr -Raw
         $raw | Should -Not -BeLike '*CLIXML*'
         $raw | Should -BeLike "*there is no art called 'no-such-art'*"
+    }
+}
+
+Describe 'the module and PowerShell''s script block log (D30)' {
+    BeforeAll {
+        # PowerShell's own check for suspicious content, an internal method of ScriptBlock: a script it
+        # flags, PowerShell writes whole to its Operational log as event 4104, with no logging policy set.
+        # This is PowerShell 7's list.
+        $flags = [System.Reflection.BindingFlags]'NonPublic, Static'
+        $script:SuspiciousCheck = [System.Management.Automation.ScriptBlock].GetMethods($flags) | Where-Object { $_.Name -eq 'CheckSuspiciousContent' } | Select-Object -First 1
+
+        function Get-SuspiciousWord {
+            # In:  a script's syntax tree, or a part of it
+            # Out: the word PowerShell's check flags it for; nothing when it flags none
+            # Why: typed, so the method gets the Ast itself and not a PSObject around it
+            param([System.Management.Automation.Language.Ast]$Ast)
+            $script:SuspiciousCheck.Invoke($null, @($Ast))
+        }
+    }
+
+    It 'has PowerShell''s own check, and it flags a script that compiles C# (else a pass proves nothing)' {
+        $script:SuspiciousCheck | Should -Not -BeNullOrEmpty
+        $sample = [System.Management.Automation.Language.Parser]::ParseInput('Add-Type -TypeDefinition $source', [ref]$null, [ref]$null)
+        Get-SuspiciousWord $sample | Should -Not -BeNullOrEmpty
+    }
+
+    It 'finds .Logged.ps1 files to check (else the checks of them prove nothing)' -ForEach @(@{ Found = $loggedFiles.Count }) {
+        $Found | Should -BeGreaterThan 0
+    }
+
+    It 'leaves <File> unflagged unless it is a .Logged.ps1 file' -ForEach $loadedFiles {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $moduleRoot $File), [ref]$null, [ref]$null)
+        $word = Get-SuspiciousWord $ast
+        if ($File -like '*.Logged.ps1') { $word | Should -Not -BeNullOrEmpty -Because 'a .Logged.ps1 file holds what PowerShell logs whole' }
+        else { $word | Should -BeNullOrEmpty -Because "PowerShell would log all of $File at each import" }
+    }
+
+    It 'has <File> hold nothing but functions, each of which PowerShell flags on its own' -ForEach $loggedFiles {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $moduleRoot $File), [ref]$null, [ref]$null)
+        @($ast.EndBlock.Statements).Count | Should -BeGreaterThan 0
+        foreach ($statement in $ast.EndBlock.Statements) {
+            $statement | Should -BeOfType ([System.Management.Automation.Language.FunctionDefinitionAst])
+            Get-SuspiciousWord $statement | Should -Not -BeNullOrEmpty -Because "$($statement.Name) would be logged for nothing"
+        }
     }
 }

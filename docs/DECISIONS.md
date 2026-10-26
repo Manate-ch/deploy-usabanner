@@ -2022,6 +2022,52 @@ direct links through Block Inheritance (D13). M6's "done when" needs both.
 Then PowerShell 7 from the MSI with `-UpdatePoSHMSI` (D18),
 `Export-UsaBanner` (D12) and `Enter-UsaPSSession` (§3.8).
 
+## D30. PowerShell's script block log (event 4104)
+
+**What was found (lab, 2026-10-23).** With no logging policy set, PowerShell
+writes a script's whole text to its Operational log as event 4104, at
+Warning, when the script holds a word on the list it checks for suspicious
+content. The loader reads each file of the module as one script, so a file
+that held one such word was logged whole at each import. That log is the
+one an investigator reads first, and many detection rules key on those
+Warnings.
+- **One pwsh import logged about 322,000 characters:** 13 files, and the
+  loader for a word in a comment [measured with PowerShell 7.6.8's own
+  check, 2026-10-25]. The log stores them as UTF-16, about 640 KB
+  [computed].
+- **The sample task imports the module every 15 minutes on every Windows
+  host** (D17), and each SSH login once more. On a lab Server 2025 being
+  tested over SSH, 15 MB of PowerShell 7 log held 25 minutes [measured,
+  2026-10-23].
+
+**E, merged with !56 (2026-10-25):** the Group Policy's Windows runner
+deploys only when one is due (D29), so a policy refresh imports nothing.
+
+**F, built (2026-10-25), for your review:** each function the check flags
+is in `<name>.Logged.ps1` beside its file, its code as it was there: 25
+functions in 13 files. The loader's comment no longer names the word that
+flagged it.
+- **One import now logs about 45,600 characters,** 7 times less [measured
+  the same way]. With the sample task alone, a 15 MB log keeps about 40
+  hours where it kept about 6 [computed].
+- **`tests/Loader.Tests.ps1` holds the module to it** with PowerShell's own
+  check: no file the module loads is flagged unless it is a `.Logged.ps1`
+  file, and such a file holds nothing but functions the check flags.
+- **Windows PowerShell 5.1 runs a check of its own,** which the tests,
+  run on Linux, cannot. On a lab Server 2025 it agreed with PowerShell 7's
+  for the Group Policy runner: it logged `SyncDeploy.ps1` once, at the
+  deploy, and `Sync-UsaBanner.ps1` not at all [measured, 2026-10-25].
+
+**Not done:**
+- **A, the Group Policy files loaded only by `Deploy-UsaBannerGPO`:** their
+  flagged functions are about 18,000 of the 45,600. Loading code from inside
+  a command changes how the tests stand in for the domain, and has not been
+  tried. For later, measured on the lab hosts first.
+- **B, code rewritten so it holds none of the words:** only the loader's
+  comment. Code bent to slip past a detection reads like evasion, and is not
+  proposed.
+- **C, a larger log:** not needed with E and F. Measure first.
+
 ## Appendix A. Art mock-ups (rough)
 
 Plain ASCII, so each works before login too. Final art gets drawn properly

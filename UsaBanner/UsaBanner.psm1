@@ -11,9 +11,15 @@
 #   | Bootstrap\*.ps1 | every PowerShell       | 5.1                      |
 #   | Public\*.ps1    | every PowerShell       | 5.1; one command a file  |
 #   | Private\*.ps1   | PowerShell 7 and later | any                      |
-#   | Private\*.cs    | Add-Type, when first   | C#                       |
-#   |                 | needed (ImageArt.ps1)  |                          |
+#   | Private\*.cs    | compiled when first    | C#                       |
+#   |                 | needed (ImageArt.      |                          |
+#   |                 | Logged.ps1)            |                          |
 #   +-----------------+------------------------+--------------------------+
+#
+# A file named <name>.Logged.ps1 holds the functions of <name>.ps1 that
+# PowerShell logs whole at each import, being on its list of suspicious
+# content (event 4104): apart, they keep the rest of the module out of that
+# log (docs/DECISIONS.md, D30). tests\Loader.Tests.ps1 holds the module to it.
 #
 # Under 5.1, each command's begin {} block hands the call to pwsh
 # (Bootstrap\Handoff.ps1), and its other blocks then do nothing.
