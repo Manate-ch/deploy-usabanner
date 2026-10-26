@@ -2039,15 +2039,34 @@ is in `<name>.Logged.ps1` beside its file, its code as it was there: 25
 functions in 13 files. The loader's comment no longer names the word that
 flagged it.
 - **One import now logs about 45,600 characters,** 7 times less [measured
-  the same way]. With the sample task alone, a 15 MB log keeps about 40
-  hours where it kept about 6 [computed].
+  the same way; and on a lab Server 2025, 2026-10-26: 322,094 characters
+  before, 45,646 after]. That alone does not make the log last: see G.
 - **`tests/Loader.Tests.ps1` holds the module to it** with PowerShell's own
   check: no file the module loads is flagged unless it is a `.Logged.ps1`
   file, and such a file holds nothing but functions the check flags.
 - **Windows PowerShell 5.1 runs a check of its own,** which the tests,
   run on Linux, cannot. On a lab Server 2025 it agreed with PowerShell 7's
   for the Group Policy runner: it logged `SyncDeploy.ps1` once, at the
-  deploy, and `Sync-UsaBanner.ps1` not at all [measured, 2026-10-25].
+  deploy, and `Sync-UsaBanner.ps1` not at all [measured, 2026-10-25]. Its
+  list holds `Add-Type` and not `EncodedCommand`: a 5.1 import of the
+  module logged the loader alone, 2,016 characters, and with F nothing
+  [measured, 2026-10-26].
+
+**G, built (2026-10-26), for your review: the slow facts read the disks
+through CIM.** The 24-hour soak found what the module's own files were not.
+Each 15-minute sample run on the lab Server 2025 also logged 110 to 120
+blocks with no path, and the host's 15 MB PowerShell 7 log held 36 minutes
+[measured, 2026-10-26]. They were the Storage module's generated code: the
+slow facts called `Get-PhysicalDisk` and `Get-Partition`, which load that
+module in each fresh pwsh, and `Get-PhysicalDisk` alone logged 120 blocks,
+1,645,005 characters [measured, the same host]. The slow facts now read
+`MSFT_PhysicalDisk` and `MSFT_Partition` with `Get-CimInstance`, which
+compiles no script, and name the codes that decide a disk's kind as the
+Storage module names them.
+- **With F and G, a sample run logs the module's 45,646 characters:** a 15
+  MB log keeps about 40 hours of the sample task alone [computed].
+- **`tests/Loader.Tests.ps1` holds the module to calling none of the Storage
+  module's commands.**
 
 **Not done:**
 - **A, the Group Policy files loaded only by `Deploy-UsaBannerGPO`:** their
@@ -2057,7 +2076,13 @@ flagged it.
 - **B, code rewritten so it holds none of the words:** only the loader's
   comment. Code bent to slip past a detection reads like evasion, and is not
   proposed.
-- **C, a larger log:** not needed with E and F. Measure first.
+- **C, a larger log:** not needed with E, F and G. Measure first.
+- **H, the profile block:** its test of how pwsh was started names
+  `-EncodedCommand`, so every pwsh that loads the all-users profile logs
+  the whole `profile.ps1`, other people's lines in it too [measured, lab
+  Server 2025, 2026-10-26]. 5.1 does not flag that word. A test of an
+  interactive login that does not read the command line needs a lab run
+  first: for later.
 
 ## Appendix A. Art mock-ups (rough)
 

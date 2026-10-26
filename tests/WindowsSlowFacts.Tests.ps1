@@ -280,6 +280,75 @@ Describe 'ConvertTo-UsaBannerDiskKind' {
     }
 }
 
+Describe 'Select-UsaBannerWinDisk' {
+    BeforeAll {
+        function Select-Disk {
+            # In:  the drives, and the MSFT_Partition and MSFT_PhysicalDisk stand-ins
+            # Out: each drive Select-UsaBannerWinDisk gives, as 'name media bus'
+            param([string[]]$Drive, [object[]]$Partition, [object[]]$PhysicalDisk)
+            InModuleScope UsaBanner -Parameters @{ Drive = $Drive; Partition = $Partition; PhysicalDisk = $PhysicalDisk } {
+                param($Drive, $Partition, $PhysicalDisk)
+                Select-UsaBannerWinDisk -Drive $Drive -Partition $Partition -PhysicalDisk $PhysicalDisk | ForEach-Object { '{0} {1} {2}' -f $_.Name, $_.MediaType, $_.BusType }
+            }
+        }
+
+        function New-PartitionStandIn {
+            # In:  a drive letter and a disk number
+            # Out: an MSFT_Partition as Get-CimInstance gives it: the letter a char, the number a UInt32
+            param([char]$Letter, [uint32]$Disk)
+            [pscustomobject]@{ DriveLetter = $Letter; DiskNumber = $Disk }
+        }
+
+        # MSFT_PhysicalDisk instances as Get-CimInstance gives them: the DeviceId a string, the codes numbers.
+        $script:NvmeSsd = [pscustomobject]@{ DeviceId = '0'; MediaType = [uint16]4; BusType = [uint16]17 }
+        $script:SataHdd = [pscustomobject]@{ DeviceId = '1'; MediaType = [uint16]3; BusType = [uint16]11 }
+        $script:HyperV = [pscustomobject]@{ DeviceId = '0'; MediaType = [uint16]0; BusType = [uint16]10 }
+    }
+
+    It 'gives each fixed drive its own disk, the codes that decide a kind named: an NVMe SSD and a SATA HDD' {
+        Select-Disk -Drive 'C:', 'D:' -Partition (New-PartitionStandIn 'C' 0), (New-PartitionStandIn 'D' 1) -PhysicalDisk $NvmeSsd, $SataHdd |
+            Should -Be @('C: SSD NVMe', 'D: HDD 11')
+    }
+
+    It 'gives what ConvertTo-UsaBannerDiskKind reads as <Kind> for the codes <MediaType> and <BusType>' -ForEach @(
+        @{ MediaType = 4; BusType = 17; Kind = 'NVMe' }
+        @{ MediaType = 4; BusType = 11; Kind = 'SSD' }
+        @{ MediaType = 3; BusType = 10; Kind = 'HDD' }
+        @{ MediaType = 0; BusType = 7; Kind = 'removable' }
+        @{ MediaType = 4; BusType = 12; Kind = 'removable' }
+        @{ MediaType = 0; BusType = 13; Kind = 'removable' }
+        @{ MediaType = 0; BusType = 10; Kind = '' }
+    ) {
+        $disk = [pscustomobject]@{ DeviceId = '0'; MediaType = [uint16]$MediaType; BusType = [uint16]$BusType }
+        $found = InModuleScope UsaBanner -Parameters @{ Disk = $disk; Partition = (New-PartitionStandIn 'C' 0) } {
+            param($Disk, $Partition)
+            @(Select-UsaBannerWinDisk -Drive 'C:' -Partition $Partition -PhysicalDisk $Disk) | ForEach-Object { ConvertTo-UsaBannerDiskKind -Disk $_ }
+        }
+        "$found" | Should -BeExactly $Kind
+    }
+
+    It 'gives the recorded Hyper-V disk as its codes, which name no kind' {
+        Select-Disk -Drive 'C:' -Partition (New-PartitionStandIn 'C' 0) -PhysicalDisk $HyperV | Should -Be @('C: 0 10')
+    }
+
+    It 'leaves out a drive with <Case>' -ForEach @(
+        @{ Case = 'no partition of its letter'; Letters = @('D'); Disks = @(0) }
+        @{ Case = 'two partitions of its letter'; Letters = @('C', 'C'); Disks = @(0, 0) }
+        @{ Case = 'its partition on a disk CIM does not list'; Letters = @('C'); Disks = @(5) }
+    ) {
+        $partitions = @(for ($i = 0; $i -lt $Letters.Count; $i++) { New-PartitionStandIn $Letters[$i] $Disks[$i] })
+        @(Select-Disk -Drive 'C:' -Partition $partitions -PhysicalDisk $NvmeSsd) | Should -BeNullOrEmpty
+    }
+
+    It 'leaves out a drive whose partition two disks claim' {
+        @(Select-Disk -Drive 'C:' -Partition (New-PartitionStandIn 'C' 0) -PhysicalDisk $NvmeSsd, $HyperV) | Should -BeNullOrEmpty
+    }
+
+    It 'passes over a partition with no drive letter, as a recovery partition is' {
+        Select-Disk -Drive 'C:' -Partition (New-PartitionStandIn ([char]0) 0), (New-PartitionStandIn 'C' 0) -PhysicalDisk $NvmeSsd | Should -Be @('C: SSD NVMe')
+    }
+}
+
 Describe 'Test-UsaBannerVirtualHardware' {
     It 'finds <Manufacturer> <Model> <Expected>' -ForEach @(
         @{ Manufacturer = 'Microsoft Corporation'; Model = 'Virtual Machine'; Expected = 'virtual' }
