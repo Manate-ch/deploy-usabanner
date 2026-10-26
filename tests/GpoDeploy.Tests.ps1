@@ -1464,10 +1464,13 @@ Describe 'Get-UsaBannerGpoPlace' {
     }
 }
 
-Describe 'GpoDeploy.ps1, the way it is built' {
+Describe 'GpoDeploy.ps1 and GpoDeploy.Logged.ps1, the way they are built' {
     BeforeAll {
-        $script:Ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:ModuleRoot 'Private' 'GpoDeploy.ps1'), [ref]$null, [ref]$null)
-        $script:Functions = @($script:Ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $false))
+        # Four adapters are in GpoDeploy.Logged.ps1, which PowerShell logs whole at each import (D30).
+        $script:Functions = @(foreach ($file in 'GpoDeploy.ps1', 'GpoDeploy.Logged.ps1') {
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:ModuleRoot 'Private' $file), [ref]$null, [ref]$null)
+                $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $false)
+            })
         # Every function that touches the domain, which the tests answer for.
         $script:Adapters = @(
             'Get-UsaBannerGpoModuleRoot', 'Import-UsaBannerGroupPolicy', 'Get-UsaBannerGpoDomain', 'Search-UsaBannerDirectory', 'Find-UsaBannerGpo',

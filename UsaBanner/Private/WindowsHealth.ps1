@@ -2,6 +2,9 @@
 # a problem for each thing wrong, the checks that ran, and the panel's
 # services row, in the forms linux/facts.sh gives them on Linux. Each probe
 # is a function of its own, so a test can stand in for it on any OS.
+#
+# Get-UsaBannerWinServiceList, which PowerShell logs whole at each import, is
+# in WindowsHealth.Logged.ps1 (docs/DECISIONS.md, D30).
 
 # Automatic services that stop by design, left out on every host, as today's
 # banner leaves them out (windows/ManatechBanner.psm1). Most are started by a
@@ -9,33 +12,6 @@
 # and was stopped on every Server 2025 host checked, healthy lab nodes
 # included (2026-10-03).
 $script:UsaStopsByDesign = @('InventorySvc', 'gupdate', 'edgeupdate', 'sppsvc', 'RemoteRegistry', 'MapsBroker', 'CDPSvc', 'tiledatamodelsvc', 'WbioSrvc')
-
-function Get-UsaBannerWinServiceList {
-    <#
-    .SYNOPSIS
-    Every service on this Windows host, as the service manager lists it.
-    .DESCRIPTION
-    Out: @(@{ Name; Status; StartType }): the service's name, and its state
-         and start type as words (Running, Stopped; Automatic, Manual). The
-         start type only for a service not running: reading it asks the
-         service manager once more for each service, and only a stopped one
-         is judged by it. Through .NET, not Win32_Service, as today's banner
-         reads them: in a third of the time. Nothing when the service
-         manager cannot be asked.
-    #>
-    [CmdletBinding()]
-    [OutputType([hashtable])]
-    param()
-    try {
-        Add-Type -AssemblyName System.ServiceProcess -ErrorAction Stop
-        $all = [System.ServiceProcess.ServiceController]::GetServices()
-    }
-    catch { return }
-    foreach ($service in $all) {
-        $status = [string]$service.Status
-        @{ Name = $service.ServiceName; Status = $status; StartType = $(if ($status -ne 'Running') { [string]$service.StartType } else { '' }) }
-    }
-}
 
 function Test-UsaBannerWinTriggerStart {
     <#

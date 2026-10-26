@@ -4,36 +4,9 @@
 # so a test can stand in for it on any OS. The probes are today's
 # (windows/ManatechBanner.psm1), each chosen there by timing a fresh process
 # on a lab Server 2025 node, which is what every login is.
-
-function Get-UsaBannerWinSystem {
-    <#
-    .SYNOPSIS
-    What CIM and the registry say about this Windows host.
-    .DESCRIPTION
-    Out: @{ Caption; Build; Ubr; BootTime; MemoryKiB; FreeKiB; DnsHostName;
-         Domain; PartOfDomain; Cores; SystemDrive }. Ubr is $null where the
-         registry holds none.
-    #>
-    [CmdletBinding()]
-    [OutputType([hashtable])]
-    param()
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem
-    $cs = Get-CimInstance -ClassName Win32_ComputerSystem
-    $version = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction SilentlyContinue
-    @{
-        Caption      = [string]$os.Caption
-        Build        = [string]$os.BuildNumber
-        Ubr          = $(if ($version -and $version.PSObject.Properties['UBR']) { [string]$version.UBR })
-        BootTime     = [datetimeoffset]$os.LastBootUpTime
-        MemoryKiB    = [double]$os.TotalVisibleMemorySize
-        FreeKiB      = [double]$os.FreePhysicalMemory
-        DnsHostName  = [string]$cs.DNSHostName
-        Domain       = [string]$cs.Domain
-        PartOfDomain = [bool]$cs.PartOfDomain
-        Cores        = [int]$cs.NumberOfLogicalProcessors
-        SystemDrive  = [string]$env:SystemDrive
-    }
-}
+#
+# Get-UsaBannerWinSystem and Get-UsaBannerWinInterface, which PowerShell logs
+# whole at each import, are in WindowsFacts.Logged.ps1 (docs/DECISIONS.md, D30).
 
 function Get-UsaBannerWinCpuSample {
     <#
@@ -113,31 +86,6 @@ function Get-UsaBannerWinSession {
     $quser = @(Get-Command -Name quser.exe -CommandType Application -ErrorAction SilentlyContinue)
     if (-not $quser.Count) { return }
     ConvertFrom-UsaBannerQuser -Line @(& $quser[0].Source 2>$null)
-}
-
-function Get-UsaBannerWinInterface {
-    <#
-    .SYNOPSIS
-    This host's network adapters, as .NET sees them.
-    .DESCRIPTION
-    Out: @(@{ Name; Type; Up; Addresses = @('a.b.c.d/n') }), with each
-         adapter's IPv4 addresses only. Through .NET, not Get-NetIPAddress,
-         whose module loads at its first call: 0.6 s of every login for
-         today's banner.
-    #>
-    [CmdletBinding()]
-    [OutputType([hashtable])]
-    param()
-    foreach ($nic in [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
-        @{
-            Name      = $nic.Name
-            Type      = [string]$nic.NetworkInterfaceType
-            Up        = $nic.OperationalStatus -eq [System.Net.NetworkInformation.OperationalStatus]::Up
-            Addresses = @(foreach ($unicast in $nic.GetIPProperties().UnicastAddresses) {
-                    if ($unicast.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) { "$($unicast.Address)/$($unicast.PrefixLength)" }
-                })
-        }
-    }
 }
 
 function Select-UsaBannerInterface {
