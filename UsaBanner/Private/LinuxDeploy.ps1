@@ -205,8 +205,8 @@ function Set-UsaBannerHostFile {
 
 function Remove-UsaBannerHostFile {
     # In:  the host's root, a file's path on the host, and what it is
-    # Out: a line when it was deleted; nothing when it was not there, or
-    #      under -WhatIf
+    # Out: a line when it was deleted; a warning instead when the host
+    #      refused; nothing when it was not there, or under -WhatIf
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param(
@@ -217,14 +217,61 @@ function Remove-UsaBannerHostFile {
     $info = [System.IO.FileInfo]::new("$Root$Path")
     if (-not ($info.Exists -or $info.LinkTarget)) { return }
     if (-not $PSCmdlet.ShouldProcess($Path, "Delete $What")) { return }
-    $info.Delete()
+    try { $info.Delete() }
+    catch [System.UnauthorizedAccessException], [System.IO.IOException] {
+        Write-Warning "UsaBanner: could not delete ${Path}, ${What}: $(Get-UsaBannerRefusal $_)"
+        return
+    }
     "deleted ${Path}: $What"
+}
+
+function Get-UsaBannerRefusal {
+    # In:  the error of a .NET call the host refused
+    # Out: the refusal as .NET words it (Access to the path '...' is
+    #      denied.), without PowerShell's "Exception calling ..." around it
+    # Why: on Linux the refusal holds errno's own words, "Permission denied",
+    #      which name no file
+    param([Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$ErrorRecord)
+    $refused = $ErrorRecord.Exception
+    while ($refused -is [System.Management.Automation.MethodInvocationException] -and $refused.InnerException) { $refused = $refused.InnerException }
+    $refused.Message
+}
+
+function Remove-UsaBannerTree {
+    # In:  a folder, by its path here; -Windows on a Windows host
+    # Out: '' once the folder and everything in it are gone; else a line:
+    #      how many files are left, and the host's refusal
+    # Why: a delete the host refused must never be reported as done. git
+    #      writes its objects read-only, and on Windows .NET deletes no
+    #      read-only file, so each attribute is cleared first. On Windows,
+    #      where even that is refused, Administrators take the folder over
+    #      (Grant-UsaBannerTreeAccess) and it is tried once more
+    param([Parameter(Mandatory)][string]$Path, [switch]$Windows)
+    $refusal = ''
+    foreach ($attempt in 1, 2) {
+        if ($attempt -eq 2) {
+            if (-not $Windows) { break }
+            Grant-UsaBannerTreeAccess -Path $Path
+        }
+        try {
+            foreach ($file in [System.IO.Directory]::GetFiles($Path, '*', [System.IO.SearchOption]::AllDirectories)) {
+                $attributes = [System.IO.File]::GetAttributes($file)
+                if ($attributes -band [System.IO.FileAttributes]::ReadOnly) { [System.IO.File]::SetAttributes($file, $attributes -band -bnot [System.IO.FileAttributes]::ReadOnly) }
+            }
+            [System.IO.Directory]::Delete($Path, $true)
+            return ''
+        }
+        catch [System.UnauthorizedAccessException], [System.IO.IOException] { $refusal = Get-UsaBannerRefusal $_ }
+    }
+    $left = try { @([System.IO.Directory]::GetFiles($Path, '*', [System.IO.SearchOption]::AllDirectories)).Count } catch { 'some' }
+    "$left file(s) are left in it. $refusal"
 }
 
 function Remove-UsaBannerHostFolder {
     # In:  the host's root, one of the banner's own folders, and what it is
-    # Out: a line when it was deleted with everything in it; nothing when it
-    #      was not there, or under -WhatIf
+    # Out: a line when it was deleted with everything in it; a warning
+    #      instead when the host refused; nothing when it was not there, or
+    #      under -WhatIf
     # Why: only the banner's own folders, and the old banner's, are deleted
     #      whole; any other path is refused, whatever the caller asks
     [CmdletBinding(SupportsShouldProcess)]
@@ -242,7 +289,11 @@ function Remove-UsaBannerHostFolder {
     if (-not [System.IO.Directory]::Exists($full)) { return }
     $count = @([System.IO.Directory]::GetFiles($full, '*', [System.IO.SearchOption]::AllDirectories)).Count
     if (-not $PSCmdlet.ShouldProcess($Path, "Delete the folder and the $count file(s) in it: $What")) { return }
-    [System.IO.Directory]::Delete($full, $true)
+    $refusal = Remove-UsaBannerTree -Path $full
+    if ($refusal) {
+        Write-Warning "UsaBanner: could not delete ${Path}, ${What}: $refusal"
+        return
+    }
     "deleted $Path and the $count file(s) in it: $What"
 }
 
