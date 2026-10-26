@@ -12,6 +12,11 @@ BeforeAll {
     $script:Build = Join-Path $repoRoot 'build' 'New-UsaBannerRelease.ps1'
     $script:Source = 'https://releases.example.com/usabanner'
     $script:Installed = (Import-PowerShellDataFile -LiteralPath (Join-Path $moduleRoot 'UsaBanner.psd1')).ModuleVersion
+    # A release newer than the module, and another version again, both from its manifest: a
+    # version bump leaves the tests below true.
+    $installedVersion = [version]$script:Installed
+    $script:Newer = '{0}.{1}.0' -f $installedVersion.Major, ($installedVersion.Minor + 1)
+    $script:Other = '{0}.{1}.0' -f $installedVersion.Major, ($installedVersion.Minor + 2)
 
     function New-Release {
         # In:  the version the archive's name gives, and the one its manifest says
@@ -138,7 +143,7 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
     It 'is off unless a flag turns it on: no job, and the job looks for nothing' {
         $null = Deploy-UsaBanner -Company Contoso
         Join-Path $global:UsaDeployRoot 'etc/systemd/system/usabanner-update.timer' | Should -Not -Exist
-        Use-Release (New-Release -Version '0.2.0')
+        Use-Release (New-Release -Version $Newer)
         InModuleScope UsaBanner { Update-UsaBannerRelease } | Should -BeExactly 'the update channel is off'
         $global:UsaDownloads | Should -BeNullOrEmpty
         (Get-Check (Get-UsaBanner) 'update channel').Detail | Should -BeExactly 'off: no release is looked for'
@@ -177,7 +182,7 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
     It 'goes with Remove-UsaBanner, which leaves the host as it was before the deploy' {
         $before = Get-HostState $global:UsaDeployRoot
         $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
-        Use-Release (New-Release -Version '0.2.0')
+        Use-Release (New-Release -Version $Newer)
         $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
         $global:UsaDeployCalls.Clear()
         $null = Remove-UsaBanner
@@ -199,17 +204,17 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
 
     It 'notify: has the banner after login say a newer release is out, naming the releases page, and downloads nothing more' {
         $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
-        Use-Release (New-Release -Version '0.2.0')
-        InModuleScope UsaBanner { Update-UsaBannerRelease } | Should -BeExactly "UsaBanner 0.2.0 is out, and this host has ${Installed}: the banner after login says so"
+        Use-Release (New-Release -Version $Newer)
+        InModuleScope UsaBanner { Update-UsaBannerRelease } | Should -BeExactly "UsaBanner $Newer is out, and this host has ${Installed}: the banner after login says so"
         [System.IO.File]::ReadAllText((Join-Path $State 'notice')) | Should -BeExactly "This banner has an update available. See $Source for more info!`n"
         $global:UsaDownloads | Should -Be @("$Source/SHA256SUMS")
         Join-Path $Modules $Installed | Should -Exist
-        (Get-Check (Get-UsaBanner) 'update channel').Detail | Should -BeExactly "notify, from ${Source}; UsaBanner 0.2.0 is out, and this host has ${Installed}: the banner after login says so"
+        (Get-Check (Get-UsaBanner) 'update channel').Detail | Should -BeExactly "notify, from ${Source}; UsaBanner $Newer is out, and this host has ${Installed}: the banner after login says so"
     }
 
     It 'notify: the collector the deploy installed gives the notice the job wrote, for the banner at login' {
         $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
-        Use-Release (New-Release -Version '0.2.0')
+        Use-Release (New-Release -Version $Newer)
         $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
         $collector = Join-Path $global:UsaDeployRoot 'usr/local/share/usabanner/facts.sh'
         $records = @(& env -i 'PATH=/usr/bin:/bin' "USABANNER_ROOT=$global:UsaDeployRoot" 'USABANNER_SERVICES=' sh $collector)
@@ -218,7 +223,7 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
 
     It 'takes the notice away with the job where a flag turns the channel off: nothing else would' {
         $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
-        Use-Release (New-Release -Version '0.2.0')
+        Use-Release (New-Release -Version $Newer)
         $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
         Join-Path $State 'notice' | Should -Exist
         $lines = @(Deploy-UsaBanner -Company Contoso -Update off)
@@ -228,29 +233,29 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
 
     It 'install: checks the archive, unpacks it, has the new version deploy this host''s configuration, and takes the old version away' {
         $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source -WarningAction SilentlyContinue
-        Use-Release (New-Release -Version '0.2.0')
+        Use-Release (New-Release -Version $Newer)
         Mock -ModuleName UsaBanner Invoke-UsaBannerNative -ParameterFilter { $ArgumentList -contains '-File' } {
             $global:UsaNewDeploy = @($ArgumentList)
             # As the new version's deploy does: it copies itself where every user's PowerShell finds it.
-            Copy-Item -LiteralPath (Split-Path (Split-Path $ArgumentList[3])) -Destination (Join-Path $global:UsaDeployRoot 'usr/local/share/powershell/Modules/UsaBanner/0.2.0') -Recurse
+            Copy-Item -LiteralPath (Split-Path (Split-Path $ArgumentList[3])) -Destination (Join-Path $global:UsaDeployRoot "usr/local/share/powershell/Modules/UsaBanner/$Newer") -Recurse
             @{ ExitCode = 0; Output = @() }
         }
-        InModuleScope UsaBanner { Update-UsaBannerRelease } | Should -BeExactly "installed UsaBanner 0.2.0, which deployed this host's configuration in place of UsaBanner $Installed"
+        InModuleScope UsaBanner { Update-UsaBannerRelease } | Should -BeExactly "installed UsaBanner $Newer, which deployed this host's configuration in place of UsaBanner $Installed"
         $global:UsaNewDeploy | Should -Be @('-NoProfile', '-NonInteractive', '-File', (Join-Path $State 'update/unpacked/UsaBanner/linux/bootstrap.ps1'), '-Path', (Join-Path $global:UsaDeployRoot 'etc/usabanner/usabanner.json'))
-        Join-Path $Modules '0.2.0' | Should -Exist
+        Join-Path $Modules $Newer | Should -Exist
         Join-Path $Modules $Installed | Should -Not -Exist
-        (Get-UpdateState $State)['installed'] | Should -BeExactly '0.2.0'
+        (Get-UpdateState $State)['installed'] | Should -BeExactly $Newer
         Join-Path $State 'notice' | Should -Not -Exist
         Join-Path $State 'update' | Should -Not -Exist
-        $global:UsaDownloads | Should -Be @("$Source/SHA256SUMS", "$Source/UsaBanner-0.2.0.zip")
+        $global:UsaDownloads | Should -Be @("$Source/SHA256SUMS", "$Source/UsaBanner-$Newer.zip")
     }
 
     It 'install: refuses an archive SHA256SUMS does not match, and installs nothing' {
         $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source -WarningAction SilentlyContinue
-        $release = New-Release -Version '0.2.0'
-        [System.IO.File]::AppendAllText((Join-Path $release 'UsaBanner-0.2.0.zip'), 'x')
+        $release = New-Release -Version $Newer
+        [System.IO.File]::AppendAllText((Join-Path $release "UsaBanner-$Newer.zip"), 'x')
         Use-Release $release
-        { InModuleScope UsaBanner { Update-UsaBannerRelease } } | Should -Throw '*UsaBanner-0.2.0.zip does not match its line in SHA256SUMS*so nothing is installed*'
+        { InModuleScope UsaBanner { Update-UsaBannerRelease } } | Should -Throw "*UsaBanner-$Newer.zip does not match its line in SHA256SUMS*so nothing is installed*"
         @(Get-Calls | Where-Object { $_ -like '* -File *' }) | Should -BeNullOrEmpty
         @(Get-ChildItem -LiteralPath $Modules -Name) | Should -Be @($Installed)
         (Get-UpdateState $State)['error'] | Should -BeLike '*does not match its line in SHA256SUMS*'
@@ -259,26 +264,26 @@ Describe 'the update channel on Ubuntu' -Skip:$IsWindows {
 
     It 'install: refuses an archive whose module is another version than its name says' {
         $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source -WarningAction SilentlyContinue
-        Use-Release (New-Release -Version '0.2.0' -ManifestVersion '0.3.0')
-        { InModuleScope UsaBanner { Update-UsaBannerRelease } } | Should -Throw '*UsaBanner-0.2.0.zip holds UsaBanner 0.3.0, not 0.2.0, so nothing is installed*'
+        Use-Release (New-Release -Version $Newer -ManifestVersion $Other)
+        { InModuleScope UsaBanner { Update-UsaBannerRelease } } | Should -Throw "*UsaBanner-$Newer.zip holds UsaBanner $Other, not $Newer, so nothing is installed*"
         @(Get-ChildItem -LiteralPath $Modules -Name) | Should -Be @($Installed)
     }
 
     It 'install: keeps the old version when the new one''s deploy fails, and puts back what that deploy changed' {
         $null = Deploy-UsaBanner -Company Contoso -Update install -UpdateSource $Source -WarningAction SilentlyContinue
-        Use-Release (New-Release -Version '0.2.0')
+        Use-Release (New-Release -Version $Newer)
         Mock -ModuleName UsaBanner Invoke-UsaBannerNative -ParameterFilter { $ArgumentList -contains '-File' } {
             # A deploy cut short: half of the new module in place, and a script of the renderer changed.
-            $null = New-Item -ItemType Directory -Path (Join-Path $global:UsaDeployRoot 'usr/local/share/powershell/Modules/UsaBanner/0.2.0') -Force
+            $null = New-Item -ItemType Directory -Path (Join-Path $global:UsaDeployRoot "usr/local/share/powershell/Modules/UsaBanner/$Newer") -Force
             [System.IO.File]::WriteAllText((Join-Path $global:UsaDeployRoot 'usr/local/share/usabanner/facts.sh'), "half`n")
             @{ ExitCode = 1; Output = @('the art broke') }
         }
-        { InModuleScope UsaBanner { Update-UsaBannerRelease } } | Should -Throw "*UsaBanner 0.2.0's deploy failed (exit code 1), so this host keeps UsaBanner ${Installed}: the art broke*"
+        { InModuleScope UsaBanner { Update-UsaBannerRelease } } | Should -Throw "*UsaBanner ${Newer}'s deploy failed (exit code 1), so this host keeps UsaBanner ${Installed}: the art broke*"
         @(Get-ChildItem -LiteralPath $Modules -Name) | Should -Be @($Installed)
         (Get-FileHash -LiteralPath (Join-Path $global:UsaDeployRoot 'usr/local/share/usabanner/facts.sh')).Hash | Should -Be (Get-FileHash -LiteralPath (Join-Path $moduleRoot 'linux' 'facts.sh')).Hash
         $check = Get-Check (Get-UsaBanner) 'update channel'
         $check.State | Should -BeExactly 'stale'
-        $check.Detail | Should -BeLike "the last look, at *Z, failed: UsaBanner: UsaBanner 0.2.0's deploy failed*"
+        $check.Detail | Should -BeLike "the last look, at *Z, failed: UsaBanner: UsaBanner ${Newer}'s deploy failed*"
     }
 
     It 'stops at a SHA256SUMS that names no archive' {
@@ -317,7 +322,7 @@ Describe 'the update channel on Windows Server' {
 
     It 'notify: writes the notice into the banner''s own folder' {
         $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
-        Use-Release (New-Release -Version '0.2.0')
+        Use-Release (New-Release -Version $Newer)
         $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
         [System.IO.File]::ReadAllText((Join-Path $Data 'notice')) | Should -BeExactly "This banner has an update available. See $Source for more info!`n"
         (Get-Check (Get-UsaBanner) 'update channel').State | Should -BeExactly 'ok'
@@ -325,14 +330,14 @@ Describe 'the update channel on Windows Server' {
 
     It 'notify: the banner after login reads the notice the job wrote' {
         $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
-        Use-Release (New-Release -Version '0.2.0')
+        Use-Release (New-Release -Version $Newer)
         $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
         InModuleScope UsaBanner -Parameters @{ Path = (Join-Path $Data 'notice') } { param($Path) @(Read-UsaBannerNotice -Path $Path) } | Should -BeExactly @("This banner has an update available. See $Source for more info!")
     }
 
     It 'takes the notice away with the task where a flag turns the channel off: nothing else would' {
         $null = Deploy-UsaBanner -Company Contoso -Update notify -UpdateSource $Source
-        Use-Release (New-Release -Version '0.2.0')
+        Use-Release (New-Release -Version $Newer)
         $null = InModuleScope UsaBanner { Update-UsaBannerRelease }
         Join-Path $Data 'notice' | Should -Exist
         $lines = @(Deploy-UsaBanner -Company Contoso -Update off)
