@@ -238,6 +238,23 @@ Describe 'linux/ad-description.sh' -Skip:$IsWindows {
         $run.Output | Should -BeExactly "usabanner: ad: empty on APP1`$ (from dc1.ad.example)`n"
     }
 
+    It 'says what it cached the first time, an empty Description too' {
+        $run = Invoke-AdDescription -Ldap1 '0:'
+        $run.Exit | Should -Be 0
+        $run.Cache | Should -BeExactly "`n"
+        $run.Output | Should -BeExactly "usabanner: ad: empty on APP1`$ (from dc1.ad.example)`n"
+    }
+
+    It 'says nothing when the cache holds that Description already: <Case>' -ForEach @(
+        @{ Case = 'a Description'; Ldap1 = '0:description: PROD: web front end'; Cached = "PROD: web front end`n" }
+        @{ Case = 'an empty one, as on a host whose Description nobody set'; Ldap1 = '0:'; Cached = "`n" }
+    ) {
+        $run = Invoke-AdDescription -Ldap1 $Ldap1 -Files @{ 'var/lib/usabanner/ad-description' = $Cached }
+        $run.Exit | Should -Be 0
+        $run.Output | Should -BeExactly ''
+        $run.Cache | Should -BeExactly $Cached
+    }
+
     It 'caches the first line of a Description given as <Case>' -ForEach @(
         @{ Case = 'base64 text with an accented letter'; Ldif = 'description:: UFJPRDogY2Fmw6k='; Expected = "PROD: caf$([char]0xE9)" }
         @{ Case = 'base64 text of two lines'; Ldif = 'description:: ' + [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("first line`nsecond line")); Expected = 'first line' }

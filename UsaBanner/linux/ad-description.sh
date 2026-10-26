@@ -11,6 +11,11 @@
 # Description is cached too, as an empty line: a Description someone cleared
 # must clear the banner's role. Every user can read the file.
 #
+# What it prints goes to the periodic job's journal. A failure is printed at
+# every run, and the Description only when the cache changes, the first one
+# included: a host says it once, not 96 times a day. Windows prints nothing
+# for a read that works.
+#
 # The computer signs in as itself. It runs kinit -k with its key in
 # /etc/krb5.keytab, into a private credential cache. Then it runs ldapsearch
 # over GSSAPI against the first domain controller that answers. The
@@ -148,10 +153,15 @@ printf '%s\n' "$res" | grep -q '^dn:' || {
 	exit 1
 }
 
+# Whether the cache holds this Description already: then the run says nothing.
+same=
+printf '%s\n' "$desc" | cmp -s - "$out" 2>/dev/null && same=1
+
 # The cache: written beside itself, then moved into place.
 mkdir -p "$dir" && printf '%s\n' "$desc" >"$out.$$" && mv -f "$out.$$" "$out" || {
 	rm -f "$out.$$"
 	log "cannot write $out; kept the last description"
 	exit 1
 }
+[ -n "$same" ] && exit 0
 if [ -n "$desc" ]; then log "\"$desc\" (from $found)"; else log "empty on $sam (from $found)"; fi

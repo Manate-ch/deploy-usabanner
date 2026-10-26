@@ -60,6 +60,9 @@
 # Everything this script says goes to stderr and to the journal, and the unit's
 # output goes to the journal under the same tag:
 #     journalctl -t usabanner
+# Under usabanner-publish.service, stderr is the journal already, under that
+# tag: the service sets USABANNER_STDERR_JOURNAL=1, and the script then says
+# each line to stderr alone, so the journal holds it once.
 #
 # USABANNER_ADSYS_ASSETS, USABANNER_STATE_DIR, USABANNER_UNIT_DIR and
 # USABANNER_LOCK_FILE move ADSys's copy, /var/lib/usabanner, /etc/systemd/system
@@ -77,10 +80,11 @@ record=$state/gpo-installed-version
 uid=$(id -u)
 gid=$(id -g)
 
-# say TEXT - one line to stderr and to the journal.
+# say TEXT - one line to stderr and to the journal; to stderr alone where that
+# is the journal (USABANNER_STDERR_JOURNAL, above).
 say() {
 	printf 'usabanner: %s\n' "$1" >&2
-	logger -t "$tag" -- "usabanner: $1" 2>/dev/null
+	[ -n "${USABANNER_STDERR_JOURNAL:-}" ] || logger -t "$tag" -- "usabanner: $1" 2>/dev/null
 }
 
 # version - the Version= in the copy's GPT.INI (SYSVOL writes it with CRLF).
@@ -227,6 +231,9 @@ Type=oneshot
 ExecStartPre=/bin/sleep 30
 ExecStart=/bin/sh $copy/adsys-startup.sh --if-new-version
 SyslogIdentifier=$tag
+# The script's stderr is the journal here, under the tag above: it says each
+# line there once, not through logger as well.
+Environment=USABANNER_STDERR_JOURNAL=1
 EOF
 if [ -n "$changed" ] && ! systemctl daemon-reload; then
 	say "systemctl daemon-reload failed"
