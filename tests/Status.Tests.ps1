@@ -407,6 +407,11 @@ Describe 'Get-UsaBanner on Windows Server' {
             Break = { Write-TestFile $global:UsaWinRoot 'ProgramData/UsagiTools/Banner/slow.tsv' "1`tupdates`t0`t0`n" -Mode '000' } }
         @{ Case = 'the module''s copy deleted'; Check = 'module copy'; State = 'missing'; Detail = 'there is no copy in *ProgramFiles/WindowsPowerShell/Modules/UsaBanner, where every login and the periodic job import it from'
             Break = { [System.IO.Directory]::Delete((Join-Path $global:UsaWinRoot 'ProgramFiles/WindowsPowerShell/Modules/UsaBanner'), $true) } }
+        @{ Case = 'the module''s copy marked by a download'; Check = 'module copy'; State = 'differs'; Detail = '2 of the * files in *ProgramFiles/WindowsPowerShell/Modules/UsaBanner/* carry the internet mark a download leaves: PowerShell asks before it loads them, or refuses, and the periodic job, as SYSTEM, cannot answer. Deploy-UsaBanner copies them again without it'
+            Break = {
+                $copy = Join-Path $global:UsaWinRoot "ProgramFiles/WindowsPowerShell/Modules/UsaBanner/$Version"
+                Set-WindowsMark (Join-Path $copy 'UsaBanner.psd1'), (Join-Path $copy 'UsaBanner.Format.ps1xml')
+            } }
     ) {
         & $Break
         $status = Get-ReadOnlyStatus

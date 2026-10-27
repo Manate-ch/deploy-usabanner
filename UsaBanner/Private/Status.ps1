@@ -610,7 +610,15 @@ function Get-UsaBannerWindowsStatus {
     if ($danger.Count) { $checks.Add((New-UsaBannerCheck -Check 'folder acl' -State 'invalid' -Detail "$($danger -join '; '). Whoever that is could have the periodic job, as SYSTEM, write wherever a link points; Deploy-UsaBanner refuses this folder until someone looks")) }
     elseif (Test-UsaBannerFolderAcl -Path $layout.Data) { $checks.Add((New-UsaBannerCheck -Check 'folder acl' -State 'ok' -Detail "$($layout.Data) is owned by Administrators: Administrators and SYSTEM may change it, Users read it")) }
     else { $checks.Add((New-UsaBannerCheck -Check 'folder acl' -State 'differs' -Detail "$($layout.Data) does not have the banner's ACL, so others may change the banners every login shows: Deploy-UsaBanner sets it again")) }
-    if ($common.Version) { $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'ok' -Detail "UsaBanner $($common.Version), for every user and the periodic job: $([System.IO.Path]::Combine($layout.Modules, 'UsaBanner', [string]$common.Version))")) }
+    if ($common.Version) {
+        $moduleCopy = [System.IO.Path]::Combine($layout.Modules, 'UsaBanner', [string]$common.Version)
+        $marked = @(Get-UsaBannerMarkedFile -Folder $moduleCopy)
+        if ($marked.Count) {
+            $total = @([System.IO.Directory]::GetFiles($moduleCopy, '*', [System.IO.SearchOption]::AllDirectories)).Count
+            $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'differs' -Detail "$($marked.Count) of the $total files in $moduleCopy carry the internet mark a download leaves: PowerShell asks before it loads them, or refuses, and the periodic job, as SYSTEM, cannot answer. Deploy-UsaBanner copies them again without it"))
+        }
+        else { $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'ok' -Detail "UsaBanner $($common.Version), for every user and the periodic job: $moduleCopy")) }
+    }
     else { $checks.Add((New-UsaBannerCheck -Check 'module copy' -State 'missing' -Detail "there is no copy in $([System.IO.Path]::Combine($layout.Modules, 'UsaBanner')), where every login and the periodic job import it from")) }
     $job = @()
     if ($config -and [string]$config['update']['mode'] -ne 'off') {

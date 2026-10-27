@@ -586,6 +586,25 @@ function Get-UsaBannerUpdateUnits {
     }
 }
 
+function Get-UsaBannerMarkedFile {
+    # In:  a folder
+    # Out: the files in it, at any depth, that carry the internet mark (the
+    #      Zone.Identifier stream a download leaves, which Unblock-File
+    #      takes off), each as a path relative to the folder, with /. None
+    #      off Windows, which has no such stream, and none for no folder
+    # Why: with the mark, PowerShell asks before it loads a module's file,
+    #      or refuses it, and the periodic job, as SYSTEM, cannot answer
+    #      ("AuthorizationManager check failed": a test host, 2026-10-27).
+    #      Get-Item -Stream is in Windows' file system provider only
+    param([Parameter(Mandatory)][string]$Folder)
+    if (-not $IsWindows -or -not [System.IO.Directory]::Exists($Folder)) { return }
+    foreach ($file in [System.IO.Directory]::GetFiles($Folder, '*', [System.IO.SearchOption]::AllDirectories)) {
+        if (Get-Item -LiteralPath $file -Stream 'Zone.Identifier' -ErrorAction Ignore) {
+            [System.IO.Path]::GetRelativePath($Folder, $file).Replace('\', '/')
+        }
+    }
+}
+
 function Install-UsaBannerModuleCopy {
     <#
     .SYNOPSIS
@@ -603,7 +622,11 @@ function Install-UsaBannerModuleCopy {
     there already is not copied onto itself. Files the copy holds and the
     module does not are removed: the folder is the module's own. The copy
     the record named before, where it is another version, goes once this
-    one is in place; a version folder no deploy recorded stays.
+    one is in place; a version folder no deploy recorded stays. Each file
+    goes over as its contents alone: on NTFS a file copy keeps the file's
+    streams, the internet mark a download leaves among them. On Windows a
+    file of the copy that carries the mark is copied again, though the
+    same, so a deploy from an unblocked module mends a marked copy.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -621,15 +644,15 @@ function Install-UsaBannerModuleCopy {
     $source = [System.IO.Path]::GetFullPath($script:UsaBannerRoot).TrimEnd('/', '\')
     if ($source -eq [System.IO.Path]::GetFullPath("$Root$target").TrimEnd('/', '\')) { return }
     $previous = [string]$Record['module']
+    $marked = @(if ($Os -eq 'windows') { Get-UsaBannerMarkedFile -Folder "$Root$target" })
     $copy = [System.Collections.Generic.List[string]]::new()
     $wanted = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($file in [System.IO.Directory]::GetFiles($source, '*', [System.IO.SearchOption]::AllDirectories)) {
         $relative = [System.IO.Path]::GetRelativePath($source, $file).Replace('\', '/')
         $null = $wanted.Add($relative)
         $there = "$Root$target/$relative"
-        if (-not ([System.IO.File]::Exists($there) -and [System.Linq.Enumerable]::SequenceEqual([byte[]][System.IO.File]::ReadAllBytes($there), [byte[]][System.IO.File]::ReadAllBytes($file)))) {
-            $copy.Add($relative)
-        }
+        $same = [System.IO.File]::Exists($there) -and [System.Linq.Enumerable]::SequenceEqual([byte[]][System.IO.File]::ReadAllBytes($there), [byte[]][System.IO.File]::ReadAllBytes($file))
+        if (-not $same -or $marked -contains $relative) { $copy.Add($relative) }
     }
     $extra = @()
     if ([System.IO.Directory]::Exists("$Root$target")) {
@@ -637,20 +660,23 @@ function Install-UsaBannerModuleCopy {
                 ForEach-Object { [System.IO.Path]::GetRelativePath("$Root$target", $_).Replace('\', '/') } |
                 Where-Object { -not $wanted.Contains($_) })
     }
+    $markedCount = @($copy | Where-Object { $marked -contains $_ }).Count
     $installed = $true
     if ($copy.Count -or $extra.Count) {
-        $installed = $PSCmdlet.ShouldProcess($target, "Install the module UsaBanner $version for every user: $($copy.Count) file(s) to copy, $($extra.Count) to remove")
+        $why = if ($markedCount) { "; $markedCount carry the internet mark, which the copies will not" } else { '' }
+        $installed = $PSCmdlet.ShouldProcess($target, "Install the module UsaBanner $version for every user: $($copy.Count) file(s) to copy, $($extra.Count) to remove$why")
         if ($installed) {
             foreach ($relative in $copy) {
                 $there = "$Root$target/$relative"
                 New-UsaBannerHostFolder -Root $Root -Path ([System.IO.Path]::GetDirectoryName("$target/$relative")) -Created $Created -Mode $FolderMode
                 $temp = "$there.usabanner-tmp"
-                [System.IO.File]::Copy((Join-Path $source $relative), $temp, $true)
+                [System.IO.File]::WriteAllBytes($temp, [System.IO.File]::ReadAllBytes((Join-Path $source $relative)))
                 if ($null -ne $FileMode) { [System.IO.File]::SetUnixFileMode($temp, [System.IO.UnixFileMode]$FileMode) }
                 [System.IO.File]::Move($temp, $there, $true)
             }
             foreach ($relative in $extra) { [System.IO.File]::Delete("$Root$target/$relative") }
-            "installed the module UsaBanner ${version} for every user: $target ($($copy.Count) file(s) copied, $($extra.Count) removed)"
+            $why = if ($markedCount) { "; $markedCount had the internet mark, which the copies do not" } else { '' }
+            "installed the module UsaBanner ${version} for every user: $target ($($copy.Count) file(s) copied, $($extra.Count) removed$why)"
         }
     }
     if ($installed) { $Record['module'] = $target }

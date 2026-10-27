@@ -485,8 +485,10 @@ moment where this table says:
   `Banner` line in `sshd_config`, as today's installer writes it. It goes
   above the first `Match` block, any other `Banner` above it turned off
   behind a note, and `sshd -t` checks the result, which is put back if
-  refused. sshd is not restarted, so an admin deploying over SSH keeps the
-  session; the deploy says to restart it.
+  refused, from a copy (`sshd_config.usabanner-bak`) deleted once `sshd -t`
+  passes; a deploy before 2026-10-27 left the copy. sshd is not restarted,
+  so an admin deploying over SSH keeps the session; the deploy says to
+  restart it.
 - **post-logon:** a marked block in each PowerShell's all-users profile.
   It shows the banner once a session, at an interactive SSH login only, as
   today's `-SshOnly` did: not at the console, and not for scp, sftp or a
@@ -1913,6 +1915,14 @@ there now, from the host's own configuration and facts.
   deploy leaves the restart to the admin, so an `sshd` that started before
   the Banner line went in sends no banner yet: `stale`, with
   `Restart-Service sshd`.
+- **On Windows, a module copy that carries the internet mark is
+  `differs`.** A file copy on NTFS keeps the file's streams, the mark of a
+  download (`Zone.Identifier`) among them, and with it PowerShell asks
+  before it loads the module, or refuses it; the periodic job, as SYSTEM
+  with `-NonInteractive`, cannot answer [measured: a test host, 2026-10-27,
+  every file of the copy marked, "AuthorizationManager check failed", the
+  task ending 1 at each run]. So a deploy copies each file's contents, and
+  copies again a file of the copy that carries the mark.
 - **It changes nothing.** Its tests check each host byte for byte before
   and after, and that no program that changes it ran.
 - **The settings are what the configuration sets otherwise than the
