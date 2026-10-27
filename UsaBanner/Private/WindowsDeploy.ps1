@@ -769,10 +769,11 @@ function Set-UsaBannerWindowsSsh {
     In:  the layout, the configuration, and the record.
     Out: a line for each change, or one saying why there is no SSH banner.
     sshd_config is copied beside itself first and checked with sshd -t
-    after: one sshd refuses is put back, with a warning. sshd is not
-    restarted, so the admin's own SSH session is safe: the line says to
-    restart it. A default shell that is not a PowerShell shows no banner
-    after login, so it is set to one first (Set-UsaBannerWindowsShell, D21).
+    after: one sshd refuses is put back from the copy, with a warning, and
+    the copy is deleted once sshd -t passes. sshd is not restarted, so the
+    admin's own SSH session is safe: the line says to restart it. A default
+    shell that is not a PowerShell shows no banner after login, so it is set
+    to one first (Set-UsaBannerWindowsShell, D21).
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -808,6 +809,7 @@ function Set-UsaBannerWindowsSsh {
         Write-Warning "UsaBanner: sshd -t refused sshd_config with the Banner line, so it is put back as it was, and there is no SSH banner: $(@($test.Output) -join ' ')"
         return
     }
+    [System.IO.File]::Delete($backup)
     $Record['sshd'] = $true
     "wrote $($Layout.SshdConfig): its Banner line. Restart sshd (Restart-Service sshd) for it to show, then try a new session before closing this one"
 }

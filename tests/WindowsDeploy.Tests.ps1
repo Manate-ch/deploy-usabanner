@@ -304,6 +304,20 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         "$warned" | Should -BeLike '*sshd -t refused sshd_config with the Banner line, so it is put back as it was*'
     }
 
+    It 'deletes the copy of sshd_config it made once sshd -t passes' {
+        # The move-off and Remove-UsaBanner delete theirs; the deploy kept its own, and a test host
+        # (2026-10-27) still held it.
+        $null = Deploy-UsaBanner -Company Contoso
+        [System.IO.File]::ReadAllText((Join-Path $Root 'ProgramData/ssh/sshd_config')) | Should -Match ([regex]::Escape('Banner __PROGRAMDATA__/UsagiTools/Banner/sshd-banner.txt'))
+        Join-Path $Root 'ProgramData/ssh/sshd_config.usabanner-bak' | Should -Not -Exist
+    }
+
+    It 'keeps the copy of sshd_config beside it when sshd -t refuses, as the file was before the deploy' {
+        Use-WindowsHost $Root @{ 'C:\Windows\System32\OpenSSH\sshd.exe -t' = @{ ExitCode = 1; Output = @('Bad configuration option') } }
+        $null = Deploy-UsaBanner -Company Contoso -WarningAction SilentlyContinue
+        [System.IO.File]::ReadAllText((Join-Path $Root 'ProgramData/ssh/sshd_config.usabanner-bak')) | Should -BeExactly $StockSshd
+    }
+
     It 'leaves a logon notice someone else set, and says so' {
         $global:UsaWinNotice = @{ Caption = 'NOTICE'; Text = 'Contoso policy applies.'; Exists = $true }
         $lines = @(Deploy-UsaBanner -Company Contoso)

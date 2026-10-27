@@ -485,8 +485,10 @@ moment where this table says:
   `Banner` line in `sshd_config`, as today's installer writes it. It goes
   above the first `Match` block, any other `Banner` above it turned off
   behind a note, and `sshd -t` checks the result, which is put back if
-  refused. sshd is not restarted, so an admin deploying over SSH keeps the
-  session; the deploy says to restart it.
+  refused, from a copy (`sshd_config.usabanner-bak`) deleted once `sshd -t`
+  passes; a deploy before 2026-10-27 left the copy. sshd is not restarted,
+  so an admin deploying over SSH keeps the session; the deploy says to
+  restart it.
 - **post-logon:** a marked block in each PowerShell's all-users profile.
   It shows the banner once a session, at an interactive SSH login only, as
   today's `-SshOnly` did: not at the console, and not for scp, sftp or a
