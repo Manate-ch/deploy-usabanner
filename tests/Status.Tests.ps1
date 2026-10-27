@@ -365,8 +365,22 @@ Describe 'Get-UsaBanner on Windows Server' {
         $status = Get-ReadOnlyStatus
         $check = Get-Check $status 'logon notice'
         $check.State | Should -BeExactly 'off'
-        $check.Detail | Should -BeExactly 'it holds someone else''s text, set by hand or by a Group Policy: Contoso IT'
+        $check.Detail | Should -BeExactly 'the text before a console or RDP sign-in is someone else''s, set by hand or by a Group Policy: Contoso IT'
         $status.Healthy | Should -BeTrue
+    }
+
+    It 'says the logon notice is the text before a console or RDP sign-in where <Case>' -ForEach @(
+        @{ Case = 'it holds another configuration''s legal text'; State = 'differs'
+            Detail = 'the text before a console or RDP sign-in is the legal text of another configuration: Deploy-UsaBanner sets it again'
+            Break = { Mock -ModuleName UsaBanner Get-UsaBannerLogonNotice { @{ Caption = 'OTHER'; Text = 'Other text.' } } } }
+        @{ Case = 'the configuration cannot be read'; State = 'unknown'
+            Detail = 'what the configuration sets before a console or RDP sign-in is not known'
+            Break = { [System.IO.File]::WriteAllText((Join-Path $Data 'usabanner.json'), '{ not json') } }
+    ) {
+        & $Break
+        $check = Get-Check (Get-ReadOnlyStatus) 'logon notice'
+        $check.State | Should -BeExactly $State
+        $check.Detail | Should -BeExactly $Detail
     }
 
     It 'says SSH logins show no banner where sshd starts cmd.exe: differs, as a deploy sets a PowerShell there' {
@@ -397,7 +411,7 @@ Describe 'Get-UsaBanner on Windows Server' {
             Break = { [System.IO.File]::AppendAllText((Join-Path $global:UsaWinRoot 'ProgramData/UsagiTools/Banner/sshd-banner.txt'), "edited`n") } }
         @{ Case = 'the data file edited'; Check = 'configuration'; State = 'differs'; Detail = '*usabanner.psd1, which each login reads, does not hold the settings of usabanner.json: Deploy-UsaBanner writes it again'
             Break = { [System.IO.File]::AppendAllText((Join-Path $global:UsaWinRoot 'ProgramData/UsagiTools/Banner/usabanner.psd1'), "# edited`n") } }
-        @{ Case = 'the logon notice cleared'; Check = 'logon notice'; State = 'missing'; Detail = 'no logon notice is set: Deploy-UsaBanner sets it where none is'
+        @{ Case = 'the logon notice cleared'; Check = 'logon notice'; State = 'missing'; Detail = 'no logon notice, the text before a console or RDP sign-in, is set: Deploy-UsaBanner sets it where none is'
             Break = { $global:UsaWinNotice = @{ Caption = ''; Text = ''; Exists = $false } } }
         @{ Case = 'the task unregistered'; Check = 'periodic job'; State = 'missing'; Detail = 'there is no task \UsagiTools\UsaBanner sample'
             Break = { $global:UsaWinTasks.Remove('UsaBanner sample') } }

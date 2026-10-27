@@ -511,17 +511,17 @@ function Get-UsaBannerWindowsNoticeCheck {
     $ours = $Record['notice']
     $isOurs = $ours -and $have.Caption -ceq [string]$ours['caption'] -and $have.Text -ceq [string]$ours['text']
     if (-not ($have.Caption -or $have.Text)) {
-        return New-UsaBannerCheck -Check 'logon notice' -State 'missing' -Detail 'no logon notice is set: Deploy-UsaBanner sets it where none is'
+        return New-UsaBannerCheck -Check 'logon notice' -State 'missing' -Detail 'no logon notice, the text before a console or RDP sign-in, is set: Deploy-UsaBanner sets it where none is'
     }
     if (-not $isOurs) {
-        return New-UsaBannerCheck -Check 'logon notice' -State 'off' -Detail "it holds someone else's text, set by hand or by a Group Policy: $($have.Caption)"
+        return New-UsaBannerCheck -Check 'logon notice' -State 'off' -Detail "the text before a console or RDP sign-in is someone else's, set by hand or by a Group Policy: $($have.Caption)"
     }
-    if (-not $Config) { return New-UsaBannerCheck -Check 'logon notice' -State 'unknown' -Detail 'what the configuration sets is not known' }
+    if (-not $Config) { return New-UsaBannerCheck -Check 'logon notice' -State 'unknown' -Detail 'what the configuration sets before a console or RDP sign-in is not known' }
     $want = Get-UsaBannerLogonNotice -Config $Config
     if ($have.Caption -ceq $want.Caption -and $have.Text -ceq $want.Text) {
         return New-UsaBannerCheck -Check 'logon notice' -State 'ok' -Detail "$($have.Caption), before a console or RDP sign-in"
     }
-    New-UsaBannerCheck -Check 'logon notice' -State 'differs' -Detail 'it holds the legal text of another configuration: Deploy-UsaBanner sets it again'
+    New-UsaBannerCheck -Check 'logon notice' -State 'differs' -Detail 'the text before a console or RDP sign-in is the legal text of another configuration: Deploy-UsaBanner sets it again'
 }
 
 function Get-UsaBannerWindowsJobCheck {

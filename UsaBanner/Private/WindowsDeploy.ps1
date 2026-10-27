@@ -838,7 +838,7 @@ function Set-UsaBannerWindowsNotice {
     $ours = $Record['notice']
     $isOurs = $ours -and $have.Caption -ceq [string]$ours['caption'] -and $have.Text -ceq [string]$ours['text']
     if (-not $isOurs -and ($have.Caption -or $have.Text)) {
-        'left the logon notice as it is: it holds someone else''s text, set by hand or by a Group Policy'
+        'left the logon notice, the text before a console or RDP sign-in, as it is: it holds someone else''s text, set by hand or by a Group Policy'
         return
     }
     if ($have.Caption -ceq $want.Caption -and $have.Text -ceq $want.Text) { return }
