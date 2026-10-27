@@ -360,6 +360,23 @@ Describe 'Get-UsaBanner on Windows Server' {
         (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this repository's Install-ManatechBanner.ps1 (*ProgramData/Manatech), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one"
     }
 
+    It 'names the old banner''s task, by its file, where it is all that is left and no banner is deployed' {
+        # A production host, 2026-10-27: the task the old banner's GPO made put it back at its midnight run, half an
+        # hour after Get-UsaBanner had found none of it; and the task stays when the GPO stops applying.
+        Use-WindowsHost (New-WindowsHost)
+        Add-WindowsOldTask -Name 'Manatech MOTD sync' -Arguments '-File Sync-ManatechBanner.ps1' -Schedule 'gpo'
+        (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this repository's Install-ManatechBanner.ps1 (the task \Manatech MOTD sync), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one"
+    }
+
+    It 'has the old banner check differ where only the old banner''s task is left, read from its file, never asked of the task scheduler' {
+        Add-WindowsOldTask -Name 'Manatech MOTD sync' -Arguments '-File Sync-ManatechBanner.ps1' -Schedule 'gpo'
+        $status = Get-ReadOnlyStatus
+        $check = Get-Check $status 'old banner'
+        "$($check.State): $($check.Detail)" | Should -BeExactly 'differs: it is on this host beside this banner (the task \Manatech MOTD sync), as a Group Policy that delivers it puts it back: take that GPO off this host, then run Deploy-UsaBanner -ReplaceOldBanner'
+        $status.Healthy | Should -BeFalse
+        Should -Invoke -ModuleName UsaBanner Get-UsaBannerTask -ParameterFilter { $Name -like 'Manatech*' } -Times 0 -Exactly
+    }
+
     It 'leaves a logon notice someone else set: off, and the host healthy still' {
         $global:UsaWinNotice = @{ Caption = 'Contoso IT'; Text = 'Authorized use only.'; Exists = $true }
         $status = Get-ReadOnlyStatus

@@ -70,7 +70,7 @@ BeforeAll {
         #      Manatech MOTD GPO's task leave it, Windows PowerShell 5.1 having written the files: its folder; its
         #      block after Windows PowerShell's own profile, and alone in PowerShell 7's; sshd_config's copy, then
         #      every Banner above the first Match turned off behind its dated note, and its own line before the
-        #      Match with a blank line after; its SSH banner file; its two tasks
+        #      Match with a blank line after; its SSH banner file; its two tasks, with their definition files
         param([string]$Root)
         foreach ($name in 'ManatechBanner.psm1', 'motd.psd1', 'sync.log') {
             $null = New-Item -ItemType Directory -Path (Join-Path $Root 'ProgramData/Manatech') -Force
@@ -90,8 +90,8 @@ BeforeAll {
         $lines.Insert($end, 'Banner __PROGRAMDATA__/ssh/manatech-banner.txt')
         $lines.Insert($end + 1, '')
         [System.IO.File]::WriteAllText($sshd, ($lines -join "`r`n") + "`r`n")
-        $global:UsaWinTasks['Manatech banner update'] = @{ Execute = 'powershell.exe'; Arguments = '-File Update-ManatechBanner.ps1'; Schedule = 'daily' }
-        $global:UsaWinTasks['Manatech MOTD sync'] = @{ Execute = 'powershell.exe'; Arguments = '-File Sync-ManatechBanner.ps1'; Schedule = 'gpo' }
+        Add-WindowsOldTask -Name 'Manatech banner update' -Arguments '-File Update-ManatechBanner.ps1' -Schedule 'daily'
+        Add-WindowsOldTask -Name 'Manatech MOTD sync' -Arguments '-File Sync-ManatechBanner.ps1' -Schedule 'gpo'
     }
 
     function Add-OldRepoCopy {
@@ -552,6 +552,17 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Windows Server' {
         $status.Healthy | Should -BeFalse
     }
 
+    It 'refuses a deploy without the switch where only the old banner''s task is left, names it, and takes it off with the switch' {
+        # A production host, 2026-10-27: the task the old banner's GPO made put it back at its midnight run, half an
+        # hour after Get-UsaBanner had found none of it; and the task stays when the GPO stops applying.
+        Add-WindowsOldTask -Name 'Manatech MOTD sync' -Arguments '-File Sync-ManatechBanner.ps1' -Schedule 'gpo'
+        { Deploy-UsaBanner -Company Contoso } | Should -Throw "*Install-ManatechBanner.ps1 (the task \Manatech MOTD sync)*"
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningAction SilentlyContinue)
+        $lines[0] | Should -BeExactly "unregistered the task \Manatech MOTD sync: the old banner's"
+        Join-Path $Root 'Windows/System32/Tasks/Manatech MOTD sync' | Should -Not -Exist
+        InModuleScope UsaBanner { @(Find-UsaBannerWindowsOldInstall -Layout (Get-UsaBannerWindowsLayout)) } | Should -BeNullOrEmpty
+    }
+
     Context 'where Windows refuses the delete at first (a host the old banner was on for long, 2026-10-26)' {
         # There an administrator could neither clear the old clone's read-only pack files nor delete them: they
         # had no access for anyone. Linux stands in for that with a folder no one may write in, so nothing in it
@@ -690,6 +701,60 @@ Describe 'a delete the host refuses' -Skip:$IsWindows {
         $refusal | Should -BeExactly ''
         Join-Path $Box 'var' | Should -Not -Exist
         $global:UsaTreeCalls | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'the old banner''s tasks, found without the task scheduler''s module' {
+    # The ScheduledTasks module is logged whole at each import (DECISIONS D30): the old banner's tasks are found by
+    # their definition files, and nothing the periodic job runs every 15 minutes may reach that module. Read from
+    # the module's own functions, following each call into the module, at any depth.
+    BeforeAll {
+        $script:Bodies = & (Get-Module UsaBanner) {
+            $found = @{}
+            foreach ($function in @(Get-ChildItem -Path function: | Where-Object { $_.ModuleName -eq 'UsaBanner' })) { $found[$function.Name] = $function.ScriptBlock.Ast }
+            $found
+        }
+
+        function Get-ReachedCommand {
+            # In:  a function of the module
+            # Out: the name of every command it calls, and those the module's functions it calls call, at any depth
+            param([string]$Name)
+            $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+            $todo = [System.Collections.Generic.Queue[string]]::new()
+            $todo.Enqueue($Name)
+            while ($todo.Count) {
+                $next = $todo.Dequeue()
+                if (-not $script:Bodies.ContainsKey($next)) { continue }
+                foreach ($call in $script:Bodies[$next].FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+                    $called = $call.GetCommandName()
+                    if ($called -and $seen.Add($called)) { $todo.Enqueue($called) }
+                }
+            }
+            @($seen)
+        }
+
+        function Test-TaskCommand {
+            # In:  a command's name
+            # Out: $true for the module's task commands and those of the task scheduler's module
+            param([string]$Name)
+            $Name -like '*-UsaBannerTask' -or $Name -like '*-ScheduledTask*'
+        }
+    }
+
+    It 'has Find-UsaBannerWindowsOldInstall call no task command' {
+        $reached = Get-ReachedCommand 'Find-UsaBannerWindowsOldInstall'
+        $reached | Should -Contain 'Read-UsaBannerWindowsText' -Because 'the walk reads the function (else it proves nothing)'
+        @($reached | Where-Object { Test-TaskCommand $_ }) | Should -BeNullOrEmpty
+    }
+
+    It 'leaves the periodic job on Windows no path to a task command' {
+        $reached = Get-ReachedCommand 'Update-UsaBannerSample'
+        $reached | Should -Contain 'Get-UsaBannerWindowsFacts' -Because 'the walk follows the job into the module (else it proves nothing)'
+        @($reached | Where-Object { Test-TaskCommand $_ }) | Should -BeNullOrEmpty
+    }
+
+    It 'sees a task command where one is called (positive control)' {
+        @(Get-ReachedCommand 'Remove-UsaBannerWindowsOldInstall' | Where-Object { Test-TaskCommand $_ }) | Should -Contain 'Unregister-UsaBannerTask'
     }
 }
 

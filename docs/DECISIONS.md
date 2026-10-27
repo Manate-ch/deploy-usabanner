@@ -1713,6 +1713,20 @@ host deployed before 0.2.2 is cleaned at its next run. A line is that one
 when, trimmed, it reads the same in any case, as sshd reads the keyword and
 Windows the path; a Banner naming any other path is the admin's, and stays.
 
+**The old banner's tasks (2026-10-27).** On the same host, `Get-UsaBanner`
+said none of the old banner was there half an hour before the
+`Manatech MOTD sync` task its GPO makes put it back, at the task's midnight
+run: a refresh while the GPO still applied had very likely made the task
+again after the move off took it, and the check read files, folders and
+profiles, not tasks. Such a task also stays on a host after its GPO stops
+applying, unless the item says to remove it. Now each of the old banner's
+two tasks counts as the old banner, found by its definition file under
+`System32\Tasks`, not with `Get-ScheduledTask`, whose module PowerShell logs
+at each import (D30). So `Get-UsaBanner` names it, a deploy without
+`-ReplaceOldBanner` is refused while it is there, and the Group Policy
+runner deploys, which unregisters it. Only an administrator may read that
+folder: for anyone else no task is found.
+
 ## D24. A LICENSE
 
 **Decided: MIT**, with the same text as deploy-usawinssh ("Copyright (c)
@@ -2129,7 +2143,9 @@ Storage module names them.
   2026-10-26]. Only a deploy (its move-off too), a removal and
   `Get-UsaBanner` use them, and the runner deploys at most daily (E), so
   they stay. The Task Scheduler's COM object would avoid them, as CIM did
-  for the disks: for later.
+  for the disks: for later. The runner's due check looks for the old
+  banner's two tasks by their definition files (D23), so a policy refresh
+  still loads none of them.
 
 ## Appendix A. Art mock-ups (rough)
 

@@ -42,14 +42,19 @@ Describe 'Sync-UsaBanner.ps1' -Skip:$IsWindows {
         # script looks there without the module, which needs PowerShell 7, so these tests put things
         # where the module says, and a move in the module fails them.
         $savedProgramData = $env:ProgramData
+        $savedWindir = $env:windir
         try {
             $env:ProgramData = 'PROGRAMDATA'
+            $env:windir = 'WINDIR'
             $layout = & (Get-Module UsaBanner) { Get-UsaBannerWindowsLayout }
         }
-        finally { $env:ProgramData = $savedProgramData }
+        finally { $env:ProgramData = $savedProgramData; $env:windir = $savedWindir }
         $script:RecordInProgramData = [System.IO.Path]::GetRelativePath('PROGRAMDATA', [System.IO.Path]::Combine($layout.Data, 'deploy.json'))
         $script:OldBannerInProgramData = @($layout.Old | ForEach-Object { [System.IO.Path]::GetRelativePath('PROGRAMDATA', $_) })
         $script:OldBannerInProgramData.Count | Should -Be 2 -Because 'the old banner leaves a folder and an SSH banner file'
+        # And where the module finds the old banner's two tasks: their definition files, under the Windows folder.
+        $script:OldTasksInWindows = @(& (Get-Module UsaBanner) { $script:UsaOldTasks } | ForEach-Object { [System.IO.Path]::GetRelativePath('WINDIR', [System.IO.Path]::Combine($layout.TaskFolder, $_)) })
+        $script:OldTasksInWindows.Count | Should -Be 2 -Because 'the old banner has two tasks'
         Remove-Module UsaBanner
         $script:StubModule = @(
             'function Deploy-UsaBanner {'
@@ -96,7 +101,8 @@ Describe 'Sync-UsaBanner.ps1' -Skip:$IsWindows {
             #      beside it), Module, Package (the configuration file beside the module folder),
             #      SystemRoot, ProgramData, ProgramFiles, Log (where the script writes), Stamp (its
             #      record of the last deploy), BannerRecord (the banner's record, which the real deploy
-            #      writes), OldBanner (what the old banner leaves), Record (what the stand-in deploy was
+            #      writes), OldBanner (what the old banner leaves), OldTasks (the definition files of the
+            #      old banner's two tasks, where the module looks), Record (what the stand-in deploy was
             #      given), Args (how pwsh was started) and Wrapped (written by the stand-in pwsh.exe in
             #      Program Files)
             param([switch]$NoPathLookup, [string]$Netlogon = "net logon's copy")
@@ -130,6 +136,7 @@ Describe 'Sync-UsaBanner.ps1' -Skip:$IsWindows {
                 Stamp        = Join-Path $root 'Windows' 'Logs' 'UsaBanner' 'sync.stamp'
                 BannerRecord = Join-Path $programData $RecordInProgramData
                 OldBanner    = @($OldBannerInProgramData | ForEach-Object { Join-Path $programData $_ })
+                OldTasks     = @($OldTasksInWindows | ForEach-Object { Join-Path (Join-Path $root 'Windows') $_ })
                 Record       = Join-Path $root 'deploy-record.txt'
                 Args         = Join-Path $root 'pwsh-args.txt'
                 Wrapped      = Join-Path $root 'wrapped.txt'
@@ -315,6 +322,9 @@ Describe 'Sync-UsaBanner.ps1' -Skip:$IsWindows {
             @{ Case = 'the banner''s record is gone, as after Remove-UsaBanner'; Reason = 'the banner''s record is gone: {BannerRecord}'; Before = $null; Change = { param($c) Remove-Item -LiteralPath $c.BannerRecord } }
             @{ Case = 'the old banner''s folder is on the host'; Reason = 'the old banner is on this host: {Old0}'; Before = $null; Change = { param($c) $null = New-Item -ItemType Directory -Path $c.OldBanner[0] -Force } }
             @{ Case = 'the old banner''s SSH banner file is on the host'; Reason = 'the old banner is on this host: {Old1}'; Before = $null; Change = { param($c) $null = New-Item -ItemType File -Path $c.OldBanner[1] -Force } }
+            # A production host, 2026-10-27: the task the old banner's GPO made put it back at its midnight run; the
+            # task stays when the GPO stops applying.
+            @{ Case = 'only a task of the old banner''s is left, its definition file on the host'; Reason = 'the old banner is on this host: {Task1}'; Before = $null; Change = { param($c) $null = New-Item -ItemType File -Path $c.OldTasks[1] -Force } }
         ) {
             $c = New-SyncShare
             if ($Before) { & $Before $c }
@@ -324,7 +334,7 @@ Describe 'Sync-UsaBanner.ps1' -Skip:$IsWindows {
             $result = Invoke-SyncRunner $c
             $result.ExitCode | Should -Be 0 -Because ($result.Output -join "`n")
             @(Get-Content -LiteralPath $c.Record).Count | Should -Be 2 -Because 'the second refresh deploys too'
-            $why = $Reason.Replace('{Stamp}', $c.Stamp).Replace('{BannerRecord}', $c.BannerRecord).Replace('{Old0}', $c.OldBanner[0]).Replace('{Old1}', $c.OldBanner[1])
+            $why = $Reason.Replace('{Stamp}', $c.Stamp).Replace('{BannerRecord}', $c.BannerRecord).Replace('{Old0}', $c.OldBanner[0]).Replace('{Old1}', $c.OldBanner[1]).Replace('{Task1}', $c.OldTasks[1])
             @(Get-SyncLogMessage $c) | Should -Contain "sync from $($c.Module), package $($c.Package): $why"
         }
 
@@ -615,5 +625,12 @@ Describe 'Sync-UsaBanner.ps1 and SyncDeploy.ps1 as files for Windows PowerShell 
     It 'leaves nothing in Sync-UsaBanner.ps1, code or comments, that PowerShell logs as suspicious: a refresh with nothing to deploy adds nothing to its log' {
         $ast = [System.Management.Automation.Language.Parser]::ParseFile($RunnerSrc, [ref]$null, [ref]$null)
         $SuspiciousCheck.Invoke($null, @($ast)) | Should -BeNullOrEmpty
+    }
+
+    It 'has Sync-UsaBanner.ps1 import no module and call no command of the task scheduler''s, whose import PowerShell logs whole (D30): the old banner''s tasks are files to it' {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($RunnerSrc, [ref]$null, [ref]$null)
+        $names = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true) | ForEach-Object { $_.GetCommandName() })
+        $names | Should -Contain 'Join-Path' -Because 'the walk reads the script (else it proves nothing)'
+        @($names | Where-Object { $_ -like '*-ScheduledTask*' -or $_ -eq 'Import-Module' }) | Should -BeNullOrEmpty
     }
 }

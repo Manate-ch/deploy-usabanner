@@ -210,10 +210,10 @@ function Get-Record {
 function New-WindowsHost {
     # Out: the path of a new folder standing in for a Windows host: ProgramData with
     #      sshd_config, Program Files with PowerShell 7 and the modules folder, and Windows
-    #      with Windows PowerShell's folder and an admin's own all-users profile (CRLF, UTF-8
-    #      with a byte order mark)
+    #      with Windows PowerShell's folder, the task scheduler's folder of task definitions,
+    #      and an admin's own all-users profile (CRLF, UTF-8 with a byte order mark)
     $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
-    foreach ($folder in 'ProgramData/ssh', 'ProgramFiles/PowerShell/7', 'ProgramFiles/WindowsPowerShell/Modules', 'Windows/System32/WindowsPowerShell/v1.0') {
+    foreach ($folder in 'ProgramData/ssh', 'ProgramFiles/PowerShell/7', 'ProgramFiles/WindowsPowerShell/Modules', 'Windows/System32/WindowsPowerShell/v1.0', 'Windows/System32/Tasks') {
         $null = New-Item -ItemType Directory -Path (Join-Path $root $folder) -Force
     }
     [System.IO.File]::WriteAllText((Join-Path $root 'ProgramData/ssh/sshd_config'), $StockSshd)
@@ -234,6 +234,14 @@ function Get-WindowsHostState {
     "notice: $($global:UsaWinNotice.Exists) '$($global:UsaWinNotice.Caption)' '$($global:UsaWinNotice.Text)'"
     "default shell: '$global:UsaWinShell'"
     foreach ($name in @($global:UsaWinTasks.Keys | Sort-Object)) { "task ${name}: $($global:UsaWinTasks[$name].Execute) $($global:UsaWinTasks[$name].Arguments)" }
+}
+
+function Add-WindowsOldTask {
+    # In:  a task of the old banner's in the task scheduler's root folder: its name, arguments and schedule
+    # Out: nothing; the fake host has the task, and its definition file where the task scheduler keeps it
+    param([string]$Name, [string]$Arguments, [string]$Schedule)
+    $global:UsaWinTasks[$Name] = @{ Execute = 'powershell.exe'; Arguments = $Arguments; Schedule = $Schedule }
+    [System.IO.File]::WriteAllText("$global:UsaWinRoot/Windows/System32/Tasks/$Name", "<Task><Actions><Exec><Command>powershell.exe</Command></Exec></Actions></Task>`r`n")
 }
 
 function Set-WindowsMark {
@@ -316,7 +324,12 @@ function Use-WindowsHost {
         $global:UsaWinCalls.Add("task registered: $($Spec.Path)$($Spec.Name)")
         $global:UsaWinTasks[$Spec.Name] = @{ Execute = $Spec.Execute; Arguments = $Spec.Arguments; Schedule = $Spec.Schedule }
     }
-    Mock -ModuleName UsaBanner Unregister-UsaBannerTask { $global:UsaWinCalls.Add("task unregistered: $Name"); $global:UsaWinTasks.Remove($Name) }
+    # A task in the root folder has its definition file there (Add-WindowsOldTask), which goes with it.
+    Mock -ModuleName UsaBanner Unregister-UsaBannerTask {
+        $global:UsaWinCalls.Add("task unregistered: $Name")
+        $global:UsaWinTasks.Remove($Name)
+        if ($Path -eq '\') { [System.IO.File]::Delete("$global:UsaWinRoot/Windows/System32/Tasks/$Name") }
+    }
     Mock -ModuleName UsaBanner Start-UsaBannerTask {
         $global:UsaWinCalls.Add("task started: $Name")
         # As Update-UsaBannerSample does at its first run; it runs on until stopped.
