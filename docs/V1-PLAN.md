@@ -143,7 +143,7 @@ policy; the rest of this list follows it.
 - **PowerShell 7 installed where it is missing** (D18): interactively, the
   newest MSI, checked against the release's `hashes.sha256` and its
   signature; by policy, the MSI deploy-usawinssh stages (D21).
-- **`Enter-UsaPSSession`** (§3.8).
+- **`Enter-UsaPSSession`** (§3.8). Built on 2026-10-27 (D5).
 - **`Export-UsaBanner`:** the one-file JSON package (D12).
 - **`Deploy-UsaBannerGPO`:** one base policy and an OU table, a direct link
   for an OU that blocks inheritance (D13), and `-UpdatePoSHMSI`.

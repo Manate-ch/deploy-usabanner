@@ -417,16 +417,18 @@ The module's commands and every flag they take, from each command's own help, wh
   - [-Path](#-path), [-Company](#-company), [-Environment](#-environment), [-Role](#-role), [-BannerImage](#-bannerimage), [-Border](#-border), [-BorderChar](#-borderchar), [-BorderCap](#-bordercap), [-ColorPreset](#-colorpreset), [-ColorMode](#-colormode), [-Glyphs](#-glyphs), [-Legal](#-legal), [-LegalText](#-legaltext), [-Voice](#-voice), [-PreInit](#-preinit), [-PreLogon](#-prelogon), [-VlanFile](#-vlanfile), [-Services](#-services), [-Update](#-update), [-UpdateSource](#-updatesource), [-ReplaceOldBanner](#-replaceoldbanner), [-WhatIf](#-whatif), [-Confirm](#-confirm)
 - [Deploy-UsaBannerGPO](#deploy-usabannergpo): Makes the Group Policy that deploys the banners on the domain's Windows servers and Ubuntu hosts, and keeps them current.
   - [-Path](#-path-1), [-Company](#-company-1), [-Environment](#-environment-1), [-Role](#-role-1), [-BannerImage](#-bannerimage-1), [-Border](#-border-1), [-BorderChar](#-borderchar-1), [-BorderCap](#-bordercap-1), [-ColorPreset](#-colorpreset-1), [-ColorMode](#-colormode-1), [-Glyphs](#-glyphs-1), [-Legal](#-legal-1), [-LegalText](#-legaltext-1), [-Voice](#-voice-1), [-PreInit](#-preinit-1), [-PreLogon](#-prelogon-1), [-VlanFile](#-vlanfile-1), [-Services](#-services-1), [-Update](#-update-1), [-UpdateSource](#-updatesource-1), [-Name](#-name), [-LinkTarget](#-linktarget), [-Domain](#-domain), [-WhatIf](#-whatif-1), [-Confirm](#-confirm-1)
+- [Enter-UsaPSSession](#enter-usapssession): Enters a PowerShell session on a host, with the host's banner after login printed first.
+  - [-ComputerName](#-computername), [-Credential](#-credential), [-Port](#-port), [-UseSSL](#-usessl), [-ConfigurationName](#-configurationname), [-Authentication](#-authentication), [-SessionOption](#-sessionoption), [-HostName](#-hostname), [-UserName](#-username), [-KeyFilePath](#-keyfilepath), [-Subsystem](#-subsystem), [-ConnectingTimeout](#-connectingtimeout), [-Options](#-options), [-Session](#-session), [-ColorMode](#-colormode-2), [-Glyphs](#-glyphs-2)
 - [Get-UsaBanner](#get-usabanner): Shows the banners Deploy-UsaBanner put on this host, and whether each part of them is in place.
   - [-Moment](#-moment)
 - [New-UsaBannerArt](#new-usabannerart): Turns an image into banner art: plain ASCII characters, with a colour for each part where the terminal has colour.
-  - [-Path](#-path-2), [-Width](#-width), [-Height](#-height), [-Colors](#-colors), [-Background](#-background), [-Fill](#-fill), [-Style](#-style), [-ColorMode](#-colormode-2), [-OutFile](#-outfile), [-Force](#-force), [-Title](#-title), [-Artist](#-artist), [-Licence](#-licence), [-Source](#-source)
+  - [-Path](#-path-2), [-Width](#-width), [-Height](#-height), [-Colors](#-colors), [-Background](#-background), [-Fill](#-fill), [-Style](#-style), [-ColorMode](#-colormode-3), [-OutFile](#-outfile), [-Force](#-force), [-Title](#-title), [-Artist](#-artist), [-Licence](#-licence), [-Source](#-source)
 - [Remove-UsaBanner](#remove-usabanner): Takes this host's banners off, and leaves the host as it was before Deploy-UsaBanner.
   - [-WhatIf](#-whatif-2), [-Confirm](#-confirm-2)
 - [Show-UsaBanner](#show-usabanner): Draws one of this host's banners, as a configuration sets it.
-  - [-Moment](#-moment-1), [-Path](#-path-3), [-Facts](#-facts), [-Os](#-os), [-ColorMode](#-colormode-3), [-Glyphs](#-glyphs-2)
+  - [-Moment](#-moment-1), [-Path](#-path-3), [-Facts](#-facts), [-Os](#-os), [-ColorMode](#-colormode-4), [-Glyphs](#-glyphs-3)
 - [Show-UsaBannerArt](#show-usabannerart): Draws one of the module's pieces of art, an art file, or a name in block letters, in colour where the terminal has it; or lists the art there is.
-  - [-Name](#-name-1), [-ColorMode](#-colormode-4), [-Os](#-os-1), [-Text](#-text), [-Font](#-font), [-Path](#-path-4), [-List](#-list)
+  - [-Name](#-name-1), [-ColorMode](#-colormode-5), [-Os](#-os-1), [-Text](#-text), [-Font](#-font), [-Path](#-path-4), [-List](#-list)
 
 ### Deploy-UsaBanner
 
@@ -1472,6 +1474,345 @@ Aliases: cf
 Required: False
 Position: Named
 Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### CommonParameters
+
+This command takes the common parameters too, such as -Verbose and -ErrorAction: `Get-Help about_CommonParameters` says what each does.
+
+### Enter-UsaPSSession
+
+Enters a PowerShell session on a host, with the host's banner after login
+printed first.
+
+#### Syntax
+
+**ComputerName (Default)**
+
+```
+Enter-UsaPSSession [-ComputerName] <string> [-Credential <pscredential>] [-Port <int>] [-UseSSL] [-ConfigurationName <string>] [-Authentication <AuthenticationMechanism>] [-SessionOption <PSSessionOption>] [-ColorMode <string>] [-Glyphs <string>] [<CommonParameters>]
+```
+
+**SSHHost**
+
+```
+Enter-UsaPSSession -HostName <string> [-Port <int>] [-UserName <string>] [-KeyFilePath <string>] [-Subsystem <string>] [-ConnectingTimeout <int>] [-Options <hashtable>] [-ColorMode <string>] [-Glyphs <string>] [<CommonParameters>]
+```
+
+**Session**
+
+```
+Enter-UsaPSSession [-Session] <PSSession> [-ColorMode <string>] [-Glyphs <string>] [<CommonParameters>]
+```
+
+#### Description
+
+PowerShell remoting runs no profile, and over SSH a session carries only
+PowerShell's own traffic, so no remote session shows the banner after
+login by itself. This command opens the session, has the host draw that
+banner over it as the host's own logins draw it, prints the lines here,
+where this terminal draws the colours, then enters the session.
+
+The host draws with Get-UsaBanner -Moment PostLogon, so UsaBanner must be
+deployed there: on Windows, the banner the profile block shows at an SSH
+login; on Ubuntu, the one pam\_motd shows. A host with no banner, or a draw
+that fails, gives one warning, and the session is entered all the same.
+
+-ColorMode and -Glyphs say what this terminal draws, as USABANNER\_COLOR
+and USABANNER\_GLYPHS do in a user's environment, and default to those two
+here. The host draws with them set and puts its own back after. A Windows
+host's banner follows them; an Ubuntu host's is the one its logins show,
+drawn at deploy.
+
+-HostName opens the session over SSH, -ComputerName over WinRM, with the
+parameters New-PSSession takes for each; -Session uses one already open.
+A session this command opens stays open after Exit-PSSession, as one from
+New-PSSession does: Remove-PSSession closes it.
+
+The command runs in the PowerShell that calls it, as a session can only be
+entered there. Under Windows PowerShell 5.1 it enters over WinRM, and
+-HostName, which needs PowerShell 7, is refused.
+
+#### Examples
+
+**Example 1**
+
+```powershell
+Enter-UsaPSSession -HostName h-vsw-app1.ad.example -UserName admin@ad.example
+```
+
+**Example 2**
+
+```powershell
+Enter-UsaPSSession h-vsw-app1.ad.example -ColorMode 16
+```
+
+**Example 3**
+
+```powershell
+Enter-UsaPSSession -Session (New-PSSession -HostName h-vsw-app1.ad.example)
+```
+
+#### Parameters
+
+##### -ComputerName
+
+The host to reach over WinRM.
+
+```yaml
+Type: String
+Parameter Sets: ComputerName
+Aliases:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -Credential
+
+The account for WinRM; the one running this command by default.
+
+```yaml
+Type: PSCredential
+Parameter Sets: ComputerName
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -Port
+
+The port: WinRM's, or SSH's; New-PSSession's own by default.
+
+```yaml
+Type: Int32
+Parameter Sets: ComputerName, SSHHost
+Aliases:
+
+Required: False
+Position: Named
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -UseSSL
+
+WinRM over HTTPS.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: ComputerName
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -ConfigurationName
+
+The WinRM endpoint on the host, such as PowerShell.7; Windows
+PowerShell's by default.
+
+```yaml
+Type: String
+Parameter Sets: ComputerName
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -Authentication
+
+The WinRM authentication mechanism.
+
+```yaml
+Type: AuthenticationMechanism
+Parameter Sets: ComputerName
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -SessionOption
+
+WinRM session options, from New-PSSessionOption.
+
+```yaml
+Type: PSSessionOption
+Parameter Sets: ComputerName
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -HostName
+
+The host to reach over SSH, in PowerShell 7.
+
+```yaml
+Type: String
+Parameter Sets: SSHHost
+Aliases:
+
+Required: True
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -UserName
+
+The SSH user.
+
+```yaml
+Type: String
+Parameter Sets: SSHHost
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -KeyFilePath
+
+The SSH private key file.
+
+```yaml
+Type: String
+Parameter Sets: SSHHost
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -Subsystem
+
+The SSH subsystem PowerShell runs as on the host; powershell by default.
+
+```yaml
+Type: String
+Parameter Sets: SSHHost
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -ConnectingTimeout
+
+How long the SSH connection may take to open, in milliseconds;
+New-PSSession's own limit by default.
+
+```yaml
+Type: Int32
+Parameter Sets: SSHHost
+Aliases:
+
+Required: False
+Position: Named
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -Options
+
+SSH options, as a hashtable, as New-PSSession takes them.
+
+```yaml
+Type: Hashtable
+Parameter Sets: SSHHost
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -Session
+
+A session already open, from New-PSSession.
+
+```yaml
+Type: PSSession
+Parameter Sets: Session
+Aliases:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -ColorMode
+
+The colours this terminal draws: truecolor, 256, 16 or none.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+Accepted values: truecolor, 256, 16, none
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -Glyphs
+
+Whether this terminal draws Unicode: unicode or ascii.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+Accepted values: unicode, ascii
+
+Required: False
+Position: Named
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

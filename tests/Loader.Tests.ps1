@@ -12,7 +12,11 @@ BeforeDiscovery {
             @{ File = [System.IO.Path]::GetRelativePath($moduleRoot, $f.FullName) }
         }
     )
-    $publicFiles = @(foreach ($f in Get-ChildItem -LiteralPath (Join-Path $moduleRoot 'Public') -Filter '*.ps1' -File) { @{ File = $f.Name } })
+    # Every command but Enter-UsaPSSession hands itself to pwsh under 5.1: a session is entered only in the
+    # PowerShell that asks, so that one runs where it is called (its own test below).
+    $publicFiles = @(foreach ($f in Get-ChildItem -LiteralPath (Join-Path $moduleRoot 'Public') -Filter '*.ps1' -File) {
+            if ($f.Name -ne 'Enter-UsaPSSession.ps1') { @{ File = $f.Name } }
+        })
     # Every file the module loads: each is one script to PowerShell, which logs it whole at each import
     # when its suspicious-content check flags it (D30).
     $loadedFiles = @(
@@ -91,6 +95,23 @@ Describe 'the module' {
             if ($null -eq $block) { continue }
             $block.Statements[0].Extent.Text | Should -BeExactly 'if ($handedOff) { return }'
         }
+    }
+
+    It 'has Enter-UsaPSSession run where it is called, calling nothing of the module there but the version check' {
+        # Under Windows PowerShell 5.1 the module's Private\ is not loaded, so whatever this command runs here
+        # must be PowerShell's own; the block it sends runs on the host, under the host's PowerShell.
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $moduleRoot 'Public' 'Enter-UsaPSSession.ps1'), [ref]$null, [ref]$null)
+        $function = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $false)
+        $function.Body.BeginBlock.Statements[0].Extent.Text | Should -BeExactly '$windowsPowerShell = Test-UsaBannerHandoff'
+        $invoke = $function.Find({ param($node) $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Invoke-Command' }, $true)
+        $elements = @($invoke.CommandElements)
+        $at = @(for ($i = 0; $i -lt $elements.Count; $i++) { if ($elements[$i] -is [System.Management.Automation.Language.CommandParameterAst] -and $elements[$i].ParameterName -eq 'ScriptBlock') { $i } })
+        $sent = $elements[$at[0] + 1].Extent
+        $commands = @($function.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
+        $local = @($commands | Where-Object { $_.Extent.StartOffset -lt $sent.StartOffset -or $_.Extent.StartOffset -ge $sent.EndOffset } | ForEach-Object { $_.GetCommandName() } | Sort-Object -Unique)
+        $there = @($commands | Where-Object { $_.Extent.StartOffset -ge $sent.StartOffset -and $_.Extent.StartOffset -lt $sent.EndOffset } | ForEach-Object { $_.GetCommandName() } | Sort-Object -Unique)
+        $local | Should -Be @('Enter-PSSession', 'ForEach-Object', 'Invoke-Command', 'New-PSSession', 'Out-Host', 'Test-UsaBannerHandoff', 'Write-Warning')
+        $there | Should -Be @('Get-UsaBanner', 'Import-Module')
     }
 }
 
