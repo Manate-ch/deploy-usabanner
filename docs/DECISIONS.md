@@ -1700,6 +1700,19 @@ came back over this one, as its GPO puts it back at the next boot, the
 record still holds them: they stay off, and `Remove-UsaBanner` turns them
 back on as the record has them.
 
+**The prototype banner's line (2026-10-27).** On the first production host
+the move off ran on, `sshd_config` held the line of a third banner,
+`Banner C:\ProgramData\ssh\banner.txt`, from a banner set up by hand before
+`Install-ManatechBanner.ps1`. A Group Policy's copy of `sshd_config` carried
+that line to every server, whether the banner was there or not. The deploy
+turned it off behind its note, and `Remove-UsaBanner` would turn it back on,
+pointing at a file most hosts never had. The move off now takes that exact
+line out, whether it is on, behind this banner's note, or behind the old
+banner's, in the same write, copy and `sshd -t` as the old banner's line: a
+host deployed before 0.2.2 is cleaned at its next run. A line is that one
+when, trimmed, it reads the same in any case, as sshd reads the keyword and
+Windows the path; a Banner naming any other path is the admin's, and stays.
+
 ## D24. A LICENSE
 
 **Decided: MIT**, with the same text as deploy-usawinssh ("Copyright (c)

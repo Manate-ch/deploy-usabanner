@@ -118,6 +118,15 @@ BeforeAll {
         $sshd = Join-Path $Root 'ProgramData/ssh/sshd_config'
         [System.IO.File]::WriteAllText($sshd, [System.IO.File]::ReadAllText($sshd).Replace("#Port 22`r`n", "#Port 22`r`nBanner __PROGRAMDATA__/ssh/contoso.txt`r`n"))
     }
+
+    function Add-PrototypeLine {
+        # In:  the host folder
+        # Out: nothing; sshd_config has the prototype banner's Banner line above the first Match, as a Group
+        #      Policy's copy of sshd_config carried it to servers (a production host, 2026-10-27)
+        param([string]$Root)
+        $sshd = Join-Path $Root 'ProgramData/ssh/sshd_config'
+        [System.IO.File]::WriteAllText($sshd, [System.IO.File]::ReadAllText($sshd).Replace("#Port 22`r`n", "#Port 22`r`nBanner C:\ProgramData\ssh\banner.txt`r`n"))
+    }
 }
 
 AfterAll {
@@ -469,6 +478,58 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Windows Server' {
         $global:UsaWinCalls | Should -BeNullOrEmpty
     }
 
+    It 'takes the prototype banner''s Banner line out before it puts its own in, so it turns nothing off behind a note' {
+        Add-PrototypeLine $Root
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner)
+        $lines | Should -Contain "took the prototype banner's Banner line out of $Root/ProgramData/ssh/sshd_config: Banner C:\ProgramData\ssh\banner.txt"
+        $sshd = [System.IO.File]::ReadAllText((Join-Path $Root 'ProgramData/ssh/sshd_config'))
+        $sshd | Should -Not -Match ([regex]::Escape('C:\ProgramData\ssh\banner.txt'))
+        $sshd | Should -Not -Match 'Turned off by Deploy-UsaBanner'
+        $sshd | Should -Match '(?m)^Banner __PROGRAMDATA__/UsagiTools/Banner/sshd-banner\.txt\r$'
+        Join-Path $Root 'ProgramData/ssh/sshd_config.usabanner-bak' | Should -Not -Exist
+    }
+
+    It 'takes out the note a deploy before 0.2.2 turned the prototype banner''s line off behind, so Remove-UsaBanner turns nothing back on' {
+        Add-PrototypeLine $Root
+        $config = Join-Path $Root 'ProgramData/ssh/sshd_config'
+        $null = Deploy-UsaBanner -Company Contoso
+        [System.IO.File]::ReadAllText($config) | Should -Match ([regex]::Escape('# Turned off by Deploy-UsaBanner, which put its own Banner above: Banner C:\ProgramData\ssh\banner.txt'))
+        @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner) | Should -Be @("took the prototype banner's Banner line out of $config`: Banner C:\ProgramData\ssh\banner.txt")
+        [System.IO.File]::ReadAllText($config) | Should -Not -Match ([regex]::Escape('C:\ProgramData\ssh\banner.txt'))
+        $null = Remove-UsaBanner
+        @([System.IO.File]::ReadAllLines($config) | Where-Object { $_ -match '^\s*Banner\s' }) | Should -BeNullOrEmpty
+    }
+
+    It 'takes both out in one write where the old banner turned the prototype banner''s line off behind its note' {
+        Add-PrototypeLine $Root
+        Add-OldWindowsBanner $Root
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningAction SilentlyContinue)
+        $lines | Should -Contain "took the old banner's Banner line out of $Root/ProgramData/ssh/sshd_config"
+        $lines | Should -Contain "took the prototype banner's Banner line out of $Root/ProgramData/ssh/sshd_config: Banner C:\ProgramData\ssh\banner.txt"
+        @($global:UsaWinCalls | Where-Object { $_ -eq 'C:\Windows\System32\OpenSSH\sshd.exe -t' }).Count | Should -Be 2 -Because 'one sshd -t for the move off, one for the deploy''s own line'
+        $sshd = [System.IO.File]::ReadAllText((Join-Path $Root 'ProgramData/ssh/sshd_config'))
+        $sshd | Should -Not -Match ([regex]::Escape('C:\ProgramData\ssh\banner.txt'))
+        $sshd | Should -Not -Match 'manatech|Turned off by Deploy-UsaBanner'
+    }
+
+    It 'says under -WhatIf that it would take the prototype banner''s Banner line out' {
+        Add-PrototypeLine $Root
+        $transcript = Join-Path $TestDrive "whatif-$([guid]::NewGuid().ToString('n')).txt"
+        $null = Start-Transcript -LiteralPath $transcript
+        try { $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WhatIf }
+        finally { $null = Stop-Transcript }
+        @(Get-Content -LiteralPath $transcript | Where-Object { $_ -like 'What if: *' }) | Should -Contain "What if: Performing the operation `"Take out the prototype banner's Banner line: Banner C:\ProgramData\ssh\banner.txt`" on target `"$Root/ProgramData/ssh/sshd_config`"."
+    }
+
+    It 'puts sshd_config back when sshd -t refuses it without the prototype banner''s line, and says so' {
+        Use-WindowsHost $Root @{ 'C:\Windows\System32\OpenSSH\sshd.exe -t' = @{ ExitCode = 1; Output = @('Bad configuration option') } }
+        Add-PrototypeLine $Root
+        $kept = [System.IO.File]::ReadAllText((Join-Path $Root 'ProgramData/ssh/sshd_config'))
+        $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue
+        [System.IO.File]::ReadAllText((Join-Path $Root 'ProgramData/ssh/sshd_config')) | Should -BeExactly $kept
+        "$warned" | Should -BeLike "*sshd -t refused sshd_config without the prototype banner's Banner line, so it is put back*"
+    }
+
     It 'puts sshd_config back when sshd -t refuses it without the old banner''s line, and says so' {
         Use-WindowsHost $Root @{ 'C:\Windows\System32\OpenSSH\sshd.exe -t' = @{ ExitCode = 1; Output = @('Bad configuration option') } }
         Add-OldWindowsBanner $Root
@@ -651,6 +712,34 @@ Describe 'Remove-UsaBannerOldSshdBannerLine' {
 
     It 'leaves a file without the old banner''s line as it is, a Banner inside a Match block included' {
         $lines = @('#Port 22', 'Match Group administrators', '  Banner __PROGRAMDATA__/ssh/admins.txt', '')
+        $result = InModuleScope UsaBanner -Parameters @{ Lines = $lines } { param($Lines) Remove-UsaBannerOldSshdBannerLine -Lines $Lines }
+        $result.Lines | Should -Be $lines
+        $result.Changed | Should -BeFalse
+    }
+
+    It 'takes out the prototype banner''s line <Case>' -ForEach @(
+        @{ Case = 'where it is on'; FromOld = $false
+            Lines = @('#Port 22', 'Banner C:\ProgramData\ssh\banner.txt', 'Subsystem sftp sftp-server.exe', '') }
+        @{ Case = 'behind the note a deploy before 0.2.2 turned it off behind'; FromOld = $false
+            Lines = @('#Port 22', '# Turned off by Deploy-UsaBanner, which put its own Banner above: Banner C:\ProgramData\ssh\banner.txt', 'Subsystem sftp sftp-server.exe', '') }
+        @{ Case = 'behind the old banner''s note, which it does not turn back on'; FromOld = $true
+            Lines = @('#Port 22', '# replaced by Install-ManatechBanner.ps1 on 2026-09-02: Banner C:\ProgramData\ssh\banner.txt', 'Subsystem sftp sftp-server.exe', 'Banner __PROGRAMDATA__/ssh/manatech-banner.txt', '', '') }
+        @{ Case = 'trimmed, in any case'; FromOld = $false
+            Lines = @('#Port 22', '  banner c:\programdata\ssh\BANNER.TXT  ', 'Subsystem sftp sftp-server.exe', '') }
+    ) {
+        $result = InModuleScope UsaBanner -Parameters @{ Lines = $Lines } { param($Lines) Remove-UsaBannerOldSshdBannerLine -Lines $Lines }
+        $result.Lines | Should -Be @('#Port 22', 'Subsystem sftp sftp-server.exe', '')
+        $result.Prototype | Should -BeTrue
+        $result.Old | Should -Be $FromOld
+        $result.Changed | Should -BeTrue
+    }
+
+    It 'leaves a Banner naming another path, or the same one written another way: <Case>' -ForEach @(
+        @{ Case = 'another file'; Line = 'Banner C:\ProgramData\ssh\other.txt' }
+        @{ Case = 'forward slashes'; Line = 'Banner C:/ProgramData/ssh/banner.txt' }
+        @{ Case = 'ProgramData by the name sshd gives it'; Line = 'Banner __PROGRAMDATA__/ssh/banner.txt' }
+    ) {
+        $lines = @('#Port 22', $Line, '')
         $result = InModuleScope UsaBanner -Parameters @{ Lines = $lines } { param($Lines) Remove-UsaBannerOldSshdBannerLine -Lines $Lines }
         $result.Lines | Should -Be $lines
         $result.Changed | Should -BeFalse

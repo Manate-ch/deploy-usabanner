@@ -18,9 +18,10 @@
 #   |                | one up)                                                |
 #   | Windows Server | its tasks; its block in both all-users profiles; its   |
 #   |                | Banner line in sshd_config, with each Banner it turned |
-#   |                | off back on, checked with sshd -t; its SSH banner      |
-#   |                | file; the git clone its update task pulled into; its   |
-#   |                | folder                                                 |
+#   |                | off back on, and the prototype banner's line (on, or   |
+#   |                | behind this banner's note), checked with sshd -t; its  |
+#   |                | SSH banner file; the git clone its update task pulled  |
+#   |                | into; its folder                                       |
 #   +----------------+--------------------------------------------------------+
 #
 # The old banner kept no record, so what it changed comes back as the OS ships
@@ -70,6 +71,11 @@ $script:UsaOldProfileBegin = '# >>> Manatech banner (Install-ManatechBanner.ps1)
 $script:UsaOldProfileEnd = '# <<< Manatech banner <<<'
 $script:UsaOldSshdEntry = 'Banner __PROGRAMDATA__/ssh/manatech-banner.txt'
 $script:UsaOldSshdNote = '^# replaced by Install-ManatechBanner\.ps1 on \d{4}-\d{2}-\d{2}: (.*)$'
+# The prototype banner's Banner line: a banner set up by hand before
+# Install-ManatechBanner.ps1, whose line a Group Policy's copy of sshd_config
+# carried to servers that never had that banner. A deploy before 0.2.2 turned
+# it off behind its note, which Remove-UsaBanner would turn back on.
+$script:UsaPrototypeSshdEntry = 'Banner C:\ProgramData\ssh\banner.txt'
 # Its tasks, in the task scheduler's root folder: its own update task, and the
 # one the "Manatech MOTD" GPO makes.
 $script:UsaOldTasks = @('Manatech banner update', 'Manatech MOTD sync')
@@ -241,32 +247,45 @@ function Test-UsaBannerOldAdsysPolicy {
 function Remove-UsaBannerOldSshdBannerLine {
     <#
     .SYNOPSIS
-    sshd_config's lines without the old banner's Banner line.
+    sshd_config's lines without the old banner's Banner line, or the
+    prototype banner's.
     .DESCRIPTION
-    Out: @{ Lines; Changed }: Install-ManatechBanner.ps1's Banner line taken
-         out, with the blank line it always put after it, and each Banner it
-         turned off ("# replaced by Install-ManatechBanner.ps1 on <date>: ")
-         back as it was.
+    Out: @{ Lines; Changed; Old; Prototype }. Old: Install-ManatechBanner.ps1's
+         Banner line taken out, with the blank line it always put after it,
+         and each Banner it turned off ("# replaced by
+         Install-ManatechBanner.ps1 on <date>: ") back as it was. Prototype:
+         the prototype banner's line taken out, whether it is on, behind this
+         banner's note, or behind the old banner's. A line is the prototype's
+         when, trimmed, it is that line in any case, as sshd reads the keyword
+         and Windows the path; one naming another path stays. Changed: either.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param([AllowEmptyCollection()][string[]]$Lines = @())
     $new = [System.Collections.Generic.List[string]]::new()
-    $changed = $false
+    $old = $false
+    $prototype = $false
     for ($i = 0; $i -lt $Lines.Count; $i++) {
         if ($Lines[$i].Trim() -eq $script:UsaOldSshdEntry) {
-            $changed = $true
+            $old = $true
             if ($i + 1 -lt $Lines.Count -and $Lines[$i + 1] -eq '') { $i++ }
             continue
         }
         if ($Lines[$i] -match $script:UsaOldSshdNote) {
-            $new.Add($Matches[1])
-            $changed = $true
+            $old = $true
+            if ($Matches[1].Trim() -eq $script:UsaPrototypeSshdEntry) { $prototype = $true }
+            else { $new.Add($Matches[1]) }
+            continue
+        }
+        $line = $Lines[$i]
+        if ($line.StartsWith($script:UsaSshdNote)) { $line = $line.Substring($script:UsaSshdNote.Length) }
+        if ($line.Trim() -eq $script:UsaPrototypeSshdEntry) {
+            $prototype = $true
             continue
         }
         $new.Add($Lines[$i])
     }
-    @{ Lines = $new.ToArray(); Changed = $changed }
+    @{ Lines = $new.ToArray(); Changed = $old -or $prototype; Old = $old; Prototype = $prototype }
 }
 
 function Remove-UsaBannerWindowsOldInstall {
@@ -280,8 +299,9 @@ function Remove-UsaBannerWindowsOldInstall {
          PowerShell says each change instead, and nothing changes.
     Its tasks go first, so they install nothing more while it goes. Then its
     block in both all-users profiles; its Banner line in sshd_config, with
-    each Banner it turned off back on (sshd -t checks the file, and one it
-    refuses is put back; sshd is not restarted); its SSH banner file; the git
+    each Banner it turned off back on, and the prototype banner's line, in one
+    write (sshd -t checks the file, and one it refuses is put back; sshd is
+    not restarted); its SSH banner file; the git
     clone its update task pulled into, which the task names, so it is read
     before the task goes (the README puts the clone in the old banner's
     folder); its folder. The task a Group Policy makes comes back at the
@@ -315,7 +335,11 @@ function Remove-UsaBannerWindowsOldInstall {
         $file = Read-UsaBannerWindowsText -Path $Layout.SshdConfig
         $eol = if ($file.Text -match "`r`n") { "`r`n" } else { "`n" }
         $result = Remove-UsaBannerOldSshdBannerLine -Lines @($file.Text -split "\r?\n")
-        if ($result.Changed -and $PSCmdlet.ShouldProcess($Layout.SshdConfig, 'Take out the old banner''s Banner line, and turn back on any Banner it turned off')) {
+        $actions = @(
+            if ($result.Old) { 'Take out the old banner''s Banner line, and turn back on any Banner it turned off' }
+            if ($result.Prototype) { "Take out the prototype banner's Banner line: $script:UsaPrototypeSshdEntry" }
+        )
+        if ($result.Changed -and $PSCmdlet.ShouldProcess($Layout.SshdConfig, ($actions -join '; '))) {
             $backup = "$($Layout.SshdConfig).usabanner-bak"
             [System.IO.File]::Copy($Layout.SshdConfig, $backup, $true)
             [System.IO.File]::WriteAllBytes($Layout.SshdConfig, (ConvertTo-UsaBannerWindowsBytes -Text ($result.Lines -join $eol) -Encoding $file.Encoding))
@@ -323,11 +347,16 @@ function Remove-UsaBannerWindowsOldInstall {
             $test = if ($sshd) { Invoke-UsaBannerNative -FilePath $sshd -ArgumentList '-t' } else { @{ ExitCode = 0; Output = @() } }
             if ($test.ExitCode -ne 0) {
                 [System.IO.File]::Copy($backup, $Layout.SshdConfig, $true)
-                Write-Warning "UsaBanner: sshd -t refused sshd_config without the old banner's Banner line, so it is put back: $(@($test.Output) -join ' ')"
+                $without = @(
+                    if ($result.Old) { 'the old banner''s Banner line' }
+                    if ($result.Prototype) { 'the prototype banner''s Banner line' }
+                ) -join ' and '
+                Write-Warning "UsaBanner: sshd -t refused sshd_config without $without, so it is put back: $(@($test.Output) -join ' ')"
             }
             else {
                 [System.IO.File]::Delete($backup)
-                "took the old banner's Banner line out of $($Layout.SshdConfig)"
+                if ($result.Old) { "took the old banner's Banner line out of $($Layout.SshdConfig)" }
+                if ($result.Prototype) { "took the prototype banner's Banner line out of $($Layout.SshdConfig): $script:UsaPrototypeSshdEntry" }
             }
         }
     }
