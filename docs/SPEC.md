@@ -159,7 +159,30 @@ Lists the monitored services. Given a service name, returns `$true` or
 ### 3.8 Enter-UsaPSSession
 
 The proper cmdlet for entering a session with the banner's formatting
-(today's `Enter-ManatechPSSession`).
+(today's `Enter-ManatechPSSession`). Built on 2026-10-27 (D5): PowerShell
+remoting runs no profile, and over SSH a session carries only PowerShell's
+own traffic, so no remote session shows the banner after login by itself.
+
+- **Opens** the session as `New-PSSession` does, with its parameters for
+  each transport: `-HostName` over SSH (`-UserName`, `-Port`,
+  `-KeyFilePath`, `-Subsystem`, `-ConnectingTimeout`, `-Options`),
+  `-ComputerName` over WinRM (`-Credential`, `-Port`, `-UseSSL`,
+  `-ConfigurationName`, `-Authentication`, `-SessionOption`); or takes one
+  already open, `-Session`.
+- **Has the host draw** its banner after login over that session,
+  `Get-UsaBanner -Moment PostLogon`, as its own logins draw it, and prints
+  the lines here, colour escapes and all, where this terminal draws them.
+- **Warns once** when the host gives none, `no banner from <host>: <why>`,
+  and enters all the same.
+- **Enters** the session. One it opened stays open after `Exit-PSSession`,
+  as one from `New-PSSession` does.
+
+`-ColorMode` and `-Glyphs` say what this terminal draws, and default to
+`USABANNER_COLOR` and `USABANNER_GLYPHS` here (D7's per-user override). A
+Windows host draws with them; an Ubuntu host shows the banner its logins
+show. The command runs in the PowerShell that calls it, as a session can
+only be entered there: Windows PowerShell 5.1 enters over WinRM, and is
+refused `-HostName`, which needs PowerShell 7.
 
 ### 3.9 New-UsaBannerArt
 

@@ -22,7 +22,9 @@
 # log (docs/DECISIONS.md, D30). tests\Loader.Tests.ps1 holds the module to it.
 #
 # Under 5.1, each command's begin {} block hands the call to pwsh
-# (Bootstrap\Handoff.ps1), and its other blocks then do nothing.
+# (Bootstrap\Handoff.ps1), and its other blocks then do nothing. The one
+# exception is Enter-UsaPSSession, which runs where it is called: a session
+# can only be entered in the PowerShell that asks for it.
 # tests\Loader.Tests.ps1 holds the first three rows to 5.1 syntax, with
 # PSScriptAnalyzer's PSUseCompatibleSyntax rule.
 

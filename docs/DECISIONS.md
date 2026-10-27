@@ -500,6 +500,33 @@ moment where this table says:
   so: a policy would set its own again at its next refresh anyway. Removal
   puts back what was there before.
 
+**Over PowerShell remoting (2026-10-27).** No remoting session shows the
+banner after login. PowerShell remoting runs no profile, so the profile
+block never runs, and over SSH the session's channel carries PowerShell's
+remoting traffic only [known; seen on a host moved off today's banner,
+2026-10-27]. `Enter-UsaPSSession` (§3.8) shows it from the client's side, as
+today's `Enter-ManatechPSSession` does:
+- **One session.** It opens the session with `New-PSSession`'s own
+  parameters for SSH or WinRM, or takes one already open, has the host draw
+  over it, prints the lines here, then enters that same session. A host that
+  gives no banner gets one warning, `no banner from <host>: <why>`, and the
+  session is entered all the same: the banner never keeps anyone out.
+- **The host draws its own**, with `Get-UsaBanner -Moment PostLogon`: the
+  banner its own logins show, from its own configuration, which the client
+  never needs.
+- **The client's terminal sets the look**, as today: `-ColorMode` and
+  `-Glyphs`, defaulting to the client's `USABANNER_COLOR` and
+  `USABANNER_GLYPHS` (D7's third layer), are set on the host for the draw and
+  put back after. A Windows host draws with them. An Ubuntu host's banner
+  after login is drawn at deploy (D2), so it shows as its logins show it.
+- **It runs where it is called**, the one command that does not hand itself
+  to pwsh under Windows PowerShell 5.1: a session can only be entered in the
+  PowerShell that asks for it. 5.1 opens it over WinRM; `-HostName`, which
+  needs PowerShell 7's remoting over SSH, is refused with what to run.
+- **The session it opens stays open** after `Exit-PSSession`, as one from
+  `New-PSSession` does; `Remove-PSSession` closes it.
+- Today's `-Color` is `-ColorMode`, as in the module's other commands.
+
 ## D6. Border and corner sets
 
 Pre-login banners must be plain ASCII (characters 32-126): an SSH client
