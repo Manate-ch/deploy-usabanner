@@ -245,6 +245,8 @@ function Use-WindowsHost {
     $global:UsaWinRoot = $Root
     $global:UsaWinCalls = [System.Collections.Generic.List[string]]::new()
     $global:UsaWinAnswers = $Answers
+    # What a test has a program's call do to the host as well, given the program and its arguments; none here.
+    $global:UsaWinOnCall = $null
     $global:UsaWinNotice = @{ Caption = ''; Text = ''; Exists = $true }
     # OpenSSH's DefaultShell; '' for none set, which is cmd.exe.
     $global:UsaWinShell = 'C:\Program Files\PowerShell\7\pwsh.exe'
@@ -308,6 +310,7 @@ function Use-WindowsHost {
     Mock -ModuleName UsaBanner Invoke-UsaBannerNative {
         $call = (@($FilePath) + @($ArgumentList)) -join ' '
         $global:UsaWinCalls.Add($call)
+        if ($global:UsaWinOnCall) { & $global:UsaWinOnCall $FilePath @($ArgumentList) }
         if ($global:UsaWinAnswers.ContainsKey($call)) { return $global:UsaWinAnswers[$call] }
         if ($FilePath -eq 'icacls.exe' -and $ArgumentList -contains '/inheritance:r') {
             if ($ArgumentList[0] -eq "$global:UsaWinRoot/ProgramData/UsagiTools") { $global:UsaWinParentAcl = $true }

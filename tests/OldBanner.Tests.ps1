@@ -122,7 +122,7 @@ BeforeAll {
 
 AfterAll {
     Remove-Variable -Name UsaDeployCalls, UsaDeployAnswers, UsaDeployUnits, UsaDeployRoot -Scope Global -ErrorAction SilentlyContinue
-    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinShell, UsaWinTasks, UsaWinAcl -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name UsaWinRoot, UsaWinCalls, UsaWinAnswers, UsaWinNotice, UsaWinShell, UsaWinTasks, UsaWinAcl, UsaWinOnCall, UsaWinStuck -Scope Global -ErrorAction SilentlyContinue
     Remove-Module UsaBanner -ErrorAction SilentlyContinue
 }
 
@@ -489,6 +489,146 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Windows Server' {
         $check.State | Should -BeExactly 'differs'
         $check.Detail | Should -BeLike "it is on this host beside this banner (*ProgramData/Manatech), as a Group Policy that delivers it puts it back*"
         $status.Healthy | Should -BeFalse
+    }
+
+    Context 'where Windows refuses the delete at first (a host the old banner was on for long, 2026-10-26)' {
+        # There an administrator could neither clear the old clone's read-only pack files nor delete them: they
+        # had no access for anyone. Linux stands in for that with a folder no one may write in, so nothing in it
+        # can be deleted; the stand-in icacls gives it back at its grant on a folder above it, as Administrators'
+        # ownership and full control do on Windows, where a test says so.
+        BeforeEach {
+            $global:UsaWinStuck = Join-Path $Root 'ProgramData/Manatech/repo/.git/objects/pack'
+            $script:Shut = [System.IO.UnixFileMode]'UserRead, UserExecute'
+            $script:Repair = {
+                param($File, $Arguments)
+                if ($File -eq 'icacls.exe' -and $Arguments -contains '/grant:r' -and $global:UsaWinStuck.StartsWith([string]$Arguments[0]) -and [System.IO.Directory]::Exists($global:UsaWinStuck)) {
+                    [System.IO.File]::SetUnixFileMode($global:UsaWinStuck, [System.IO.UnixFileMode]'UserRead, UserWrite, UserExecute')
+                }
+            }
+        }
+        AfterEach {
+            if ([System.IO.Directory]::Exists($global:UsaWinStuck)) { [System.IO.File]::SetUnixFileMode($global:UsaWinStuck, [System.IO.UnixFileMode]'UserRead, UserWrite, UserExecute') }
+        }
+
+        It 'deletes the old banner''s folder once Administrators have taken it over, and says deleted only then' {
+            # The second run there: the old update task was gone, so its clone went with the folder it is in.
+            Add-OldWindowsBanner $Root
+            Add-OldRepoCopy $Root 'ProgramData/Manatech/repo'
+            [System.IO.File]::SetUnixFileMode($global:UsaWinStuck, $Shut)
+            $global:UsaWinOnCall = $Repair
+            $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue)
+            $lines | Should -Contain "deleted $Root/ProgramData/Manatech and the 8 file(s) in it: the old banner: its module, data, settings and logs"
+            Join-Path $Root 'ProgramData/Manatech' | Should -Not -Exist
+            @($global:UsaWinCalls | Where-Object { $_ -like "* $Root/ProgramData/Manatech*" }) | Should -Be @(
+                "takeown.exe /F $Root/ProgramData/Manatech /R /A /D Y"
+                "icacls.exe $Root/ProgramData/Manatech /grant:r *S-1-5-32-544:F /T /C /Q"
+            )
+            "$warned" | Should -Not -BeLike '*could not delete*'
+        }
+
+        It 'deletes the clone its update task names once Administrators have taken it over, then the old folder' {
+            # The first run there: the task named the clone.
+            Add-OldWindowsBanner $Root
+            Add-OldRepoCopy $Root 'ProgramData/Manatech/repo'
+            $global:UsaWinTasks['Manatech banner update'].Arguments = "-File `"$Root/ProgramData/Manatech/repo/windows/Update-ManatechBanner.ps1`""
+            [System.IO.File]::SetUnixFileMode($global:UsaWinStuck, $Shut)
+            $global:UsaWinOnCall = $Repair
+            $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue)
+            $lines | Should -Contain "deleted $Root/ProgramData/Manatech/repo and the 5 file(s) in it: the copy of the old banner's repository its update task pulled into"
+            $lines | Should -Contain "deleted $Root/ProgramData/Manatech and the 3 file(s) in it: the old banner: its module, data, settings and logs"
+            @($global:UsaWinCalls | Where-Object { $_ -like "* $Root/ProgramData/Manatech*" }) | Should -Be @(
+                "takeown.exe /F $Root/ProgramData/Manatech/repo /R /A /D Y"
+                "icacls.exe $Root/ProgramData/Manatech/repo /grant:r *S-1-5-32-544:F /T /C /Q"
+            )
+            "$warned" | Should -Not -BeLike '*could not delete*'
+        }
+
+        It 'says it could not delete the old folder, and what is left, never that it did, when Windows refuses after the takeover too' {
+            Add-OldWindowsBanner $Root
+            Add-OldRepoCopy $Root 'ProgramData/Manatech/repo'
+            [System.IO.File]::SetUnixFileMode($global:UsaWinStuck, $Shut)
+            $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue)
+            @($lines | Where-Object { $_ -like 'deleted *ProgramData/Manatech*' }) | Should -BeNullOrEmpty
+            "$warned" | Should -BeLike "*could not delete $Root/ProgramData/Manatech, the old banner: its module, data, settings and logs: * file(s) are left in it. Access to the path*denied*"
+            Join-Path $global:UsaWinStuck 'pack-0.pack' | Should -Exist
+            # The deploy goes on, and Get-UsaBanner's old banner check shows what is left.
+            "$lines" | Should -BeLike '*registered the task*UsaBanner sample*'
+            InModuleScope UsaBanner { @(Find-UsaBannerWindowsOldInstall -Layout (Get-UsaBannerWindowsLayout)) } | Should -Contain "$Root/ProgramData/Manatech"
+        }
+
+        It 'reads the clone''s .git/config once Administrators have taken the clone over, and says whether it held a token' {
+            Add-OldWindowsBanner $Root
+            Add-OldRepoCopy $Root 'ProgramData/Manatech/repo' -Url 'https://deploy:not-a-real-token@gitlab.example.com/contoso/motd.git'
+            [System.IO.File]::SetUnixFileMode((Join-Path $Root 'ProgramData/Manatech/repo/.git/config'), [System.IO.UnixFileMode]::None)
+            $global:UsaWinTasks['Manatech banner update'].Arguments = "-File `"$Root/ProgramData/Manatech/repo/windows/Update-ManatechBanner.ps1`""
+            $global:UsaWinOnCall = {
+                param($File, $Arguments)
+                $config = Join-Path $global:UsaWinRoot 'ProgramData/Manatech/repo/.git/config'
+                if ($File -eq 'icacls.exe' -and $Arguments -contains '/grant:r' -and [System.IO.File]::Exists($config)) { [System.IO.File]::SetUnixFileMode($config, [System.IO.UnixFileMode]'UserRead, UserWrite') }
+            }
+            $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningVariable warned -WarningAction SilentlyContinue
+            "$warned" | Should -BeLike "*a remote URL in $Root/ProgramData/Manatech/repo held sign-in details*revoke it where it was issued*"
+            "$warned" | Should -Not -BeLike '*could not be read*'
+            "$warned" | Should -Not -BeLike '*not-a-real-token*'
+            Join-Path $Root 'ProgramData/Manatech/repo' | Should -Not -Exist
+        }
+    }
+}
+
+Describe 'a delete the host refuses' -Skip:$IsWindows {
+    # Linux stands in for the refusal with a folder no one may write in: nothing in it can be deleted.
+    BeforeEach {
+        $script:Box = Join-Path $TestDrive ([guid]::NewGuid().ToString('n'))
+        $script:Shut = Join-Path $Box 'var/lib/usabanner/shut'
+        $null = New-Item -ItemType Directory -Path $Shut -Force
+        [System.IO.File]::WriteAllText((Join-Path $Shut 'kept'), "kept`n")
+        [System.IO.File]::SetUnixFileMode($Shut, [System.IO.UnixFileMode]'UserRead, UserExecute')
+        $global:UsaTreeCalls = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName UsaBanner Invoke-UsaBannerNative { $global:UsaTreeCalls.Add((@($FilePath) + @($ArgumentList)) -join ' '); @{ ExitCode = 0; Output = @() } }
+    }
+    AfterEach {
+        if ([System.IO.Directory]::Exists($Shut)) { [System.IO.File]::SetUnixFileMode($Shut, [System.IO.UnixFileMode]'UserRead, UserWrite, UserExecute') }
+        Remove-Variable -Name UsaTreeCalls -Scope Global -ErrorAction SilentlyContinue
+    }
+
+    It 'has Remove-UsaBannerHostFile warn that it could not delete a file, and not say it did' {
+        $result = InModuleScope UsaBanner -Parameters @{ Root = $Box } {
+            param($Root)
+            $lines = @(Remove-UsaBannerHostFile -Root $Root -Path '/var/lib/usabanner/shut/kept' -What 'a test file' -WarningVariable warned -WarningAction SilentlyContinue)
+            @{ Lines = $lines; Warned = "$warned" }
+        }
+        $result.Lines | Should -BeNullOrEmpty
+        $result.Warned | Should -BeLike '*could not delete /var/lib/usabanner/shut/kept, a test file: Access to the path*denied*'
+        Join-Path $Shut 'kept' | Should -Exist
+    }
+
+    It 'has Remove-UsaBannerHostFolder warn that it could not delete a folder, with what is left, and not say it did' {
+        $result = InModuleScope UsaBanner -Parameters @{ Root = $Box } {
+            param($Root)
+            $lines = @(Remove-UsaBannerHostFolder -Root $Root -Path '/var/lib/usabanner' -What 'the banner''s state' -WarningVariable warned -WarningAction SilentlyContinue)
+            @{ Lines = $lines; Warned = "$warned" }
+        }
+        $result.Lines | Should -BeNullOrEmpty
+        $result.Warned | Should -BeLike '*could not delete /var/lib/usabanner, the banner''s state: 1 file(s) are left in it. Access to the path*denied*'
+        $global:UsaTreeCalls | Should -BeNullOrEmpty
+    }
+
+    It 'has Remove-UsaBannerTree, on Windows, have Administrators take the folder over before it tries again: takeown, then icacls' {
+        $refusal = InModuleScope UsaBanner -Parameters @{ Path = (Join-Path $Box 'var') } { param($Path) Remove-UsaBannerTree -Path $Path -Windows }
+        $refusal | Should -BeLike '1 file(s) are left in it. Access to the path*denied*'
+        $global:UsaTreeCalls | Should -Be @(
+            "takeown.exe /F $Box/var /R /A /D Y"
+            "icacls.exe $Box/var /grant:r *S-1-5-32-544:F /T /C /Q"
+        )
+    }
+
+    It 'has Remove-UsaBannerTree delete a folder with a read-only file in it, taking nothing over' {
+        [System.IO.File]::SetUnixFileMode($Shut, [System.IO.UnixFileMode]'UserRead, UserWrite, UserExecute')
+        [System.IO.File]::SetAttributes((Join-Path $Shut 'kept'), [System.IO.FileAttributes]::ReadOnly)
+        $refusal = InModuleScope UsaBanner -Parameters @{ Path = (Join-Path $Box 'var') } { param($Path) Remove-UsaBannerTree -Path $Path -Windows }
+        $refusal | Should -BeExactly ''
+        Join-Path $Box 'var' | Should -Not -Exist
+        $global:UsaTreeCalls | Should -BeNullOrEmpty
     }
 }
 

@@ -1058,9 +1058,30 @@ function Invoke-UsaBannerWindowsRemove {
     }
 }
 
+function Grant-UsaBannerTreeAccess {
+    # In:  a folder about to be deleted, on Windows
+    # Out: nothing; Administrators own it and everything in it, and have
+    #      full control of each, by SID
+    # Why: Install-ManatechBanner.ps1 -UpdateTask's icacls /T leaves each
+    #      file already in its clone with no access for anyone (lab,
+    #      2026-10-23), and on a host the old banner had been on for long, an
+    #      elevated administrator could neither clear a git pack file's
+    #      read-only attribute nor delete it (2026-10-26). takeown makes
+    #      Administrators the owner, which icacls /setowner does not force;
+    #      the owner may then grant. /D Y answers takeown's question about a
+    #      folder it may not list, where it would otherwise wait for one: a
+    #      Windows whose language takes another letter refuses the Y, and the
+    #      delete after this says what is left
+    param([Parameter(Mandatory)][string]$Path)
+    $null = Invoke-UsaBannerNative -FilePath 'takeown.exe' -ArgumentList '/F', $Path, '/R', '/A', '/D', 'Y'
+    $null = Invoke-UsaBannerNative -FilePath 'icacls.exe' -ArgumentList $Path, '/grant:r', '*S-1-5-32-544:F', '/T', '/C', '/Q'
+}
+
 function Remove-UsaBannerWindowsFolder {
     # In:  a folder, the one folder the caller may delete, and what it is
-    # Out: a line when it was deleted with everything in it
+    # Out: a line when it was deleted with everything in it; a warning
+    #      instead when Windows refused, even after Administrators took the
+    #      folder over
     # Why: only the banner's own folders, and the old banner's, go whole;
     #      any other is refused
     [CmdletBinding(SupportsShouldProcess)]
@@ -1076,6 +1097,10 @@ function Remove-UsaBannerWindowsFolder {
     if (-not [System.IO.Directory]::Exists($Path)) { return }
     $count = @([System.IO.Directory]::GetFiles($Path, '*', [System.IO.SearchOption]::AllDirectories)).Count
     if (-not $PSCmdlet.ShouldProcess($Path, "Delete the folder and the $count file(s) in it: $What")) { return }
-    [System.IO.Directory]::Delete($Path, $true)
+    $refusal = Remove-UsaBannerTree -Path $Path -Windows
+    if ($refusal) {
+        Write-Warning "UsaBanner: could not delete ${Path}, ${What}: $refusal"
+        return
+    }
     "deleted $Path and the $count file(s) in it: $What"
 }

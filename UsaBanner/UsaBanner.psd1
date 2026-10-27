@@ -3,7 +3,7 @@
 # hand itself to pwsh (UsaBanner.psm1 says how).
 @{
     RootModule           = 'UsaBanner.psm1'
-    ModuleVersion        = '0.2.0'
+    ModuleVersion        = '0.2.1'
     GUID                 = '27da0669-2d84-41c1-aa5e-217086ee70cc'
     Author               = 'Tyson C Rasanen'
     CompanyName          = 'Manatech'

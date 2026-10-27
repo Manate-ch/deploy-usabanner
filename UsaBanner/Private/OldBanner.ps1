@@ -332,7 +332,7 @@ function Remove-UsaBannerWindowsOldInstall {
         }
     }
     Remove-UsaBannerHostFile -Root '' -Path $Layout.OldSshText -What 'the old banner''s SSH banner'
-    if ($repo) { Remove-UsaBannerOldRepo -Path $repo -What 'its update task pulled into' }
+    if ($repo) { Remove-UsaBannerOldRepo -Path $repo -What 'its update task pulled into' -Windows }
     Remove-UsaBannerWindowsFolder -Path $Layout.OldData -Allowed $Layout.OldData -What 'the old banner: its module, data, settings and logs'
 }
 
@@ -392,20 +392,24 @@ function Remove-UsaBannerOldRepo {
     Deletes the copy of the old banner's repository its update job ran from.
     .DESCRIPTION
     In:  the host's root (Ubuntu; '' on Windows), the copy's path on the
-         host, and what the old banner's job did with it.
-    Out: a line when it was deleted. A folder without the repository's own
+         host, what the old banner's job did with it, and -Windows on a
+         Windows host.
+    Out: a line when it was deleted; a warning instead when the host
+         refused, saying what is left. A folder without the repository's own
          files is left, with a warning: its path came from a unit or a task.
          Where a remote URL in it held sign-in details, a warning says to
-         revoke the token: deleting the copy does not end it. Where its
-         .git/config could not be read, a warning says so, and to revoke a
-         token if the clone was made with one.
+         revoke the token: deleting the copy does not end it. On Windows, a
+         .git/config no one may read is read once Administrators have taken
+         the copy over; where it still cannot be read, a warning says so,
+         and to revoke a token if the clone was made with one.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param(
         [AllowEmptyString()][string]$Root = '',
         [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][string]$What
+        [Parameter(Mandatory)][string]$What,
+        [switch]$Windows
     )
     $full = "$Root$Path"
     if (-not [System.IO.Directory]::Exists($full)) { return }
@@ -416,19 +420,18 @@ function Remove-UsaBannerOldRepo {
     $files = @([System.IO.Directory]::GetFiles($full, '*', [System.IO.SearchOption]::AllDirectories))
     if (-not $PSCmdlet.ShouldProcess($Path, "Delete the folder and the $($files.Count) file(s) in it: the copy of the old banner's repository $What")) { return }
     $signIn = Test-UsaBannerRepoSignIn -Path $full
-    # git writes its objects read-only, and on Windows .NET deletes no
-    # read-only file.
-    foreach ($file in $files) {
-        $attributes = [System.IO.File]::GetAttributes($file)
-        if ($attributes -band [System.IO.FileAttributes]::ReadOnly) { [System.IO.File]::SetAttributes($file, $attributes -band -bnot [System.IO.FileAttributes]::ReadOnly) }
+    if ($null -eq $signIn -and $Windows) {
+        Grant-UsaBannerTreeAccess -Path $full
+        $signIn = Test-UsaBannerRepoSignIn -Path $full
     }
-    [System.IO.Directory]::Delete($full, $true)
-    "deleted $Path and the $($files.Count) file(s) in it: the copy of the old banner's repository $What"
+    $refusal = Remove-UsaBannerTree -Path $full -Windows:$Windows
+    if ($refusal) { Write-Warning "UsaBanner: could not delete ${Path}, the copy of the old banner's repository ${What}: $refusal" }
+    else { "deleted $Path and the $($files.Count) file(s) in it: the copy of the old banner's repository $What" }
     if ($signIn) {
-        Write-Warning "UsaBanner: a remote URL in $Path held sign-in details, as the README's private-fork steps put a deploy token there. The copy is deleted, and the token works until it is revoked: revoke it where it was issued."
+        Write-Warning "UsaBanner: a remote URL in $Path held sign-in details, as the README's private-fork steps put a deploy token there. Deleting the copy does not end the token: revoke it where it was issued."
     }
     elseif ($null -eq $signIn) {
-        Write-Warning "UsaBanner: $([System.IO.Path]::Combine($Path, '.git', 'config')) could not be read (Install-ManatechBanner.ps1 -UpdateTask leaves the clone's files so), so whether a remote URL in it held a deploy token is not known. The copy is deleted; if it was cloned with a token, as the README's private-fork steps do, revoke it where it was issued."
+        Write-Warning "UsaBanner: $([System.IO.Path]::Combine($Path, '.git', 'config')) could not be read (Install-ManatechBanner.ps1 -UpdateTask leaves the clone's files so), so whether a remote URL in it held a deploy token is not known. If it was cloned with a token, as the README's private-fork steps do, revoke it where it was issued."
     }
 }
 
