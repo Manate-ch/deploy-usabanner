@@ -458,16 +458,22 @@ function Get-UsaBannerLinuxStatus {
 }
 
 function Get-UsaBannerWindowsSshCheck {
-    # In:  the layout, the configuration ($null when it cannot be read), and
-    #      sshd.exe's path ('' when there is no sshd service)
+    # In:  the layout, the configuration ($null when it cannot be read),
+    #      sshd.exe's path ('' when there is no sshd service), and the record
     # Out: the SSH banner's check: sshd-banner.txt as the configuration draws
     #      it, sshd_config's Banner line in place, and sshd started since
     #      sshd_config last changed: it reads the file at its start, and a
-    #      deploy leaves the restart to the admin
+    #      deploy leaves the restart to the admin. A missing line comes with
+    #      the time sshd_config was last written; where the record says the
+    #      deploy put the line in and that time is older than the record's, a
+    #      copy replaced the file the deploy wrote, since a copy keeps its
+    #      source's time (a Group Policy's file item did, on a production
+    #      host, 2026-10-27)
     param(
         [Parameter(Mandatory)][hashtable]$Layout,
         [AllowNull()][System.Collections.IDictionary]$Config,
-        [AllowEmptyString()][string]$Sshd
+        [AllowEmptyString()][string]$Sshd,
+        [System.Collections.IDictionary]$Record = @{}
     )
     if (-not $Sshd) {
         return New-UsaBannerCheck -Check 'ssh banner' -State 'off' -Detail 'OpenSSH''s server is not installed here (deploy-usawinssh installs it): run Deploy-UsaBanner again once it is'
@@ -487,7 +493,16 @@ function Get-UsaBannerWindowsSshCheck {
             $result = Set-UsaBannerSshdBannerLine -Lines $lines
             if ($result.Changed) {
                 if (@($lines | Where-Object { $_.Trim() -eq $script:UsaSshdEntry }).Count) { $found += @{ State = 'differs'; Text = "another Banner in $($Layout.SshdConfig) comes before the banner's, and sshd takes the first" } }
-                else { $found += @{ State = 'missing'; Text = "$($Layout.SshdConfig) has no Banner line for it" } }
+                else {
+                    $written = [System.IO.File]::GetLastWriteTimeUtc($Layout.SshdConfig)
+                    $text = "$($Layout.SshdConfig) has no Banner line for it; it was last written at $($written.ToString('u'))"
+                    $recordPath = [System.IO.Path]::Combine($Layout.Data, 'deploy.json')
+                    if ($Record['sshd'] -and [System.IO.File]::Exists($recordPath)) {
+                        $recorded = [System.IO.File]::GetLastWriteTimeUtc($recordPath)
+                        if ($written -lt $recorded) { $text += ", before the deploy that put its line in was recorded ($($recorded.ToString('u'))): a copy older than the deploy replaced the file, as a Group Policy file item or a restore does" }
+                    }
+                    $found += @{ State = 'missing'; Text = $text }
+                }
             }
             elseif ((Get-UsaBannerServiceState -Name 'sshd') -eq 'Running') {
                 $started = Get-UsaBannerServiceStart -Name 'sshd'
@@ -591,7 +606,8 @@ function Get-UsaBannerWindowsStatus {
             else { @{ State = 'missing'; Text = "$path has no block" } }
         })
     $checks.Add((Join-UsaBannerFinding -Check 'banner after login' -Ok "a block in each PowerShell's all-users profile shows it at an SSH login: $($layout.Profiles -join ', ')" -Found $profiles))
-    $checks.Add((Get-UsaBannerWindowsSshCheck -Layout $layout -Config $config -Sshd $sshd))
+    $record = Read-UsaBannerDeployRecord -Path ([System.IO.Path]::Combine($layout.Data, 'deploy.json'))
+    $checks.Add((Get-UsaBannerWindowsSshCheck -Layout $layout -Config $config -Sshd $sshd -Record $record))
 
     if (-not $sshd) { $checks.Add((New-UsaBannerCheck -Check 'ssh default shell' -State 'off' -Detail 'OpenSSH''s server is not installed here')) }
     else {
@@ -600,7 +616,6 @@ function Get-UsaBannerWindowsStatus {
         else { $checks.Add((New-UsaBannerCheck -Check 'ssh default shell' -State 'differs' -Detail "sshd starts $leaf at a login, so no banner shows after an SSH login: Deploy-UsaBanner sets a PowerShell there")) }
     }
 
-    $record = Read-UsaBannerDeployRecord -Path ([System.IO.Path]::Combine($layout.Data, 'deploy.json'))
     $checks.Add((Get-UsaBannerWindowsNoticeCheck -Config $config -Record $record))
     $checks.Add((Get-UsaBannerWindowsJobCheck -Data $layout.Data))
     $danger = @(foreach ($place in [System.IO.Path]::GetDirectoryName($layout.Data), $layout.Data) {

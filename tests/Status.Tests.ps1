@@ -405,7 +405,7 @@ Describe 'Get-UsaBanner on Windows Server' {
             } }
         @{ Case = 'a profile''s block taken out'; Check = 'banner after login'; State = 'missing'; Detail = '*Windows/System32/WindowsPowerShell/v1.0/profile.ps1 has no block'
             Break = { [System.IO.File]::WriteAllText((Join-Path $global:UsaWinRoot 'Windows/System32/WindowsPowerShell/v1.0/profile.ps1'), "Set-Location C:\`r`n") } }
-        @{ Case = 'sshd_config''s Banner line taken out'; Check = 'ssh banner'; State = 'missing'; Detail = '*ProgramData/ssh/sshd_config has no Banner line for it'
+        @{ Case = 'sshd_config''s Banner line taken out'; Check = 'ssh banner'; State = 'missing'; Detail = '*ProgramData/ssh/sshd_config has no Banner line for it; it was last written at ????-??-?? ??:??:??Z'
             Break = { [System.IO.File]::WriteAllText((Join-Path $global:UsaWinRoot 'ProgramData/ssh/sshd_config'), $StockSshd) } }
         @{ Case = 'the SSH banner edited'; Check = 'ssh banner'; State = 'differs'; Detail = '*sshd-banner.txt is not what the configuration draws for *: Deploy-UsaBanner draws it again'
             Break = { [System.IO.File]::AppendAllText((Join-Path $global:UsaWinRoot 'ProgramData/UsagiTools/Banner/sshd-banner.txt'), "edited`n") } }
@@ -433,6 +433,17 @@ Describe 'Get-UsaBanner on Windows Server' {
         $found.State | Should -BeExactly $State -Because ((Get-Problem $status) -join '; ')
         $found.Detail | Should -BeLike $Detail
         $status.Healthy | Should -BeFalse
+    }
+
+    It 'says a copy older than the deploy replaced sshd_config, where its Banner line is gone and the file is older than the record' {
+        # A production host, 2026-10-27: a Group Policy's file item put its 9/2 copy back at each refresh.
+        $config = Join-Path $global:UsaWinRoot 'ProgramData/ssh/sshd_config'
+        [System.IO.File]::WriteAllText($config, $StockSshd)
+        [System.IO.File]::SetLastWriteTimeUtc($config, [datetime]::new(2026, 9, 2, 18, 18, 9, [System.DateTimeKind]::Utc))
+        $recorded = [System.IO.File]::GetLastWriteTimeUtc((Join-Path $Data 'deploy.json')).ToString('u')
+        $check = Get-Check (Get-ReadOnlyStatus) 'ssh banner'
+        $check.State | Should -BeExactly 'missing'
+        $check.Detail | Should -BeExactly "$config has no Banner line for it; it was last written at 2026-09-02 18:18:09Z, before the deploy that put its line in was recorded ($recorded): a copy older than the deploy replaced the file, as a Group Policy file item or a restore does"
     }
 
     It 'finds sshd not restarted since its Banner line went in: stale, with the command that restarts it' {

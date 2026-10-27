@@ -1928,6 +1928,12 @@ there now, from the host's own configuration and facts.
   deploy leaves the restart to the admin, so an `sshd` that started before
   the Banner line went in sends no banner yet: `stale`, with
   `Restart-Service sshd`.
+- **A Banner line gone says when `sshd_config` was last written** (2026-10-27).
+  On the first production host, a Group Policy's file item put a copy of
+  `sshd_config` from weeks before back at every refresh. A copy keeps its
+  source's write time, so where the record says the deploy put its line in
+  and the file is older than the record, the check says a copy older than
+  the deploy replaced it: a Group Policy file item, or a restore.
 - **On Windows, a module copy that carries the internet mark is
   `differs`.** A file copy on NTFS keeps the file's streams, the mark of a
   download (`Zone.Identifier`) among them, and with it PowerShell asks
