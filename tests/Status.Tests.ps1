@@ -360,13 +360,44 @@ Describe 'Get-UsaBanner on Windows Server' {
         (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this repository's Install-ManatechBanner.ps1 (*ProgramData/Manatech), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one"
     }
 
+    It 'names the old banner''s task, by its file, where it is all that is left and no banner is deployed' {
+        # A production host, 2026-10-27: the task the old banner's GPO made put it back at its midnight run, half an
+        # hour after Get-UsaBanner had found none of it; and the task stays when the GPO stops applying.
+        Use-WindowsHost (New-WindowsHost)
+        Add-WindowsOldTask -Name 'Manatech MOTD sync' -Arguments '-File Sync-ManatechBanner.ps1' -Schedule 'gpo'
+        (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this repository's Install-ManatechBanner.ps1 (the task \Manatech MOTD sync), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one"
+    }
+
+    It 'has the old banner check differ where only the old banner''s task is left, read from its file, never asked of the task scheduler' {
+        Add-WindowsOldTask -Name 'Manatech MOTD sync' -Arguments '-File Sync-ManatechBanner.ps1' -Schedule 'gpo'
+        $status = Get-ReadOnlyStatus
+        $check = Get-Check $status 'old banner'
+        "$($check.State): $($check.Detail)" | Should -BeExactly 'differs: it is on this host beside this banner (the task \Manatech MOTD sync), as a Group Policy that delivers it puts it back: take that GPO off this host, then run Deploy-UsaBanner -ReplaceOldBanner'
+        $status.Healthy | Should -BeFalse
+        Should -Invoke -ModuleName UsaBanner Get-UsaBannerTask -ParameterFilter { $Name -like 'Manatech*' } -Times 0 -Exactly
+    }
+
     It 'leaves a logon notice someone else set: off, and the host healthy still' {
         $global:UsaWinNotice = @{ Caption = 'Contoso IT'; Text = 'Authorized use only.'; Exists = $true }
         $status = Get-ReadOnlyStatus
         $check = Get-Check $status 'logon notice'
         $check.State | Should -BeExactly 'off'
-        $check.Detail | Should -BeExactly 'it holds someone else''s text, set by hand or by a Group Policy: Contoso IT'
+        $check.Detail | Should -BeExactly 'the text before a console or RDP sign-in is someone else''s, set by hand or by a Group Policy: Contoso IT'
         $status.Healthy | Should -BeTrue
+    }
+
+    It 'says the logon notice is the text before a console or RDP sign-in where <Case>' -ForEach @(
+        @{ Case = 'it holds another configuration''s legal text'; State = 'differs'
+            Detail = 'the text before a console or RDP sign-in is the legal text of another configuration: Deploy-UsaBanner sets it again'
+            Break = { Mock -ModuleName UsaBanner Get-UsaBannerLogonNotice { @{ Caption = 'OTHER'; Text = 'Other text.' } } } }
+        @{ Case = 'the configuration cannot be read'; State = 'unknown'
+            Detail = 'what the configuration sets before a console or RDP sign-in is not known'
+            Break = { [System.IO.File]::WriteAllText((Join-Path $Data 'usabanner.json'), '{ not json') } }
+    ) {
+        & $Break
+        $check = Get-Check (Get-ReadOnlyStatus) 'logon notice'
+        $check.State | Should -BeExactly $State
+        $check.Detail | Should -BeExactly $Detail
     }
 
     It 'says SSH logins show no banner where sshd starts cmd.exe: differs, as a deploy sets a PowerShell there' {
@@ -391,13 +422,13 @@ Describe 'Get-UsaBanner on Windows Server' {
             } }
         @{ Case = 'a profile''s block taken out'; Check = 'banner after login'; State = 'missing'; Detail = '*Windows/System32/WindowsPowerShell/v1.0/profile.ps1 has no block'
             Break = { [System.IO.File]::WriteAllText((Join-Path $global:UsaWinRoot 'Windows/System32/WindowsPowerShell/v1.0/profile.ps1'), "Set-Location C:\`r`n") } }
-        @{ Case = 'sshd_config''s Banner line taken out'; Check = 'ssh banner'; State = 'missing'; Detail = '*ProgramData/ssh/sshd_config has no Banner line for it'
+        @{ Case = 'sshd_config''s Banner line taken out'; Check = 'ssh banner'; State = 'missing'; Detail = '*ProgramData/ssh/sshd_config has no Banner line for it; it was last written at ????-??-?? ??:??:??Z'
             Break = { [System.IO.File]::WriteAllText((Join-Path $global:UsaWinRoot 'ProgramData/ssh/sshd_config'), $StockSshd) } }
         @{ Case = 'the SSH banner edited'; Check = 'ssh banner'; State = 'differs'; Detail = '*sshd-banner.txt is not what the configuration draws for *: Deploy-UsaBanner draws it again'
             Break = { [System.IO.File]::AppendAllText((Join-Path $global:UsaWinRoot 'ProgramData/UsagiTools/Banner/sshd-banner.txt'), "edited`n") } }
         @{ Case = 'the data file edited'; Check = 'configuration'; State = 'differs'; Detail = '*usabanner.psd1, which each login reads, does not hold the settings of usabanner.json: Deploy-UsaBanner writes it again'
             Break = { [System.IO.File]::AppendAllText((Join-Path $global:UsaWinRoot 'ProgramData/UsagiTools/Banner/usabanner.psd1'), "# edited`n") } }
-        @{ Case = 'the logon notice cleared'; Check = 'logon notice'; State = 'missing'; Detail = 'no logon notice is set: Deploy-UsaBanner sets it where none is'
+        @{ Case = 'the logon notice cleared'; Check = 'logon notice'; State = 'missing'; Detail = 'no logon notice, the text before a console or RDP sign-in, is set: Deploy-UsaBanner sets it where none is'
             Break = { $global:UsaWinNotice = @{ Caption = ''; Text = ''; Exists = $false } } }
         @{ Case = 'the task unregistered'; Check = 'periodic job'; State = 'missing'; Detail = 'there is no task \UsagiTools\UsaBanner sample'
             Break = { $global:UsaWinTasks.Remove('UsaBanner sample') } }
@@ -419,6 +450,17 @@ Describe 'Get-UsaBanner on Windows Server' {
         $found.State | Should -BeExactly $State -Because ((Get-Problem $status) -join '; ')
         $found.Detail | Should -BeLike $Detail
         $status.Healthy | Should -BeFalse
+    }
+
+    It 'says a copy older than the deploy replaced sshd_config, where its Banner line is gone and the file is older than the record' {
+        # A production host, 2026-10-27: a Group Policy's file item put its 9/2 copy back at each refresh.
+        $config = Join-Path $global:UsaWinRoot 'ProgramData/ssh/sshd_config'
+        [System.IO.File]::WriteAllText($config, $StockSshd)
+        [System.IO.File]::SetLastWriteTimeUtc($config, [datetime]::new(2026, 9, 2, 18, 18, 9, [System.DateTimeKind]::Utc))
+        $recorded = [System.IO.File]::GetLastWriteTimeUtc((Join-Path $Data 'deploy.json')).ToString('u')
+        $check = Get-Check (Get-ReadOnlyStatus) 'ssh banner'
+        $check.State | Should -BeExactly 'missing'
+        $check.Detail | Should -BeExactly "$config has no Banner line for it; it was last written at 2026-09-02 18:18:09Z, before the deploy that put its line in was recorded ($recorded): a copy older than the deploy replaced the file, as a Group Policy file item or a restore does"
     }
 
     It 'finds sshd not restarted since its Banner line went in: stale, with the command that restarts it' {

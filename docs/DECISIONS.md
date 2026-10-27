@@ -1700,6 +1700,33 @@ came back over this one, as its GPO puts it back at the next boot, the
 record still holds them: they stay off, and `Remove-UsaBanner` turns them
 back on as the record has them.
 
+**The prototype banner's line (2026-10-27).** On the first production host
+the move off ran on, `sshd_config` held the line of a third banner,
+`Banner C:\ProgramData\ssh\banner.txt`, from a banner set up by hand before
+`Install-ManatechBanner.ps1`. A Group Policy's copy of `sshd_config` carried
+that line to every server, whether the banner was there or not. The deploy
+turned it off behind its note, and `Remove-UsaBanner` would turn it back on,
+pointing at a file most hosts never had. The move off now takes that exact
+line out, whether it is on, behind this banner's note, or behind the old
+banner's, in the same write, copy and `sshd -t` as the old banner's line: a
+host deployed before 0.2.2 is cleaned at its next run. A line is that one
+when, trimmed, it reads the same in any case, as sshd reads the keyword and
+Windows the path; a Banner naming any other path is the admin's, and stays.
+
+**The old banner's tasks (2026-10-27).** On the same host, `Get-UsaBanner`
+said none of the old banner was there half an hour before the
+`Manatech MOTD sync` task its GPO makes put it back, at the task's midnight
+run: a refresh while the GPO still applied had very likely made the task
+again after the move off took it, and the check read files, folders and
+profiles, not tasks. Such a task also stays on a host after its GPO stops
+applying, unless the item says to remove it. Now each of the old banner's
+two tasks counts as the old banner, found by its definition file under
+`System32\Tasks`, not with `Get-ScheduledTask`, whose module PowerShell logs
+at each import (D30). So `Get-UsaBanner` names it, a deploy without
+`-ReplaceOldBanner` is refused while it is there, and the Group Policy
+runner deploys, which unregisters it. Only an administrator may read that
+folder: for anyone else no task is found.
+
 ## D24. A LICENSE
 
 **Decided: MIT**, with the same text as deploy-usawinssh ("Copyright (c)
@@ -1915,6 +1942,12 @@ there now, from the host's own configuration and facts.
   deploy leaves the restart to the admin, so an `sshd` that started before
   the Banner line went in sends no banner yet: `stale`, with
   `Restart-Service sshd`.
+- **A Banner line gone says when `sshd_config` was last written** (2026-10-27).
+  On the first production host, a Group Policy's file item put a copy of
+  `sshd_config` from weeks before back at every refresh. A copy keeps its
+  source's write time, so where the record says the deploy put its line in
+  and the file is older than the record, the check says a copy older than
+  the deploy replaced it: a Group Policy file item, or a restore.
 - **On Windows, a module copy that carries the internet mark is
   `differs`.** A file copy on NTFS keeps the file's streams, the mark of a
   download (`Zone.Identifier`) among them, and with it PowerShell asks
@@ -2110,7 +2143,9 @@ Storage module names them.
   2026-10-26]. Only a deploy (its move-off too), a removal and
   `Get-UsaBanner` use them, and the runner deploys at most daily (E), so
   they stay. The Task Scheduler's COM object would avoid them, as CIM did
-  for the disks: for later.
+  for the disks: for later. The runner's due check looks for the old
+  banner's two tasks by their definition files (D23), so a policy refresh
+  still loads none of them.
 
 ## Appendix A. Art mock-ups (rough)
 

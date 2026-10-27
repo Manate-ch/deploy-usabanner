@@ -334,7 +334,7 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         $global:UsaWinNotice = @{ Caption = 'NOTICE'; Text = 'Contoso policy applies.'; Exists = $true }
         $lines = @(Deploy-UsaBanner -Company Contoso)
         $global:UsaWinNotice.Caption | Should -BeExactly 'NOTICE'
-        $lines | Should -Contain 'left the logon notice as it is: it holds someone else''s text, set by hand or by a Group Policy'
+        $lines | Should -Contain 'left the logon notice, the text before a console or RDP sign-in, as it is: it holds someone else''s text, set by hand or by a Group Policy'
     }
 
     It 'rewrites its own logon notice when the legal text changes' {

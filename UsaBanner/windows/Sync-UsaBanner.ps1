@@ -27,8 +27,10 @@ A deploy is due, and the run's first line in the log says why, when
   come: a change made by hand on the host is put right within a day;
 - the banner's record (%ProgramData%\UsagiTools\Banner\deploy.json) is gone,
   as after Remove-UsaBanner;
-- the old banner is on the host (%ProgramData%\Manatech, or
-  %ProgramData%\ssh\manatech-banner.txt): the deploy moves the host off it.
+- the old banner is on the host (%ProgramData%\Manatech,
+  %ProgramData%\ssh\manatech-banner.txt, or one of its two tasks, found by
+  its definition file under %SystemRoot%\System32\Tasks, as a task its GPO
+  made outlives the GPO): the deploy moves the host off it.
 The deploy is SyncDeploy.ps1's, beside this file. When none is due, the run
 adds one line to the log and ends, and no pwsh starts.
 
@@ -87,7 +89,13 @@ $dest = Join-Path (Join-Path $env:SystemRoot 'Logs') 'UsaBanner'
 $log = Join-Path $dest 'sync.log'
 $stamp = Join-Path $dest 'sync.stamp'
 $record = Join-Path (Join-Path (Join-Path $env:ProgramData 'UsagiTools') 'Banner') 'deploy.json'
-$oldBanner = @((Join-Path $env:ProgramData 'Manatech'), (Join-Path (Join-Path $env:ProgramData 'ssh') 'manatech-banner.txt'))
+$taskFolder = Join-Path (Join-Path $env:SystemRoot 'System32') 'Tasks'
+$oldBanner = @(
+    (Join-Path $env:ProgramData 'Manatech'),
+    (Join-Path (Join-Path $env:ProgramData 'ssh') 'manatech-banner.txt'),
+    (Join-Path $taskFolder 'Manatech banner update'),
+    (Join-Path $taskFolder 'Manatech MOTD sync')
+)
 $keepLines = 500
 $mutexName = 'Global\UsaBanner-Sync'
 $utf8 = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false

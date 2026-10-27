@@ -584,13 +584,15 @@ function Get-UsaBannerWindowsLayout {
     .SYNOPSIS
     Where each part of the banner goes on this Windows host.
     .DESCRIPTION
-    Out: @{ Data; Modules; Profiles; SshdConfig; Old; OldData; OldSshText }:
-         the banner's own folder; the modules folder for all users; the
-         all-users profile of each PowerShell installed (Windows
+    Out: @{ Data; Modules; Profiles; SshdConfig; Old; OldData; OldSshText;
+         TaskFolder }: the banner's own folder; the modules folder for all
+         users; the all-users profile of each PowerShell installed (Windows
          PowerShell's always, PowerShell 7's where its folder is);
-         sshd_config; and what the old banner
+         sshd_config; what the old banner
          (windows/Install-ManatechBanner.ps1) leaves, to look for: its
-         folder and its SSH banner file.
+         folder and its SSH banner file; and the folder where the task
+         scheduler keeps the definition of each task in its root folder, a
+         file named as the task.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
@@ -609,6 +611,7 @@ function Get-UsaBannerWindowsLayout {
         Old        = @($oldData, $oldSshText)
         OldData    = $oldData
         OldSshText = $oldSshText
+        TaskFolder = [System.IO.Path]::Combine($paths.Windir, 'System32', 'Tasks')
     }
 }
 
@@ -644,11 +647,22 @@ function Assert-UsaBannerWindowsHost {
 function Find-UsaBannerWindowsOldInstall {
     # In:  the layout (Get-UsaBannerWindowsLayout)
     # Out: each file and folder of today's banner
-    #      (windows/Install-ManatechBanner.ps1) on the host, and each profile
-    #      that holds its block
+    #      (windows/Install-ManatechBanner.ps1) on the host, each profile
+    #      that holds its block, and each of its two tasks, as "the task
+    #      \<name>"
+    # Why: on a production host the old banner's GPO task put the banner
+    #      back at its midnight run, half an hour after this found none of
+    #      it (2026-10-27); the task stays when the GPO stops applying. A
+    #      task is found by its definition file, not by Get-ScheduledTask,
+    #      whose module PowerShell logs at each import (D30). Only an
+    #      administrator may read the task scheduler's folder: for anyone
+    #      else no task is found
     param([Parameter(Mandatory)][hashtable]$Layout)
     $Layout.Old | Where-Object { [System.IO.File]::Exists($_) -or [System.IO.Directory]::Exists($_) }
     $Layout.Profiles | Where-Object { [System.IO.File]::Exists($_) -and (Read-UsaBannerWindowsText -Path $_).Text.Contains('# >>> Manatech banner') }
+    foreach ($name in $script:UsaOldTasks) {
+        if ([System.IO.File]::Exists([System.IO.Path]::Combine($Layout.TaskFolder, $name))) { "the task \$name" }
+    }
 }
 
 function Set-UsaBannerDataFolder {
@@ -838,7 +852,7 @@ function Set-UsaBannerWindowsNotice {
     $ours = $Record['notice']
     $isOurs = $ours -and $have.Caption -ceq [string]$ours['caption'] -and $have.Text -ceq [string]$ours['text']
     if (-not $isOurs -and ($have.Caption -or $have.Text)) {
-        'left the logon notice as it is: it holds someone else''s text, set by hand or by a Group Policy'
+        'left the logon notice, the text before a console or RDP sign-in, as it is: it holds someone else''s text, set by hand or by a Group Policy'
         return
     }
     if ($have.Caption -ceq $want.Caption -and $have.Text -ceq $want.Text) { return }
