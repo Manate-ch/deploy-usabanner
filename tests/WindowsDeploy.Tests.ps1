@@ -318,6 +318,18 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         [System.IO.File]::ReadAllText((Join-Path $Root 'ProgramData/ssh/sshd_config.usabanner-bak')) | Should -BeExactly $StockSshd
     }
 
+    It 'copies again a file of the module''s copy that carries the internet mark, and says so' {
+        # A test host, 2026-10-27: a copy made from a downloaded zip kept its mark on every file, a
+        # deploy from the unblocked zip found each file the same and copied none, and the periodic
+        # job, as SYSTEM, could not import the module.
+        $null = Deploy-UsaBanner -Company Contoso
+        $version = (Import-PowerShellDataFile -LiteralPath (Join-Path $moduleRoot 'UsaBanner.psd1')).ModuleVersion
+        $copy = Join-Path $Root "ProgramFiles/WindowsPowerShell/Modules/UsaBanner/$version"
+        Set-WindowsMark (Join-Path $copy 'UsaBanner.psd1'), (Join-Path $copy 'UsaBanner.Format.ps1xml')
+        @(Deploy-UsaBanner -Company Contoso) | Should -Be @("installed the module UsaBanner $version for every user: $copy (2 file(s) copied, 0 removed; 2 had the internet mark, which the copies do not)")
+        @(Deploy-UsaBanner -Company Contoso) | Should -BeNullOrEmpty
+    }
+
     It 'leaves a logon notice someone else set, and says so' {
         $global:UsaWinNotice = @{ Caption = 'NOTICE'; Text = 'Contoso policy applies.'; Exists = $true }
         $lines = @(Deploy-UsaBanner -Company Contoso)
@@ -544,5 +556,40 @@ Describe 'who could swap the banner''s folders' {
         $found | Should -Be @((Join-Path $root 'a/b/to-elsewhere'), (Join-Path $root 'a/file-link'))
         @(InModuleScope UsaBanner -Parameters @{ Path = (Join-Path $root 'a/b/to-elsewhere') } { param($Path) Find-UsaBannerFolderLink -Path $Path }) | Should -Be @((Join-Path $root 'a/b/to-elsewhere'))
         @(InModuleScope UsaBanner -Parameters @{ Path = $elsewhere } { param($Path) Find-UsaBannerFolderLink -Path $Path }) | Should -Be @((Join-Path $elsewhere 'c/deeper'))
+    }
+}
+
+Describe 'the module''s copy for every user' {
+    It 'copies each file''s contents, not the file: what else a file carries stays behind' {
+        # A file copy carries more than the contents: on NTFS the file's streams, the internet mark of
+        # a download among them, which kept the periodic job from importing the module on a test host
+        # (2026-10-27); on Linux the file's mode. A module of one file with a mode of its own shows it.
+        $source = Join-Path $TestDrive 'source/UsaBanner'
+        $null = New-Item -ItemType Directory -Path $source -Force
+        [System.IO.File]::WriteAllText((Join-Path $source 'UsaBanner.psd1'), "@{ ModuleVersion = '9.9.9' }")
+        [System.IO.File]::WriteAllText((Join-Path $source 'own.ps1'), '1')
+        [System.IO.File]::SetUnixFileMode((Join-Path $source 'own.ps1'), [System.IO.UnixFileMode]'UserRead, UserWrite, UserExecute')
+        $modules = Join-Path $TestDrive 'modules'
+        $lines = @(InModuleScope UsaBanner -Parameters @{ Source = $source; Modules = $modules } {
+                param($Source, $Modules)
+                $root, $manifest = $script:UsaBannerRoot, $script:UsaBannerManifest
+                try {
+                    $script:UsaBannerRoot = $Source
+                    $script:UsaBannerManifest = Join-Path $Source 'UsaBanner.psd1'
+                    Install-UsaBannerModuleCopy -Record @{} -Created $null -Modules $Modules -FileMode $null -FolderMode $null -Os windows
+                }
+                finally { $script:UsaBannerRoot, $script:UsaBannerManifest = $root, $manifest }
+            })
+        $lines | Should -Be @("installed the module UsaBanner 9.9.9 for every user: $modules/UsaBanner/9.9.9 (2 file(s) copied, 0 removed)")
+        $copied = Join-Path $modules 'UsaBanner/9.9.9/own.ps1'
+        [System.IO.File]::ReadAllText($copied) | Should -BeExactly '1'
+        [System.IO.File]::GetUnixFileMode($copied) -band [System.IO.UnixFileMode]::UserExecute | Should -Be ([System.IO.UnixFileMode]::None)
+    }
+
+    It 'finds no file with the internet mark off Windows, which has no stream to carry one' -Skip:$IsWindows {
+        $folder = Join-Path $TestDrive 'plain'
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        [System.IO.File]::WriteAllText((Join-Path $folder 'a.ps1'), '1')
+        @(InModuleScope UsaBanner -Parameters @{ Folder = $folder } { param($Folder) Get-UsaBannerMarkedFile -Folder $Folder }) | Should -BeNullOrEmpty
     }
 }

@@ -236,6 +236,13 @@ function Get-WindowsHostState {
     foreach ($name in @($global:UsaWinTasks.Keys | Sort-Object)) { "task ${name}: $($global:UsaWinTasks[$name].Execute) $($global:UsaWinTasks[$name].Arguments)" }
 }
 
+function Set-WindowsMark {
+    # In:  files on the fake Windows host
+    # Out: nothing; each carries the internet mark, as a download leaves it, until it is written anew
+    param([string[]]$Path)
+    foreach ($file in $Path) { $global:UsaWinMarks[$file] = [System.IO.File]::GetLastWriteTimeUtc($file) }
+}
+
 function Use-WindowsHost {
     # In:  the host folder, and answers that differ from the stock host's: 'program arguments'
     #      -> @{ ExitCode; Output }
@@ -260,6 +267,9 @@ function Use-WindowsHost {
     # listed is Administrators', with what ProgramData passes down: Users may read, and add files
     # and folders, not delete them; CREATOR OWNER's entry is inherit-only.
     $global:UsaWinSecurity = @{}
+    # The files that carry the internet mark (Set-WindowsMark), by path: each one's write time when
+    # it was marked. NTFS keeps the mark on the file itself, so a file written anew has none.
+    $global:UsaWinMarks = @{}
     Mock -ModuleName UsaBanner Get-UsaBannerHostOs { 'windows' }
     Mock -ModuleName UsaBanner Get-UsaBannerWindowsPaths { @{ ProgramData = "$global:UsaWinRoot/ProgramData"; ProgramFiles = "$global:UsaWinRoot/ProgramFiles"; Windir = "$global:UsaWinRoot/Windows" } }
     Mock -ModuleName UsaBanner Get-UsaBannerWindowsBuild { 20348 }
@@ -293,6 +303,13 @@ function Use-WindowsHost {
             @{ Sid = 'S-1-5-32-545'; Name = 'BUILTIN\Users'; Allow = $true; Rights = 0x116; InheritOnly = $false }
             @{ Sid = 'S-1-3-0'; Name = 'CREATOR OWNER'; Allow = $true; Rights = 0x10000000; InheritOnly = $true }
         ) }
+    }
+    Mock -ModuleName UsaBanner Get-UsaBannerMarkedFile {
+        foreach ($path in @($global:UsaWinMarks.Keys | Sort-Object)) {
+            if ($path.StartsWith("$Folder/") -and [System.IO.File]::Exists($path) -and [System.IO.File]::GetLastWriteTimeUtc($path) -eq $global:UsaWinMarks[$path]) {
+                $path.Substring($Folder.Length + 1)
+            }
+        }
     }
     Mock -ModuleName UsaBanner Get-UsaBannerTask { $global:UsaWinTasks[$Name] }
     Mock -ModuleName UsaBanner Register-UsaBannerTask {

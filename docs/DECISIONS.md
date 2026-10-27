@@ -1915,6 +1915,14 @@ there now, from the host's own configuration and facts.
   deploy leaves the restart to the admin, so an `sshd` that started before
   the Banner line went in sends no banner yet: `stale`, with
   `Restart-Service sshd`.
+- **On Windows, a module copy that carries the internet mark is
+  `differs`.** A file copy on NTFS keeps the file's streams, the mark of a
+  download (`Zone.Identifier`) among them, and with it PowerShell asks
+  before it loads the module, or refuses it; the periodic job, as SYSTEM
+  with `-NonInteractive`, cannot answer [measured: a test host, 2026-10-27,
+  every file of the copy marked, "AuthorizationManager check failed", the
+  task ending 1 at each run]. So a deploy copies each file's contents, and
+  copies again a file of the copy that carries the mark.
 - **It changes nothing.** Its tests check each host byte for byte before
   and after, and that no program that changes it ran.
 - **The settings are what the configuration sets otherwise than the
