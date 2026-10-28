@@ -86,8 +86,16 @@ function Deploy-UsaBanner {
     this host's AD Description, as "PROD : Web front end" gives Web front
     end.
     .PARAMETER BannerImage
-    The art: a piece of the module's art (Show-UsaBannerArt -List), or os
-    for the pictogram in the host's OS colour.
+    The art: a piece of the module's art (Show-UsaBannerArt -List), os for
+    the pictogram in the host's OS colour, or os-logo for the logo of the OS
+    the host runs (Windows, Ubuntu, or Tux on any other Linux).
+    .PARAMETER ArtPath
+    Art of your own, drawn in place of the module's: a .json file as
+    New-UsaBannerArt -OutFile saves it (look at it first with
+    Show-UsaBannerArt -Path). The art goes into the configuration, so it
+    reaches every host the configuration does, and never into the module:
+    for a logo you cannot or will not contribute. It keeps the rules of the
+    module's own art. Not with -BannerImage.
     .PARAMETER Border
     The box's lines and corners. The Unicode sets show after login only,
     with Classic before login.
@@ -145,6 +153,8 @@ function Deploy-UsaBanner {
     .EXAMPLE
     Deploy-UsaBanner -Path ./contoso.json -Environment DEV-TEST
     .EXAMPLE
+    Deploy-UsaBanner -Path ./contoso.json -ArtPath ./contoso-logo.json
+    .EXAMPLE
     Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WhatIf
     #>
     [CmdletBinding(SupportsShouldProcess)]
@@ -162,6 +172,9 @@ function Deploy-UsaBanner {
 
         [ValidateNotNullOrEmpty()]
         [string]$BannerImage,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$ArtPath,
 
         [ValidateSet('Classic', 'Hash', 'Star', 'Equals', 'Round', 'Bevel', 'PipeUnderscore', 'Wavy', 'OneChar', 'Rounded', 'Single', 'Double', 'Heavy', 'Block')]
         [string]$Border,

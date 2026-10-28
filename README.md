@@ -23,6 +23,7 @@ see how far it has got, from a clone:
     Show-UsaBannerArt tux              # a logo: tux, windows or ubuntu
     New-UsaBannerArt ./logo.png        # an image as art; -OutFile ./logo.json saves it
     Show-UsaBannerArt -Path ./logo.json   # art saved in a file
+    Deploy-UsaBanner -ArtPath ./logo.json -WhatIf   # that art in a host's banners, kept out of the module
     Show-UsaBanner                     # the banner after login, from the defaults
     Show-UsaBanner PreLogon -Path ./usabanner.json   # the SSH banner a configuration sets
     Show-UsaBanner PreInit             # the console's banner; on Windows, the logon notice
@@ -47,7 +48,10 @@ affiliated with or endorsed by their owners; `UsaBanner/NOTICE` has the
 details.
 
 Bugs, ideas and logos are welcome, as issues and merge requests:
-`CONTRIBUTING.md` says how, and how to add your own logo to the art.
+`CONTRIBUTING.md` says how, and how to add your own logo to the art. A logo
+you cannot or will not contribute stays yours: `-ArtPath` carries it in your
+own configuration, to every host the configuration reaches, and never into
+the module (`docs/DECISIONS.md`, D31).
 
 ## Quickstart
 
@@ -414,9 +418,9 @@ What each OS does after that:
 The module's commands and every flag they take, from each command's own help, which `Get-Help <command> -Full` shows too.
 
 - [Deploy-UsaBanner](#deploy-usabanner): Deploys this host's banners: the console's before login, the SSH banner before authentication, and the banner after login.
-  - [-Path](#-path), [-Company](#-company), [-Environment](#-environment), [-Role](#-role), [-BannerImage](#-bannerimage), [-Border](#-border), [-BorderChar](#-borderchar), [-BorderCap](#-bordercap), [-ColorPreset](#-colorpreset), [-ColorMode](#-colormode), [-Glyphs](#-glyphs), [-Legal](#-legal), [-LegalText](#-legaltext), [-Voice](#-voice), [-PreInit](#-preinit), [-PreLogon](#-prelogon), [-VlanFile](#-vlanfile), [-Services](#-services), [-Update](#-update), [-UpdateSource](#-updatesource), [-ReplaceOldBanner](#-replaceoldbanner), [-WhatIf](#-whatif), [-Confirm](#-confirm)
+  - [-Path](#-path), [-Company](#-company), [-Environment](#-environment), [-Role](#-role), [-BannerImage](#-bannerimage), [-ArtPath](#-artpath), [-Border](#-border), [-BorderChar](#-borderchar), [-BorderCap](#-bordercap), [-ColorPreset](#-colorpreset), [-ColorMode](#-colormode), [-Glyphs](#-glyphs), [-Legal](#-legal), [-LegalText](#-legaltext), [-Voice](#-voice), [-PreInit](#-preinit), [-PreLogon](#-prelogon), [-VlanFile](#-vlanfile), [-Services](#-services), [-Update](#-update), [-UpdateSource](#-updatesource), [-ReplaceOldBanner](#-replaceoldbanner), [-WhatIf](#-whatif), [-Confirm](#-confirm)
 - [Deploy-UsaBannerGPO](#deploy-usabannergpo): Makes the Group Policy that deploys the banners on the domain's Windows servers and Ubuntu hosts, and keeps them current.
-  - [-Path](#-path-1), [-Company](#-company-1), [-Environment](#-environment-1), [-Role](#-role-1), [-BannerImage](#-bannerimage-1), [-Border](#-border-1), [-BorderChar](#-borderchar-1), [-BorderCap](#-bordercap-1), [-ColorPreset](#-colorpreset-1), [-ColorMode](#-colormode-1), [-Glyphs](#-glyphs-1), [-Legal](#-legal-1), [-LegalText](#-legaltext-1), [-Voice](#-voice-1), [-PreInit](#-preinit-1), [-PreLogon](#-prelogon-1), [-VlanFile](#-vlanfile-1), [-Services](#-services-1), [-Update](#-update-1), [-UpdateSource](#-updatesource-1), [-Name](#-name), [-LinkTarget](#-linktarget), [-Domain](#-domain), [-WhatIf](#-whatif-1), [-Confirm](#-confirm-1)
+  - [-Path](#-path-1), [-Company](#-company-1), [-Environment](#-environment-1), [-Role](#-role-1), [-BannerImage](#-bannerimage-1), [-ArtPath](#-artpath-1), [-Border](#-border-1), [-BorderChar](#-borderchar-1), [-BorderCap](#-bordercap-1), [-ColorPreset](#-colorpreset-1), [-ColorMode](#-colormode-1), [-Glyphs](#-glyphs-1), [-Legal](#-legal-1), [-LegalText](#-legaltext-1), [-Voice](#-voice-1), [-PreInit](#-preinit-1), [-PreLogon](#-prelogon-1), [-VlanFile](#-vlanfile-1), [-Services](#-services-1), [-Update](#-update-1), [-UpdateSource](#-updatesource-1), [-Name](#-name), [-LinkTarget](#-linktarget), [-Domain](#-domain), [-WhatIf](#-whatif-1), [-Confirm](#-confirm-1)
 - [Enter-UsaPSSession](#enter-usapssession): Enters a PowerShell session on a host, with the host's banner after login printed first.
   - [-ComputerName](#-computername), [-Credential](#-credential), [-Port](#-port), [-UseSSL](#-usessl), [-ConfigurationName](#-configurationname), [-Authentication](#-authentication), [-SessionOption](#-sessionoption), [-HostName](#-hostname), [-UserName](#-username), [-KeyFilePath](#-keyfilepath), [-Subsystem](#-subsystem), [-ConnectingTimeout](#-connectingtimeout), [-Options](#-options), [-Session](#-session), [-ColorMode](#-colormode-2), [-Glyphs](#-glyphs-2)
 - [Get-UsaBanner](#get-usabanner): Shows the banners Deploy-UsaBanner put on this host, and whether each part of them is in place.
@@ -438,7 +442,7 @@ before authentication, and the banner after login.
 #### Syntax
 
 ```
-Deploy-UsaBanner [[-Path] <string>] [[-Company] <string>] [[-Environment] <string>] [[-Role] <string>] [[-BannerImage] <string>] [[-Border] <string>] [[-BorderChar] <string>] [[-BorderCap] <string>] [[-ColorPreset] <string>] [[-ColorMode] <string>] [[-Glyphs] <string>] [[-Legal] <string>] [[-LegalText] <string[]>] [[-Voice] <string>] [[-PreInit] <string[]>] [[-PreLogon] <string[]>] [[-VlanFile] <string>] [[-Services] <string[]>] [[-Update] <string>] [[-UpdateSource] <string>] [-ReplaceOldBanner] [-WhatIf] [-Confirm] [<CommonParameters>]
+Deploy-UsaBanner [[-Path] <string>] [[-Company] <string>] [[-Environment] <string>] [[-Role] <string>] [[-BannerImage] <string>] [[-ArtPath] <string>] [[-Border] <string>] [[-BorderChar] <string>] [[-BorderCap] <string>] [[-ColorPreset] <string>] [[-ColorMode] <string>] [[-Glyphs] <string>] [[-Legal] <string>] [[-LegalText] <string[]>] [[-Voice] <string>] [[-PreInit] <string[]>] [[-PreLogon] <string[]>] [[-VlanFile] <string>] [[-Services] <string[]>] [[-Update] <string>] [[-UpdateSource] <string>] [-ReplaceOldBanner] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 #### Description
@@ -542,6 +546,12 @@ Deploy-UsaBanner -Path ./contoso.json -Environment DEV-TEST
 **Example 5**
 
 ```powershell
+Deploy-UsaBanner -Path ./contoso.json -ArtPath ./contoso-logo.json
+```
+
+**Example 6**
+
+```powershell
 Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WhatIf
 ```
 
@@ -622,8 +632,9 @@ Accept wildcard characters: False
 
 ##### -BannerImage
 
-The art: a piece of the module's art (Show-UsaBannerArt -List), or os
-for the pictogram in the host's OS colour.
+The art: a piece of the module's art (Show-UsaBannerArt -List), os for
+the pictogram in the host's OS colour, or os-logo for the logo of the OS
+the host runs (Windows, Ubuntu, or Tux on any other Linux).
 
 ```yaml
 Type: String
@@ -632,6 +643,27 @@ Aliases:
 
 Required: False
 Position: 4
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -ArtPath
+
+Art of your own, drawn in place of the module's: a .json file as
+New-UsaBannerArt -OutFile saves it (look at it first with
+Show-UsaBannerArt -Path). The art goes into the configuration, so it
+reaches every host the configuration does, and never into the module:
+for a logo you cannot or will not contribute. It keeps the rules of the
+module's own art. Not with -BannerImage.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -649,7 +681,7 @@ Aliases:
 Accepted values: Classic, Hash, Star, Equals, Round, Bevel, PipeUnderscore, Wavy, OneChar, Rounded, Single, Double, Heavy, Block
 
 Required: False
-Position: 5
+Position: 6
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -667,7 +699,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 6
+Position: 7
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -683,7 +715,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 7
+Position: 8
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -700,7 +732,7 @@ Aliases:
 Accepted values: UsagiTools, Classic16, HighContrast, Mono, Custom
 
 Required: False
-Position: 8
+Position: 9
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -718,7 +750,7 @@ Aliases:
 Accepted values: auto, truecolor, 256, 16, none
 
 Required: False
-Position: 9
+Position: 10
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -735,7 +767,7 @@ Aliases:
 Accepted values: auto, unicode, ascii
 
 Required: False
-Position: 10
+Position: 11
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -752,7 +784,7 @@ Aliases:
 Accepted values: L1, L2, L3, L4, L5, custom
 
 Required: False
-Position: 11
+Position: 12
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -768,7 +800,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 12
+Position: 13
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -785,7 +817,7 @@ Aliases:
 Accepted values: plain, uwu, random, leet
 
 Required: False
-Position: 13
+Position: 14
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -803,7 +835,7 @@ Aliases:
 Accepted values: HostName, Ip, None
 
 Required: False
-Position: 14
+Position: 15
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -820,7 +852,7 @@ Aliases:
 Accepted values: HostName, Ip, None
 
 Required: False
-Position: 15
+Position: 16
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -837,7 +869,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 16
+Position: 17
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -854,7 +886,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 17
+Position: 18
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -871,7 +903,7 @@ Aliases:
 Accepted values: off, notify, install
 
 Required: False
-Position: 18
+Position: 19
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -889,7 +921,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 19
+Position: 20
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -962,7 +994,7 @@ servers and Ubuntu hosts, and keeps them current.
 #### Syntax
 
 ```
-Deploy-UsaBannerGPO [[-Path] <string>] [[-Company] <string>] [[-Environment] <string>] [[-Role] <string>] [[-BannerImage] <string>] [[-Border] <string>] [[-BorderChar] <string>] [[-BorderCap] <string>] [[-ColorPreset] <string>] [[-ColorMode] <string>] [[-Glyphs] <string>] [[-Legal] <string>] [[-LegalText] <string[]>] [[-Voice] <string>] [[-PreInit] <string[]>] [[-PreLogon] <string[]>] [[-VlanFile] <string>] [[-Services] <string[]>] [[-Update] <string>] [[-UpdateSource] <string>] [[-Name] <string>] [[-LinkTarget] <string[]>] [[-Domain] <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Deploy-UsaBannerGPO [[-Path] <string>] [[-Company] <string>] [[-Environment] <string>] [[-Role] <string>] [[-BannerImage] <string>] [[-ArtPath] <string>] [[-Border] <string>] [[-BorderChar] <string>] [[-BorderCap] <string>] [[-ColorPreset] <string>] [[-ColorMode] <string>] [[-Glyphs] <string>] [[-Legal] <string>] [[-LegalText] <string[]>] [[-Voice] <string>] [[-PreInit] <string[]>] [[-PreLogon] <string[]>] [[-VlanFile] <string>] [[-Services] <string[]>] [[-Update] <string>] [[-UpdateSource] <string>] [[-Name] <string>] [[-LinkTarget] <string[]>] [[-Domain] <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 #### Description
@@ -1123,8 +1155,9 @@ Accept wildcard characters: False
 
 ##### -BannerImage
 
-The art: a piece of the module's art (Show-UsaBannerArt -List), or os
-for the pictogram in the host's OS colour.
+The art: a piece of the module's art (Show-UsaBannerArt -List), os for
+the pictogram in each host's OS colour, or os-logo for the logo of the
+OS each host runs (Windows, Ubuntu, or Tux on any other Linux).
 
 ```yaml
 Type: String
@@ -1133,6 +1166,27 @@ Aliases:
 
 Required: False
 Position: 4
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+##### -ArtPath
+
+Art of your own, drawn in place of the module's: a .json file as
+New-UsaBannerArt -OutFile saves it (look at it first with
+Show-UsaBannerArt -Path). The art goes into the package, so it reaches
+every host the GPO does, and never into the module: for a logo you
+cannot or will not contribute. It keeps the rules of the module's own
+art. Not with -BannerImage.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1150,7 +1204,7 @@ Aliases:
 Accepted values: Classic, Hash, Star, Equals, Round, Bevel, PipeUnderscore, Wavy, OneChar, Rounded, Single, Double, Heavy, Block
 
 Required: False
-Position: 5
+Position: 6
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1166,7 +1220,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 6
+Position: 7
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1182,7 +1236,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 7
+Position: 8
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1199,7 +1253,7 @@ Aliases:
 Accepted values: UsagiTools, Classic16, HighContrast, Mono, Custom
 
 Required: False
-Position: 8
+Position: 9
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1217,7 +1271,7 @@ Aliases:
 Accepted values: auto, truecolor, 256, 16, none
 
 Required: False
-Position: 9
+Position: 10
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1234,7 +1288,7 @@ Aliases:
 Accepted values: auto, unicode, ascii
 
 Required: False
-Position: 10
+Position: 11
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1251,7 +1305,7 @@ Aliases:
 Accepted values: L1, L2, L3, L4, L5, custom
 
 Required: False
-Position: 11
+Position: 12
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1267,7 +1321,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 12
+Position: 13
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1284,7 +1338,7 @@ Aliases:
 Accepted values: plain, uwu, random, leet
 
 Required: False
-Position: 13
+Position: 14
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1302,7 +1356,7 @@ Aliases:
 Accepted values: HostName, Ip, None
 
 Required: False
-Position: 14
+Position: 15
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1319,7 +1373,7 @@ Aliases:
 Accepted values: HostName, Ip, None
 
 Required: False
-Position: 15
+Position: 16
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1337,7 +1391,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 16
+Position: 17
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1354,7 +1408,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 17
+Position: 18
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1372,7 +1426,7 @@ Aliases:
 Accepted values: off, notify, install
 
 Required: False
-Position: 18
+Position: 19
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1388,7 +1442,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 19
+Position: 20
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1404,7 +1458,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 20
+Position: 21
 Default value: UsaBanner
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1423,7 +1477,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 21
+Position: 22
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -1440,7 +1494,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 22
+Position: 23
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

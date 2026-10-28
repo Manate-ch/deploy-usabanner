@@ -37,9 +37,13 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "description": "A built-in piece of art, by name. 'os' is our pictogram in the host's OS colour.",
+          "description": "A built-in piece of art, by name. 'os' is our pictogram in the host's OS colour; 'os-logo' is the logo of the OS the host runs.",
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "custom": {
+          "description": "Art of your own, as New-UsaBannerArt -OutFile saves it; drawn in place of the named art. Deploy-UsaBanner -ArtPath puts a file's art here.",
+          "type": "object"
         }
       }
     },

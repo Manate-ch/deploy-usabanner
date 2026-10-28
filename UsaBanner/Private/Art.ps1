@@ -30,6 +30,12 @@
 #   +---------+----------------------------------------------------------+
 #
 # label is for people; nothing reads it.
+#
+# A configuration names a piece in art.name, or holds art of its own in
+# art.custom (Get-UsaBannerConfiguredArt; docs/DECISIONS.md, D31).
+
+# os-logo: the logo of the OS a host runs, from art\apps.
+$script:UsaOsLogo = @{ windows = 'windows'; ubuntu = 'ubuntu'; linux = 'tux' }
 
 function Get-UsaBannerArtIndex {
     <#
@@ -106,6 +112,65 @@ function Read-UsaBannerArtFile {
     $problems = @(Test-UsaBannerArtData -Art $art -Folder $Folder)
     if ($problems.Count -gt 0) { throw ("UsaBanner: $Path breaks the art rules:`n  " + ($problems -join "`n  ")) }
     $art
+}
+
+function Test-UsaBannerCustomArt {
+    <#
+    .SYNOPSIS
+    The rules a configuration's own art keeps; returns each one it breaks.
+    .DESCRIPTION
+    In:  the value of art.custom.
+    Out: one string per problem; nothing when the art is sound.
+    The rules of the module's own art in art\base (Test-UsaBannerArtData),
+    and one more: no two classes differ only in case. Windows reads the
+    configuration at a login as a PowerShell data file, where f and F are
+    one key. New-UsaBannerArt names its classes a to p.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()]$Art)
+    if ($Art -isnot [System.Collections.IDictionary]) { return 'not art: an object as New-UsaBannerArt -OutFile saves it' }
+    Test-UsaBannerArtData -Art $Art
+    if ($Art['palette'] -isnot [System.Collections.IDictionary]) { return }
+    $seen = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($key in $Art['palette'].Keys) {
+        $class = [string]$key
+        if ($seen.ContainsKey($class)) { "palette: classes '$($seen[$class])' and '$class' differ only in case, and Windows reads the configuration as PowerShell data, where they are one key: give one of them another character" }
+        else { $seen[$class] = $class }
+    }
+}
+
+function Get-UsaBannerConfiguredArt {
+    <#
+    .SYNOPSIS
+    The art a configuration draws, checked.
+    .DESCRIPTION
+    In:  the configuration's art setting, and the host's OS: windows, ubuntu
+         or linux.
+    Out: the art, as Get-UsaBannerArtData gives it.
+    - art.custom, when there: the configuration's own art (Deploy-UsaBanner
+      -ArtPath), checked by Test-UsaBannerCustomArt;
+    - else art.name: os is the server pictogram, which takes the OS's
+      colour; os-logo is the logo of the OS: windows, ubuntu, or tux on any
+      other Linux; any other name is that piece of the module's art.
+    Throws when the configuration's own art breaks a rule, naming each, and
+    when the module has no art of that name.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.IDictionary])]
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Setting,
+        [Parameter(Mandatory)][ValidateSet('windows', 'ubuntu', 'linux')][string]$Os
+    )
+    if ($null -ne $Setting['custom']) {
+        $problems = @(Test-UsaBannerCustomArt -Art $Setting['custom'])
+        if ($problems.Count -gt 0) { throw ("UsaBanner: the configuration's own art (art.custom) breaks the art rules:`n  " + ($problems -join "`n  ")) }
+        return $Setting['custom']
+    }
+    $name = [string]$Setting['name']
+    if ($name -eq 'os') { $name = 'server' }
+    elseif ($name -eq 'os-logo') { $name = $script:UsaOsLogo[$Os] }
+    Get-UsaBannerArtData -Name $name
 }
 
 function Save-UsaBannerArtFile {

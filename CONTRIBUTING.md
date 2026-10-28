@@ -51,3 +51,14 @@ case letters, digits and hyphens, and `Show-UsaBannerArt <name>` draws it.
      be distributed under this repository's licence (MIT, see `LICENSE`);
    - the output of `Show-UsaBannerArt <name> -ColorMode none`, in a code
      block.
+
+### A logo you keep
+
+A logo you cannot, do not or will not contribute stays yours: make the file
+with `New-UsaBannerArt -OutFile ./contoso-logo.json` anywhere outside the
+module, look at it with `Show-UsaBannerArt -Path ./contoso-logo.json`, and
+deploy with `-ArtPath ./contoso-logo.json`. The art goes into your
+configuration, never into the module, and reaches every host the
+configuration does, through Group Policy too (`docs/DECISIONS.md`, D31). It
+keeps the art rules of step 3, and no two of its colour classes may differ
+only in case.

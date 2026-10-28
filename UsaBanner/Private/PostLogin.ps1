@@ -543,9 +543,7 @@ function New-UsaBannerPostLogin {
     )
     $voice = [string]$Config['voice']
     $glyphs = if ($AsciiOnly) { $script:UsaPanelGlyphs['Ascii'] } else { $script:UsaPanelGlyphs['Unicode'] }
-    $artName = [string]$Config['art']['name']
-    if ($artName -eq 'os') { $artName = 'server' }
-    $art = New-UsaBannerArtBlock -Art (Resolve-UsaBannerArtTint -Art (Get-UsaBannerArtData -Name $artName) -Os $Os) -Mode $Mode
+    $art = New-UsaBannerArtBlock -Art (Resolve-UsaBannerArtTint -Art (Get-UsaBannerConfiguredArt -Setting $Config['art'] -Os $Os) -Os $Os) -Mode $Mode
     $blank = New-UsaBannerTextBlock -Lines @('')
     $company = [string]$Config['company']
     # Held to the left: the stack centres each block as a whole.
