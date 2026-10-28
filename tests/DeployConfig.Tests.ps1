@@ -181,7 +181,7 @@ Describe 'the configuration a deploy builds' {
                 $node = $node['properties'][$part]
             }
         }
-        $settings.Count | Should -Be 19
+        $settings.Count | Should -Be 20
     }
 
     It 'turns the update channel on with -Update and the address of the releases with -UpdateSource' {
