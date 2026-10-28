@@ -494,6 +494,53 @@ Describe 'Remove-UsaBanner on Ubuntu' -Skip:$IsWindows {
     }
 }
 
+Describe 'Deploy-UsaBanner from a module folder that is not the files its manifest lists (D32)' -Skip:$IsWindows {
+    BeforeAll {
+        # A copy of the module to run from, as an admin's unpacked release: each test adds a file or takes one away.
+        $release = Join-Path $TestDrive 'release'
+        $null = New-Item -ItemType Directory -Path $release -Force
+        Copy-Item -LiteralPath $moduleRoot -Destination $release -Recurse
+        $script:Copy = Join-Path $release 'UsaBanner'
+        $script:Version = (Import-PowerShellDataFile -LiteralPath (Join-Path $script:Copy 'UsaBanner.psd1')).ModuleVersion
+        $script:Saved = InModuleScope UsaBanner { @($script:UsaBannerRoot, $script:UsaBannerManifest) }
+        InModuleScope UsaBanner -Parameters @{ Copy = $script:Copy } { param($Copy) $script:UsaBannerRoot = $Copy; $script:UsaBannerManifest = Join-Path $Copy 'UsaBanner.psd1' }
+    }
+
+    AfterAll {
+        InModuleScope UsaBanner -Parameters @{ Saved = $script:Saved } { param($Saved) $script:UsaBannerRoot, $script:UsaBannerManifest = $Saved }
+    }
+
+    BeforeEach { Use-LinuxHost -Root (New-StockHost) }
+
+    It 'refuses one that lacks a file the manifest lists, names it, and changes nothing' {
+        $gone = Join-Path $script:Copy 'art/base/globe.json'
+        $bytes = [System.IO.File]::ReadAllBytes($gone)
+        Remove-Item -LiteralPath $gone
+        try {
+            $before = Get-HostState $global:UsaDeployRoot
+            { Deploy-UsaBanner -Company Contoso } | Should -Throw "*the module's folder, $script:Copy, lacks 1 file(s) its manifest lists: art/base/globe.json.*Nothing was changed*"
+            Get-HostState $global:UsaDeployRoot | Should -Be $before
+            Get-Calls -Changes | Should -BeNullOrEmpty
+        }
+        finally { [System.IO.File]::WriteAllBytes($gone, $bytes) }
+    }
+
+    It 'leaves a file the manifest does not list out of the copy for every user, and says so (a production domain, 2026-10-28)' {
+        $extra = Join-Path $script:Copy 'usabanner-contoso.json'
+        [System.IO.File]::WriteAllText($extra, '{}')
+        try {
+            $all = @(Deploy-UsaBanner -Company Contoso 3>&1)
+            $warnings = @($all | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | ForEach-Object { $_.Message })
+            $warnings | Should -Contain "UsaBanner: the module's folder, $script:Copy, holds 1 file(s) its manifest does not list, which the copy for every user leaves out: usabanner-contoso.json. Keep other files, a configuration among them, outside the module's folder: the module loads every .ps1 in its folders."
+            $installed = Join-Path $global:UsaDeployRoot "usr/local/share/powershell/Modules/UsaBanner/$script:Version"
+            Join-Path $installed 'usabanner-contoso.json' | Should -Not -Exist
+            Join-Path $installed 'art/base/globe.json' | Should -Exist
+            $all | Should -Contain "installed the module UsaBanner $script:Version for every user: /usr/local/share/powershell/Modules/UsaBanner/$script:Version (83 file(s) copied, 0 removed)"
+        }
+        finally { Remove-Item -LiteralPath $extra }
+    }
+}
+
 Describe 'the scripts a deploy installs' -Skip:$IsWindows {
     BeforeAll {
         $script:Redraw = Join-Path $moduleRoot 'linux' 'redraw.sh'

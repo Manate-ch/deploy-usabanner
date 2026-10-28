@@ -15,7 +15,9 @@ function Remove-UsaBanner {
     -WhatIf says what it would change, and changes nothing.
 
     On Windows Server, as an administrator: unregisters the periodic job's
-    task and the update job's; takes the block out of each all-users
+    task and the update job's, and deletes their folder in the task
+    scheduler, \UsagiTools\, once no other task is in it; takes the block
+    out of each all-users
     profile, and the Banner
     line out of sshd_config, turning back on any Banner the deploy turned
     off (sshd -t checks it; restart sshd yourself); puts the logon notice

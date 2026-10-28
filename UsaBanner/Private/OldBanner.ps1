@@ -9,7 +9,8 @@
 #   +----------------+--------------------------------------------------------+
 #   | Ubuntu         | its jobs (manatech-motd-update.timer, and              |
 #   |                | manatech-motd-publish.path where Group Policy delivers |
-#   |                | it): stopped, their units deleted; what --retire       |
+#   |                | it): stopped with a run in progress, their units       |
+#   |                | deleted, their failed state cleared; what --retire     |
 #   |                | turned off, back on as Ubuntu ships it: four stock     |
 #   |                | MOTD scripts, landscape-sysinfo, motd-news.timer; its  |
 #   |                | sshd drop-in (ssh reloads); its MOTD scripts, console  |
@@ -119,7 +120,10 @@ function Remove-UsaBannerLinuxOldInstall {
          (Read-UsaBannerDeployRecord).
     Out: a line for each change, in the order made. Under -WhatIf,
          PowerShell says each change instead, and nothing changes.
-    Its jobs stop first, so they install nothing more while it goes. Then
+    Its jobs stop first, a run of each in progress too, so they install
+    nothing more while it goes; their units are deleted, and each that is
+    failed has its failed state cleared, so none stays in systemctl's failed
+    list without its unit. Then
     what --retire turned off comes back on as Ubuntu ships it: the stock
     MOTD scripts; landscape-sysinfo, its statoverride removed (or, for a
     file no package owns, its execute bits set); motd-news.timer, unmasked,
@@ -143,11 +147,17 @@ function Remove-UsaBannerLinuxOldInstall {
     )
     $repo = Get-UsaBannerOldLinuxRepo -Root $Root
     foreach ($unit in $script:UsaOldJobs) {
+        $service = [System.IO.Path]::ChangeExtension($unit, 'service')
         if ([System.IO.File]::Exists("$Root/etc/systemd/system/$unit") -and
-            $PSCmdlet.ShouldProcess($unit, 'Stop and disable the old banner''s job (systemctl disable --now)')) {
+            $PSCmdlet.ShouldProcess($unit, "Stop and disable the old banner's job (systemctl disable --now), and stop a run of it in progress (systemctl stop $service)")) {
             $disable = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'disable', '--now', $unit
             if ($disable.ExitCode -eq 0) { "stopped ${unit}: the old banner's job" }
             else { Write-Warning "UsaBanner: systemctl could not disable ${unit}: $($disable.Output -join ' ')" }
+            # The trigger stopped, a run it started goes on, and its unit is deleted under it: the
+            # publish watcher's run, in its 30-second sleep, then had nothing left to start, and
+            # systemd failed it ('resources', a production host, 2026-10-28).
+            $stop = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'stop', $service
+            if ($stop.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl could not stop ${service}: $($stop.Output -join ' ')" }
         }
     }
     $gone = @(foreach ($unit in $script:UsaOldUnits) { Remove-UsaBannerHostFile -Root $Root -Path "/etc/systemd/system/$unit" -What 'a unit of the old banner''s job' })
@@ -155,6 +165,18 @@ function Remove-UsaBannerLinuxOldInstall {
     if ($gone.Count) {
         $reload = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'daemon-reload'
         if ($reload.ExitCode -ne 0) { Write-Warning "UsaBanner: systemctl daemon-reload failed: $($reload.Output -join ' ')" }
+    }
+    # A unit deleted while failed stays in systemctl's failed list, and in the "failed units" line
+    # at each login, until it is reset: the old update job had failed before a move-off (a test
+    # host, 2026-10-27), and a run stopped part way ends failed. Every unit of the old jobs, so a
+    # host an earlier deploy moved off is cleared at its next one.
+    foreach ($unit in $script:UsaOldUnits) {
+        $state = [string](@((Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'is-failed', $unit).Output) + '')[0]
+        if ($state -eq 'failed' -and $PSCmdlet.ShouldProcess($unit, 'Clear its failed state: its unit is gone, and it would stay in systemctl''s failed list (systemctl reset-failed)')) {
+            $reset = Invoke-UsaBannerNative -FilePath 'systemctl' -ArgumentList 'reset-failed', $unit
+            if ($reset.ExitCode -eq 0) { "cleared the failed state of ${unit}: a unit of the old banner's job" }
+            else { Write-Warning "UsaBanner: systemctl could not reset ${unit}: $($reset.Output -join ' ')" }
+        }
     }
 
     # What this banner's deploys turned off is on their record, and stays off (lab, 2026-10-25).

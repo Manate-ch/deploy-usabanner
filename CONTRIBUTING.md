@@ -29,6 +29,10 @@ case letters, digits and hyphens, and `Show-UsaBannerArt <name>` draws it.
    `docs/IMAGE-ART.md` says what each one changes. Art drawn by hand is
    welcome too: the file's keys are described at the top of
    `UsaBanner/Private/Art.ps1`, and `UsaBanner/art/base/` has examples.
+   Then list the file in `FileList` in `UsaBanner/UsaBanner.psd1`, in its
+   place in ordinal order (capitals before lower case): the tests hold the
+   module's folder to that list, and a deploy copies only what it names
+   (`docs/DECISIONS.md`, D32).
 
 2. **For another owner's logo** (`art/apps/`): draw it yourself rather than
    copy it, and only to identify what a host runs, such as its OS or an
@@ -61,4 +65,6 @@ deploy with `-ArtPath ./contoso-logo.json`. The art goes into your
 configuration, never into the module, and reaches every host the
 configuration does, through Group Policy too (`docs/DECISIONS.md`, D31). It
 keeps the art rules of step 3, and no two of its colour classes may differ
-only in case.
+only in case. Keep the file, and your configuration, outside the module's
+folder: a deploy leaves out a file its manifest does not list, and the Group
+Policy publish refuses the folder (D32).

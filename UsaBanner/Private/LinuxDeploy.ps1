@@ -605,6 +605,44 @@ function Get-UsaBannerMarkedFile {
     }
 }
 
+function Get-UsaBannerModuleFileCheck {
+    # In:  a module's folder; this module's own by default
+    # Out: @{ Listed; Extra; Missing }: the files its manifest lists (FileList),
+    #      the files the folder holds that the manifest does not list, and the
+    #      ones it lists that the folder lacks; each a path from the folder,
+    #      with /, names compared as they are spelt
+    # Why: the module loads every .ps1 in its Bootstrap, Private and Public
+    #      folders, and its folder is copied on to every host, so a file left
+    #      in an admin's copy of the release went along (a production
+    #      domain's publish staged one, 2026-10-28)
+    param([string]$Root = $script:UsaBannerRoot)
+    $full = [System.IO.Path]::GetFullPath($Root).TrimEnd('/', '\')
+    $manifest = Import-PowerShellDataFile -LiteralPath ([System.IO.Path]::Combine($full, 'UsaBanner.psd1'))
+    $listed = [string[]]@(@($manifest['FileList']) | Where-Object { $_ } | ForEach-Object { ([string]$_).Replace('\', '/') })
+    $held = [string[]]@([System.IO.Directory]::GetFiles($full, '*', [System.IO.SearchOption]::AllDirectories) | ForEach-Object { [System.IO.Path]::GetRelativePath($full, $_).Replace('\', '/') })
+    $isListed = [System.Collections.Generic.HashSet[string]]::new($listed, [System.StringComparer]::Ordinal)
+    $isHeld = [System.Collections.Generic.HashSet[string]]::new($held, [System.StringComparer]::Ordinal)
+    $extra = [string[]]@($held | Where-Object { -not $isListed.Contains($_) })
+    [array]::Sort($extra, [System.StringComparer]::Ordinal)
+    @{ Listed = $listed; Extra = $extra; Missing = [string[]]@($listed | Where-Object { -not $isHeld.Contains($_) }) }
+}
+
+function Assert-UsaBannerModuleWhole {
+    # In:  the command that asks
+    # Out: nothing; a warning names each file the module's folder holds and its
+    #      manifest does not list, which the copy for every user leaves out.
+    #      Throws, before anything is changed, when a file the manifest lists
+    #      is missing: the copy would be short of it
+    param([Parameter(Mandatory)][string]$Command)
+    $check = Get-UsaBannerModuleFileCheck
+    if ($check.Missing.Count) {
+        throw "UsaBanner: the module's folder, $script:UsaBannerRoot, lacks $($check.Missing.Count) file(s) its manifest lists: $($check.Missing -join ', '). $Command copies the module for every user, and a copy short of a file fails every login that imports it. Unpack the release again, then run $Command again. Nothing was changed."
+    }
+    if ($check.Extra.Count) {
+        Write-Warning "UsaBanner: the module's folder, $script:UsaBannerRoot, holds $($check.Extra.Count) file(s) its manifest does not list, which the copy for every user leaves out: $($check.Extra -join ', '). Keep other files, a configuration among them, outside the module's folder: the module loads every .ps1 in its folders."
+    }
+}
+
 function Install-UsaBannerModuleCopy {
     <#
     .SYNOPSIS
@@ -619,7 +657,9 @@ function Install-UsaBannerModuleCopy {
     /usr/local/share/powershell/Modules, where any user's Show-UsaBanner
     and the periodic job's redraw import it from; on Windows, Windows
     PowerShell's, which PowerShell 7 reads too. A module that runs from
-    there already is not copied onto itself. Files the copy holds and the
+    there already is not copied onto itself. The module is the files its
+    manifest lists (FileList): another file in its folder is left out
+    (Assert-UsaBannerModuleWhole names it). Files the copy holds and the
     module does not are removed: the folder is the module's own. The copy
     the record named before, where it is another version, goes once this
     one is in place; a version folder no deploy recorded stays. Each file
@@ -647,8 +687,8 @@ function Install-UsaBannerModuleCopy {
     $marked = @(if ($Os -eq 'windows') { Get-UsaBannerMarkedFile -Folder "$Root$target" })
     $copy = [System.Collections.Generic.List[string]]::new()
     $wanted = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($file in [System.IO.Directory]::GetFiles($source, '*', [System.IO.SearchOption]::AllDirectories)) {
-        $relative = [System.IO.Path]::GetRelativePath($source, $file).Replace('\', '/')
+    foreach ($relative in (Get-UsaBannerModuleFileCheck -Root $source).Listed) {
+        $file = [System.IO.Path]::Combine($source, $relative)
         $null = $wanted.Add($relative)
         $there = "$Root$target/$relative"
         $same = [System.IO.File]::Exists($there) -and [System.Linq.Enumerable]::SequenceEqual([byte[]][System.IO.File]::ReadAllBytes($there), [byte[]][System.IO.File]::ReadAllBytes($file))
@@ -1004,6 +1044,7 @@ function Invoke-UsaBannerLinuxDeploy {
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Config, [switch]$ReplaceOld)
     $root = Get-UsaBannerHostRoot
     Assert-UsaBannerLinuxHost -Root $root -Command 'Deploy-UsaBanner' -RefuseOldInstall:(-not $ReplaceOld)
+    Assert-UsaBannerModuleWhole -Command 'Deploy-UsaBanner'
     $record = Read-UsaBannerDeployRecord -Root $root
     $created = [System.Collections.Generic.List[string]]::new()
     foreach ($folder in @($record['created'])) { if ($folder) { $created.Add([string]$folder) } }
