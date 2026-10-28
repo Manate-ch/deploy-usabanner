@@ -74,13 +74,22 @@ function Test-UsaBannerConfig {
     Test-Json's answer decides: text it calls not valid always has a
     problem here, named by Find-UsaBannerSchemaProblem when Test-Json's own
     records name none (ConfigSchema.ps1 says when).
+    Valid text with art of its own (art.custom) is then held to the art
+    rules, Test-UsaBannerCustomArt's: each one broken is /art/custom: <rule>.
+    The schema says only that it is an object.
     #>
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory)][string]$Json)
     $schema = Get-Content -LiteralPath (Join-Path -Path $script:UsaBannerRoot -ChildPath 'config' -AdditionalChildPath 'usabanner.schema.json') -Raw
     $check = Invoke-UsaBannerSchemaCheck -Json $Json -Schema $schema
-    if ($check.Valid) { return }
+    if ($check.Valid) {
+        $value = $Json | ConvertFrom-Json -AsHashtable
+        if ($value['art'] -is [System.Collections.IDictionary] -and $value['art'].Contains('custom')) {
+            foreach ($problem in @(Test-UsaBannerCustomArt -Art $value['art']['custom'])) { "/art/custom: $problem" }
+        }
+        return
+    }
     $named = @(ConvertFrom-UsaBannerSchemaError -Records $check.Errors)
     # Records that are not about the schema say the text is not JSON at all: there is nothing to look into.
     if (@($named | Where-Object { $_ -notmatch '^(/[^:]*)?: ' }).Count) { return $named }
@@ -103,9 +112,10 @@ function ConvertTo-UsaBannerDataFile {
     Out: the text of a .psd1: a comment saying where it comes from, then one
          hashtable literal, its keys in the configuration's order, each
          string in single quotes. Only what Import-PowerShellDataFile reads
-         as data: strings, whole numbers, $true and $false, @() and @{}. LF
-         line ends and a final newline, so the same configuration always
-         gives the same bytes.
+         as data: strings, numbers (a fraction, as in art's sheen, in the
+         invariant culture's round-trip form), $true and $false, @() and
+         @{}. LF line ends and a final newline, so the same configuration
+         always gives the same bytes.
     Reading it takes no measurable time in a fresh pwsh, where the JSON and
     its schema check take about 100 ms [measured: 7 fresh pwsh 7.6.6 each,
     on a 16-core VM, 2026-10-22].
@@ -132,6 +142,8 @@ function ConvertTo-UsaBannerDataFile {
         }
         if ($Value -is [bool]) { if ($Value) { return '$true' } else { return '$false' } }
         if ($Value -is [int] -or $Value -is [long]) { return [string]$Value }
+        # A fraction quoted would come back a string, which the art rules refuse as a sheen's number.
+        if ($Value -is [double]) { return $Value.ToString('R', [System.Globalization.CultureInfo]::InvariantCulture) }
         "'$(([string]$Value).Replace("'", "''"))'"
     }
     "# UsaBanner: this host's configuration, read at each login. Deploy-UsaBanner writes it`n" +

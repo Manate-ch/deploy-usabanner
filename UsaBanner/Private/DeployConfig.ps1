@@ -9,7 +9,10 @@
 #   | Environment  | environment    | UNSET, DEV-TEST, LAB, PROD or PUB    |
 #   | Role         | role           | what the host is for, printable      |
 #   |              |                | ASCII                                |
-#   | BannerImage  | art.name       | a piece of the module's art, or os   |
+#   | BannerImage  | art.name       | a piece of the module's art, os or   |
+#   |              |                | os-logo                              |
+#   | ArtPath      | art.custom     | an art file of your own, as          |
+#   |              |                | New-UsaBannerArt -OutFile saves it   |
 #   | Border       | border.set     | a border set (D6)                    |
 #   | BorderChar   | border.char    | the character OneChar draws with     |
 #   | BorderCap    | border.cap     | an ASCII face for the top line       |
@@ -38,6 +41,7 @@ $script:UsaDeployFlags = [ordered]@{
     Environment  = 'environment'
     Role         = 'role'
     BannerImage  = 'art.name'
+    ArtPath      = 'art.custom'
     Border       = 'border.set'
     BorderChar   = 'border.char'
     BorderCap    = 'border.cap'
@@ -85,8 +89,11 @@ function New-UsaBannerDeployConfig {
          -Environment prod sets PROD. -PreInit and -PreLogon set both of
          their settings: what is not named is not shown. -LegalText sets the
          template to custom. -Services default is the OS's own list.
+         -BannerImage drops any art.custom the file held; -ArtPath puts the
+         file's art in art.custom, which is drawn in place of art.name.
     Throws on a flag the table does not have, on art the module does not
-    have, on -LegalText with another template or without text, on a custom
+    have, on -ArtPath given a file that is not art or with -BannerImage, on
+    -LegalText with another template or without text, on a custom
     template left without text, on None or default given with something
     else, on an update channel turned on without a source, when the result
     breaks the schema: each problem with the flag that set it; and on
@@ -118,10 +125,20 @@ function New-UsaBannerDeployConfig {
         $setting = $script:UsaDeployFlags[$name]
         switch ($name) {
             'BannerImage' {
-                $known = @('os') + @((Get-UsaBannerArtIndex).Keys)
+                $known = @('os', 'os-logo') + @((Get-UsaBannerArtIndex).Keys)
                 $match = @($known | Where-Object { $_ -eq [string]$value })
-                if ($match.Count -eq 0) { throw "UsaBanner: -BannerImage takes the module's art, or os for the host's own; there is no art called '$value'. There is: $($known -join ', ')." }
+                if ($match.Count -eq 0) { throw "UsaBanner: -BannerImage takes the module's art, os for our pictogram in the host's OS colour, or os-logo for the logo of its OS; there is no art called '$value'. There is: $($known -join ', ')." }
                 & $put $setting $match[0]
+                # The flag names the art to draw: a file's own art would be drawn in its place.
+                if ($config['art'].Contains('custom')) { $config['art'].Remove('custom') }
+            }
+            'ArtPath' {
+                if ($Flags.Contains('BannerImage')) { throw "UsaBanner: -BannerImage names a piece of the module's art, and -ArtPath brings art of your own: give one of them." }
+                $file = $PSCmdlet.GetUnresolvedProviderPathFromPSPath([string]$value)
+                if ([System.IO.Path]::GetExtension($file) -ne '.json') {
+                    throw "UsaBanner: -ArtPath takes art as New-UsaBannerArt -OutFile saves it, a .json file. From an image, make it first: New-UsaBannerArt -Path $value -OutFile <name>.json, then look at it with Show-UsaBannerArt -Path <name>.json."
+                }
+                & $put $setting (Read-UsaBannerArtFile -Path $file)
             }
             'LegalText' {
                 $lines = @($value | ForEach-Object { [string]$_ })
@@ -197,7 +214,8 @@ function Compare-UsaBannerConfig {
          new configuration's order, then any the new one leaves out. A
          setting is a path such as border.set; a list (the VLANs, the
          services, the legal text, a naming table) is one setting, and is
-         shown by its length when its JSON runs past 40 characters. Values
+         shown by its length when its JSON runs past 40 characters; so is
+         art.custom, shown by its title and size, as "Contoso", 40 x 18. Values
          are JSON; one that is not there is (none). Nothing when the two are
          the same. With -NewOnly, '<setting>: <new>': what the new one sets
          otherwise than the old, as Get-UsaBanner lists a host's settings
@@ -218,7 +236,8 @@ function Compare-UsaBannerConfig {
         foreach ($key in $Node.Keys) {
             $path = if ($Prefix) { "$Prefix.$key" } else { [string]$key }
             $value = $Node[$key]
-            if ($value -is [System.Collections.IDictionary]) { & $flatten $value $path $Into }
+            # A configuration's own art is one setting: its palette entries are not settings of their own.
+            if ($value -is [System.Collections.IDictionary] -and $path -cne 'art.custom') { & $flatten $value $path $Into }
             else { $Into[$path] = $value }
         }
     }
@@ -227,6 +246,12 @@ function Compare-UsaBannerConfig {
         # Out: the value as compact JSON, or its length when that runs long
         param($Value, [bool]$Present)
         if (-not $Present) { return '(none)' }
+        if ($Value -is [System.Collections.IDictionary]) {
+            # Only art.custom arrives whole: its title and size say which art it is.
+            $rows = @($Value['art'])
+            $wide = ($rows | ForEach-Object { ([string]$_).Length } | Measure-Object -Maximum).Maximum
+            return "$(ConvertTo-Json -InputObject ([string]$Value['title']) -Compress), $wide x $($rows.Count)"
+        }
         $json = ConvertTo-Json -InputObject $Value -Compress -Depth 10
         if ($json.Length -le 40 -or -not ($Value -is [System.Collections.IList])) { return $json }
         $count = @($Value).Count

@@ -74,6 +74,7 @@
 | D27 | Deploy-UsaBanner's flags | decided; built |
 | D28 | What Get-UsaBanner checks | decided; built |
 | D29 | Group Policy delivery (M6): the first rollout | decided; built |
+| D31 | Art the module does not hold, and the logo of each host's OS | asked 2026-10-28; built, for review |
 
 ## D1. Where the code lives, and its name
 
@@ -2173,6 +2174,43 @@ Storage module names them.
   for the disks: for later. The runner's due check looks for the old
   banner's two tasks by their definition files (D23), so a policy refresh
   still loads none of them.
+
+## D31. Art the module does not hold, and the logo of each host's OS
+
+Asked 2026-10-28: a logo its admin cannot, does not or will not contribute,
+such as a company's own whose images its marketing owns, has to be usable all
+the same, made with `New-UsaBannerArt` and kept out of the module. Until now
+the banners drew only art the module holds, by name (`art.name`).
+
+- **A. A path on each host** (`art.path`): every host needs the file, in a
+  place only root or SYSTEM may write, and Group Policy would need a second
+  channel to put it there.
+- **B. The art inside the configuration** (`art.custom`): it goes wherever
+  the configuration goes, by hand (`-Path`), in the Group Policy's package,
+  and with the update job's redeploy, with no channel of its own. The
+  configuration is the admin's file, never the module's.
+- **C. Contribute it** (CONTRIBUTING.md): still the way for a logo its owner
+  wants in the default set.
+
+**Built: B**, as `Deploy-UsaBanner -ArtPath <art.json>` and the same flag on
+`Deploy-UsaBannerGPO`, taking the file `New-UsaBannerArt -OutFile` saves
+(look at it first with `Show-UsaBannerArt -Path`). The art keeps the rules
+of the module's own in `art\base` (`Test-UsaBannerArtData`: printable ASCII
+only, so it cannot carry an escape to a terminal; 64 x 30 at most; its
+credits), checked when a configuration is built or read and again when it is
+drawn, and one rule more: no two colour classes that differ only in case.
+Windows reads the configuration at a login as a PowerShell data file, where
+`f` and `F` are one key; `New-UsaBannerArt` names its classes `a` to `p`. The
+data file now writes a fraction as a number, so a sheen survives it.
+`art.custom` is drawn in place of `art.name`; `-BannerImage` drops it, and
+is refused beside `-ArtPath`. A deploy reports it as one setting, by its
+title and size.
+
+**Also built: `os-logo`**, for `-BannerImage`: the logo of the OS each host
+runs, from `art/apps` (Windows, Ubuntu, or Tux on any other Linux), as SPEC
+3.1 first asked. It is one setting, so one Group Policy package draws each
+host its own. `os`, the default, stays our server pictogram in the OS's
+colour (D3).
 
 ## Appendix A. Art mock-ups (rough)
 

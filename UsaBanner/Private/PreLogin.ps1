@@ -49,9 +49,7 @@ function New-UsaBannerPreLogin {
     $titleStyle = New-UsaBannerStyle -FgBasic 'bright-yellow' -Bold
     $hintStyle = New-UsaBannerStyle -FgBasic 'bright-black'
 
-    $artName = [string]$Config['art']['name']
-    if ($artName -eq 'os') { $artName = 'server' }
-    $art = New-UsaBannerArtBlock -Art (Resolve-UsaBannerArtTint -Art (Get-UsaBannerArtData -Name $artName) -Os $Os) -Mode $Mode
+    $art = New-UsaBannerArtBlock -Art (Resolve-UsaBannerArtTint -Art (Get-UsaBannerConfiguredArt -Setting $Config['art'] -Os $Os) -Os $Os) -Mode $Mode
 
     $hostLine = $null
     if ($HostText -or $AddressText) {

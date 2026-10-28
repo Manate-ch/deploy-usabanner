@@ -72,8 +72,16 @@ function Deploy-UsaBannerGPO {
     64 characters at most. Empty, the default, takes the role from each
     host's AD Description, as "PROD : Web front end" gives Web front end.
     .PARAMETER BannerImage
-    The art: a piece of the module's art (Show-UsaBannerArt -List), or os
-    for the pictogram in the host's OS colour.
+    The art: a piece of the module's art (Show-UsaBannerArt -List), os for
+    the pictogram in each host's OS colour, or os-logo for the logo of the
+    OS each host runs (Windows, Ubuntu, or Tux on any other Linux).
+    .PARAMETER ArtPath
+    Art of your own, drawn in place of the module's: a .json file as
+    New-UsaBannerArt -OutFile saves it (look at it first with
+    Show-UsaBannerArt -Path). The art goes into the package, so it reaches
+    every host the GPO does, and never into the module: for a logo you
+    cannot or will not contribute. It keeps the rules of the module's own
+    art. Not with -BannerImage.
     .PARAMETER Border
     The box's lines and corners. The Unicode sets show after login only,
     with Classic before login.
@@ -145,6 +153,9 @@ function Deploy-UsaBannerGPO {
 
         [ValidateNotNullOrEmpty()]
         [string]$BannerImage,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$ArtPath,
 
         [ValidateSet('Classic', 'Hash', 'Star', 'Equals', 'Round', 'Bevel', 'PipeUnderscore', 'Wavy', 'OneChar', 'Rounded', 'Single', 'Double', 'Heavy', 'Block')]
         [string]$Border,

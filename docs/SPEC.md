@@ -99,6 +99,11 @@ logon.
   in orange on Ubuntu, Tux on other Linux, and the like for any OS added
   later (D3).
 - (§8: the list ended in an empty bullet here.)
+- As built (D31): `-BannerImage os-logo` draws the logo of the OS each host
+  runs, as above; the default `os` is our pictogram in the OS's colour.
+  `-ArtPath` draws art of your own, made with `New-UsaBannerArt`: it travels
+  in the configuration, so a logo you cannot or will not contribute never
+  enters the module.
 
 ### 3.2 Set-UsaBanner
 

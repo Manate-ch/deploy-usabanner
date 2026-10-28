@@ -1377,8 +1377,8 @@ Describe 'Deploy-UsaBannerGPO, its parameters' {
         $script:Flags = InModuleScope UsaBanner { Get-UsaBannerDeployFlagName }
     }
 
-    It 'takes the 19 flags of Deploy-UsaBanner, no more and no fewer: its flag parameters equal the list the configuration builder keeps' {
-        $script:Flags | Should -HaveCount 19
+    It 'takes the 20 flags of Deploy-UsaBanner, no more and no fewer: its flag parameters equal the list the configuration builder keeps' {
+        $script:Flags | Should -HaveCount 20
         $common = @([System.Management.Automation.PSCmdlet]::CommonParameters) + @([System.Management.Automation.PSCmdlet]::OptionalCommonParameters)
         $own = @('Path', 'Name', 'LinkTarget', 'Domain')
         $flagParameters = @($script:Command.Parameters.Keys | Where-Object { $_ -notin $common -and $_ -notin $own })
@@ -1386,8 +1386,8 @@ Describe 'Deploy-UsaBannerGPO, its parameters' {
     }
 
     # Discovery's variables are gone when tests run, so the count travels as test data.
-    It 'finds the 19 flags to compare, else the next test compares nothing' -ForEach @(@{ Found = @($flagCases).Count }) {
-        $Found | Should -Be 19
+    It 'finds the 20 flags to compare, else the next test compares nothing' -ForEach @(@{ Found = @($flagCases).Count }) {
+        $Found | Should -Be 20
     }
 
     It 'gives each flag the type and the allowed values Deploy-UsaBanner gives it: <Flag>' -ForEach $flagCases {
