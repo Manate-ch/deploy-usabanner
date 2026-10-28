@@ -99,6 +99,19 @@ Describe 'a release' {
         $null = & $Build -OutDir $out
         { & $Build -OutDir $out } | Should -Throw '*is there already, and a release does not change under the same name*'
     }
+
+    It 'is refused from a module folder that is not the files its manifest lists, naming each, and nothing is written (D32)' {
+        # A file left in the folder would ship in the archive, as a production domain's publish staged one (2026-10-28).
+        $work = Join-Path $TestDrive 'stray'
+        $null = New-Item -ItemType Directory -Path $work -Force
+        Copy-Item -LiteralPath $moduleRoot -Destination $work -Recurse
+        $copy = Join-Path $work 'UsaBanner'
+        [System.IO.File]::WriteAllText((Join-Path $copy 'usabanner-contoso.json'), '{}')
+        Remove-Item -LiteralPath (Join-Path $copy 'NOTICE')
+        $out = Join-Path $TestDrive 'stray-dist'
+        { & $Build -OutDir $out -ModulePath $copy } | Should -Throw "*$copy is not the module its manifest lists (FileList): not listed: usabanner-contoso.json; missing: NOTICE.*"
+        Test-Path -LiteralPath $out | Should -BeFalse
+    }
 }
 
 Describe 'reading a release' {

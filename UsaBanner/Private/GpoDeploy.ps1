@@ -899,8 +899,8 @@ function Invoke-UsaBannerGpoDeploy {
     not the files its manifest lists, a destination that is someone else's,
     the module staged onto itself, two GPOs of the name, no GPO of the name
     while another carries this banner's task, a ScheduledTasks.xml it cannot
-    merge into); the overwrite warnings; the
-    files; the GPO; the links; the neighbours' warnings; the read-back.
+    merge into); the overwrite warnings; the files; the GPO; the links; the
+    neighbours' warnings; the read-back.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]

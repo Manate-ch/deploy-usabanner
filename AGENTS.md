@@ -22,6 +22,9 @@ For AI coding agents working in this repository. Humans: see README.md.
 - No real hosts, domains, addresses or companies in code, tests or docs:
   use `ad.example`, `example.com`, `10.20.x.x` and Contoso.
 - A behaviour change comes with a test that fails without it.
+- A file added to `UsaBanner/` is listed in `FileList` in
+  `UsaBanner/UsaBanner.psd1` too, in ordinal order: a deploy copies only
+  what the list names (`docs/DECISIONS.md`, D32).
 - What the tool should do is in `docs/SPEC.md`, and why in
   `docs/DECISIONS.md`: read the part that covers your change first.
 
