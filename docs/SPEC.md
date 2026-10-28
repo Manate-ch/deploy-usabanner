@@ -160,6 +160,12 @@ Lists the monitored services. Given a service name, returns `$true` or
 - Does NOT enable SSH on its own. Its Windows servers need `deploy-usawinssh`
   in the domain, which installs PowerShell 7 (D21): it warns while no GPO of
   that tool is linked and enabled.
+- Finds its GPO by name (`-Name`, `UsaBanner` by default). Where no GPO has
+  the name and another carries its task `UsaBanner sync` (one it made,
+  renamed since), it stops and names that GPO and the `-Name` to give; while
+  another GPO carries the task beside its own, it warns (D29).
+- Stages the module's own files, as its manifest lists them, and refuses a
+  module folder that holds more or fewer (D32).
 
 ### 3.8 Enter-UsaPSSession
 
@@ -220,7 +226,8 @@ How it works, step by step, for anyone reading its code: [IMAGE-ART.md](IMAGE-AR
 Added on 2026-10-22 (D23). Takes the banners off a host and leaves it as it
 was before `Deploy-UsaBanner`: only what a deploy changed is changed back,
 so a stock MOTD script someone else turned off stays off (D16). `-WhatIf`
-says what it would change, and changes nothing.
+says what it would change, and changes nothing. On Windows its tasks' folder
+in the task scheduler, `\UsagiTools\`, goes too, once no other task is in it.
 
 ## 4. Rules for every banner
 

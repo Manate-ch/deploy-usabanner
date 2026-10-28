@@ -25,7 +25,17 @@ param(
 $ErrorActionPreference = 'Stop'
 $module = (Resolve-Path -LiteralPath $ModulePath).ProviderPath
 if ([System.IO.Path]::GetFileName($module.TrimEnd('/', '\')) -cne 'UsaBanner') { throw "New-UsaBannerRelease: $module is not a folder named UsaBanner: the archive's root folder takes its name." }
-$version = (Import-PowerShellDataFile -LiteralPath (Join-Path $module 'UsaBanner.psd1')).ModuleVersion
+$manifest = Import-PowerShellDataFile -LiteralPath (Join-Path $module 'UsaBanner.psd1')
+$version = $manifest.ModuleVersion
+# The archive holds the folder whole: a file left in it would ship with the release, and a deploy
+# leaves out, and the Group Policy publish refuses, any file the manifest does not list.
+$listed = @($manifest.FileList | ForEach-Object { ([string]$_).Replace('\', '/') })
+$held = @(Get-ChildItem -LiteralPath $module -Recurse -File -Force | ForEach-Object { [System.IO.Path]::GetRelativePath($module, $_.FullName).Replace('\', '/') })
+$extra = @($held | Where-Object { $_ -cnotin $listed })
+$missing = @($listed | Where-Object { $_ -cnotin $held })
+if ($extra.Count -or $missing.Count) {
+    throw "New-UsaBannerRelease: $module is not the module its manifest lists (FileList): $(@(if ($extra.Count) { "not listed: $($extra -join ', ')" }; if ($missing.Count) { "missing: $($missing -join ', ')" }) -join '; '). Move other files out, or list a new file in the manifest."
+}
 $out = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($OutDir)
 $null = New-Item -ItemType Directory -Path $out -Force
 $name = "UsaBanner-$version.zip"

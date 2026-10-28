@@ -387,13 +387,27 @@ function Get-UsaBannerGpoStagingPlan {
          its plan. The Ubuntu copy is only there when the ADSys assets folder
          is (its GPT.INI): without it a warning says what to create, and the
          Windows half goes on.
-    Throws, with nothing written, when a destination holds files and has no
-    mark (it is someone else's: staging would remove them), and when the
-    module's own folder is, or is inside, a destination.
+    Throws, with nothing written, when the module's folder is not the files
+    its manifest lists (FileList), no more and no fewer; when a destination
+    holds files and has no mark (it is someone else's: staging would remove
+    them); and when the module's own folder is, or is inside, a destination.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$Run)
     $root = Get-UsaBannerGpoModuleRoot
+    # Every host copies the staged module on and loads every .ps1 in its folders: a file left in
+    # an admin's copy of the release went to every host (a production domain, 2026-10-28).
+    $check = Get-UsaBannerModuleFileCheck -Root $root
+    $wrong = @(
+        if (-not $check.Listed.Count) { 'its manifest lists no files (FileList)' }
+        else {
+            if ($check.Extra.Count) { "it holds $($check.Extra.Count) file(s) its manifest does not list: $($check.Extra -join ', ')" }
+            if ($check.Missing.Count) { "it lacks $($check.Missing.Count) file(s) its manifest lists: $($check.Missing -join ', ')" }
+        }
+    )
+    if ($wrong.Count) {
+        throw "UsaBanner: the module's folder, $root, is not the module its manifest lists: $($wrong -join '; '). It is staged whole to NETLOGON and SYSVOL, and every host copies it on and loads every .ps1 in its folders. Move other files out of it (a configuration belongs outside the module's folder: -Path names it), or unpack the release again. Nothing was written."
+    }
     $module = @(Get-UsaBannerGpoModuleFile -Root $root)
     $Run.Converted = @($module | Where-Object { $_.Converted }).Count
     $mark = [System.Text.UTF8Encoding]::new($false).GetBytes($script:UsaGpoMarkText)
@@ -436,8 +450,10 @@ function Get-UsaBannerGpoSettingsPlan {
     Out: nothing; the run holds the GPO (found by its name, or not there yet),
          the ScheduledTasks.xml to write and whether the file has it already,
          and the ADSys startup values to set and remove.
-    Throws, with nothing written, when more than one GPO has the name, and
-    when the GPO's ScheduledTasks.xml is not a file this can merge into.
+    Throws, with nothing written, when more than one GPO has the name; when no
+    GPO has it and another GPO carries the task "UsaBanner sync" (one this
+    command made, renamed); and when the GPO's ScheduledTasks.xml is not a file
+    this can merge into.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$Run)
@@ -448,6 +464,16 @@ function Get-UsaBannerGpoSettingsPlan {
     }
     $Run.Existed = $found.Count -eq 1
     $Run.Guid = if ($Run.Existed) { [string]$found[0].Guid } else { '' }
+    $Run.TaskItems = @(Get-UsaBannerGpoTaskItems -Run $Run)
+    if (-not $Run.Existed) {
+        # The GPO is found by its name, so one this command made and an admin renamed is not found,
+        # and a run would make a second beside it (a production domain, 2026-10-28).
+        $carriers = @($Run.TaskItems | Where-Object { $script:UsaGpoTaskName -in $_.Items })
+        if ($carriers.Count) {
+            $named = ($carriers | ForEach-Object { "'$($_.Name)' ($($_.Guid))" }) -join ', '
+            throw "UsaBanner: no GPO is named '$($Run.Name)', but $named carries this banner's task '$script:UsaGpoTaskName': a GPO this command made, renamed since. The staged copies are one per domain, so a second GPO would only run the same task again. Publish into it with -Name '$($carriers[0].Name)'. Nothing was written."
+        }
+    }
 
     $tasksFile = Get-UsaBannerGpoFilePath -Policies $Run.Place.Policies -Guid $Run.Guid -File Tasks
     $tasksText = if ($tasksFile -and [System.IO.File]::Exists($tasksFile)) { [System.IO.File]::ReadAllText($tasksFile) } else { $null }
@@ -727,10 +753,30 @@ function Invoke-UsaBannerGpoLinking {
 
 #region ----- the neighbours, and the read-back -----
 
+function Get-UsaBannerGpoTaskItems {
+    # In:  the run
+    # Out: a row for each GPO that has the Scheduled Tasks extension and a
+    #      ScheduledTasks.xml in SYSVOL: Guid, Name and Items, the names of its
+    #      task items. One whose file cannot be read is left out, with a note.
+    #      The plan reads them once, for itself and the neighbours' warnings
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Run)
+    foreach ($gpo in @(Find-UsaBannerGpoWithTasks -Domain $Run.Domain)) {
+        $file = Get-UsaBannerGpoFilePath -Policies $Run.Place.Policies -Guid $gpo.Guid -File Tasks
+        if (-not [System.IO.File]::Exists($file)) { continue }
+        try { $names = @(Get-UsaBannerGpoTaskItemName -Xml ([System.IO.File]::ReadAllText($file))) }
+        catch {
+            Write-Information -MessageData "  note: the ScheduledTasks.xml of the GPO '$($gpo.Name)' ($($gpo.Guid)) could not be read ($($_.Exception.Message)), so it is skipped when looking for this banner's task, today's banner and deploy-usawinssh" -InformationAction Continue
+            continue
+        }
+        [pscustomobject]@{ Guid = $gpo.Guid; Name = $gpo.Name; Items = $names }
+    }
+}
+
 function Write-UsaBannerGpoNeighbourWarning {
     <#
     .SYNOPSIS
-    Warns of the two policies this one depends on or collides with.
+    Warns of the policies this one depends on or collides with.
     .DESCRIPTION
     In:  the run.
     Out: nothing; warnings only. Read from the GPOs that have the Scheduled
@@ -738,25 +784,23 @@ function Write-UsaBannerGpoNeighbourWarning {
     read is skipped, with a note). Today's banner: a GPO with the task "Manatech
     MOTD sync" that an enabled link reaches undoes this one at each refresh.
     deploy-usawinssh: with no GPO that has its task "UsaDeploy-WinSsh" linked by
-    an enabled link, a Windows server without PowerShell 7 gets no banner.
+    an enabled link, a Windows server without PowerShell 7 gets no banner. This
+    banner's own task, "UsaBanner sync", in another GPO than this run's: a host
+    that applies both runs the runner twice at each refresh.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$Run)
     $ctx = $Run.Domain
     $today = [System.Collections.Generic.List[object]]::new()
     $winssh = [System.Collections.Generic.List[string]]::new()
-    foreach ($gpo in @(Find-UsaBannerGpoWithTasks -Domain $ctx)) {
-        $file = Get-UsaBannerGpoFilePath -Policies $Run.Place.Policies -Guid $gpo.Guid -File Tasks
-        if (-not [System.IO.File]::Exists($file)) { continue }
-        try { $names = @(Get-UsaBannerGpoTaskItemName -Xml ([System.IO.File]::ReadAllText($file))) }
-        catch {
-            Write-Information -MessageData "  note: the ScheduledTasks.xml of the GPO '$($gpo.Name)' ($($gpo.Guid)) could not be read ($($_.Exception.Message)), so it is skipped when looking for today's banner and deploy-usawinssh" -InformationAction Continue
-            continue
-        }
-        $isToday = $script:UsaOldGpoTask -in $names
-        $isWinSsh = $script:UsaGpoWinSshTask -in $names
-        if (-not ($isToday -or $isWinSsh)) { continue }
+    $twins = [System.Collections.Generic.List[object]]::new()
+    foreach ($gpo in @($Run.TaskItems)) {
+        $isToday = $script:UsaOldGpoTask -in $gpo.Items
+        $isWinSsh = $script:UsaGpoWinSshTask -in $gpo.Items
+        $isTwin = $script:UsaGpoTaskName -in $gpo.Items -and $gpo.Guid -ne $Run.Guid
+        if (-not ($isToday -or $isWinSsh -or $isTwin)) { continue }
         $enabled = @(Get-UsaBannerGpoLinkPlace -Domain $ctx -Guid $gpo.Guid | Where-Object { $_.Enabled })
+        if ($isTwin) { $twins.Add([pscustomobject]@{ Name = $gpo.Name; Guid = $gpo.Guid; Dn = @($enabled | ForEach-Object { $_.Dn }) }) }
         if (-not $enabled.Count) { continue }
         if ($isToday) { $today.Add([pscustomobject]@{ Name = $gpo.Name; Guid = $gpo.Guid; Dn = @($enabled | ForEach-Object { $_.Dn }) }) }
         if ($isWinSsh) { $winssh.Add($gpo.Name) }
@@ -766,6 +810,10 @@ function Write-UsaBannerGpoNeighbourWarning {
     }
     if (-not $winssh.Count) {
         Write-Warning "UsaBanner: no GPO that makes the task '$script:UsaGpoWinSshTask' is linked and enabled, so Windows servers without PowerShell 7 get no banner: deploy-usawinssh installs it (D21)."
+    }
+    foreach ($twin in $twins) {
+        $where = if ($twin.Dn.Count) { "linked, enabled, at $($twin.Dn -join '; ')" } else { 'linked by no enabled link' }
+        Write-Warning "UsaBanner: the GPO '$($twin.Name)' ($($twin.Guid)) carries this banner's task '$script:UsaGpoTaskName' too, ${where}: a host that applies both runs the runner twice at each refresh. The staged copies are one per domain, so one GPO is enough: delete the other in GPMC, or take the task out of it."
     }
 }
 
@@ -847,9 +895,11 @@ function Invoke-UsaBannerGpoDeploy {
          -WhatIf, PowerShell says each change instead, and nothing changes.
     In this order: the package (refused when it turns the update channel on);
     the domain, and every -LinkTarget checked to be there; the plan, which
-    reads and writes nothing and refuses what it must (a destination that is
-    someone else's, the module staged onto itself, two GPOs of the name, a
-    ScheduledTasks.xml it cannot merge into); the overwrite warnings; the
+    reads and writes nothing and refuses what it must (a module folder that is
+    not the files its manifest lists, a destination that is someone else's,
+    the module staged onto itself, two GPOs of the name, no GPO of the name
+    while another carries this banner's task, a ScheduledTasks.xml it cannot
+    merge into); the overwrite warnings; the
     files; the GPO; the links; the neighbours' warnings; the read-back.
     #>
     [CmdletBinding(SupportsShouldProcess)]

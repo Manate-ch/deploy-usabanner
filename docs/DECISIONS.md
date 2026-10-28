@@ -75,6 +75,7 @@
 | D28 | What Get-UsaBanner checks | decided; built |
 | D29 | Group Policy delivery (M6): the first rollout | decided; built |
 | D31 | Art the module does not hold, and the logo of each host's OS | asked 2026-10-28; built, for review |
+| D32 | The module's own files, by its manifest | found 2026-10-28; built, for review |
 
 ## D1. Where the code lives, and its name
 
@@ -2087,6 +2088,13 @@ package for every host leaves the tier and the role as what differs per host.
   a newer release that the next refresh puts back to the staged one, and each
   deletes the other's copy (!47). `Deploy-UsaBannerGPO` refuses a package
   that turns the channel on.
+- **One GPO, found by its name** (0.2.4). `-Name` gives it, `UsaBanner` by
+  default, so a GPO this command made and an admin renamed is not found
+  without it (a production domain, 2026-10-28). A run that would make a new
+  GPO while another carries the task `UsaBanner sync` stops, names that GPO
+  and the `-Name` to give: the staged copies are one per domain, so a second
+  GPO would only run the same task again. A run into its GPO warns of any
+  other GPO that carries the task.
 
 **After the first rollout, in this order:** the OU table (D13's B), then the
 direct links through Block Inheritance (D13). M6's "done when" needs both.
@@ -2211,6 +2219,43 @@ runs, from `art/apps` (Windows, Ubuntu, or Tux on any other Linux), as SPEC
 3.1 first asked. It is one setting, so one Group Policy package draws each
 host its own. `os`, the default, stays our server pictogram in the OS's
 colour (D3).
+
+## D32. The module's own files, by its manifest
+
+Found 2026-10-28, on a production domain: a Group Policy publish staged 84
+module files where the release holds 83. The extra one was the admin's
+configuration file, left in the folder of the unpacked release. The publish
+stages the module's folder whole, every host copied it on into its copy for
+every user, and the module loads every `.ps1` in its `Bootstrap`, `Private`
+and `Public` folders: a script left there would have run on every host.
+
+- **A. The module's files by name, in its manifest** (`FileList`,
+  PowerShell's own key for it). A test holds the list to the folder, so a
+  file added to the module is listed in the same merge request.
+- **B. The list with each file's SHA-256, made by the build.** It would also
+  catch a file changed by hand, but only a built release would hold it (a
+  clone has none), and a file edited in place is an admin's act, not an
+  accident. The release's `SHA256SUMS` already covers the archive.
+- **C. Only the README's word** to keep other files out of the module's
+  folder: that was known, and the file went in all the same.
+
+**Built: A.** What each command does with the list:
+
+- `Deploy-UsaBannerGPO` refuses, before anything is written, a module folder
+  that holds a file the list does not name or lacks one it names, and names
+  each: the publish goes to every host.
+- `Deploy-UsaBanner` copies the listed files alone into the copy for every
+  user, and takes any other file out of that copy; a file in the module's
+  folder that the list does not name is left out, with a warning. It
+  refuses, before anything changes, a folder short of a listed file. It does
+  not refuse an extra one: under Group Policy an Ubuntu host deploys from
+  ADSys's copy of SYSVOL, and whether that copy drops a file the publish
+  removed is not measured, so a refusal could stop every later deploy there.
+- `build/New-UsaBannerRelease.ps1` refuses a folder that is not the list, so
+  no release ships a stray file.
+
+A guard against accidents, not against an admin: whoever can write the
+module's folder can write its manifest too.
 
 ## Appendix A. Art mock-ups (rough)
 

@@ -54,6 +54,13 @@ Describe 'the files Windows PowerShell 5.1 parses' {
 }
 
 Describe 'the module' {
+    It 'lists every file of its folder in the manifest''s FileList, in ordinal order, and nothing else (D32)' {
+        $listed = @((Import-PowerShellDataFile -LiteralPath (Join-Path $moduleRoot 'UsaBanner.psd1')).FileList)
+        $held = @(Get-ChildItem -LiteralPath $moduleRoot -Recurse -File -Force | ForEach-Object { [System.IO.Path]::GetRelativePath($moduleRoot, $_.FullName).Replace('\', '/') })
+        [array]::Sort($held, [System.StringComparer]::Ordinal)
+        $listed | Should -Be $held
+    }
+
     It 'is ASCII with LF line ends in every file: Windows PowerShell 5.1 reads a file without a BOM in the ANSI code page' {
         $bad = foreach ($f in Get-ChildItem -LiteralPath $moduleRoot -Recurse -File) {
             $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
@@ -136,6 +143,28 @@ Describe 'the hand-off to pwsh' {
     It 'finds the pwsh on the PATH' {
         $expected = (Get-Command -Name 'pwsh' -CommandType Application | Select-Object -First 1).Path
         InModuleScope UsaBanner { Find-UsaBannerPwsh } | Should -Be $expected
+    }
+
+    It 'takes %ProgramFiles%\PowerShell\7\pwsh.exe before the PATH: a remoting session over SSH puts pwsh on its PATH in the 8.3 form, and the task registered again (a production host, 2026-10-28)' {
+        $saved = $env:ProgramFiles
+        try {
+            $env:ProgramFiles = Join-Path $TestDrive 'Program Files'
+            $msi = Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe'
+            $null = New-Item -ItemType File -Path $msi -Force
+            InModuleScope UsaBanner { Find-UsaBannerPwsh } | Should -Be $msi
+        }
+        finally { $env:ProgramFiles = $saved }
+    }
+
+    It 'takes the PATH where %ProgramFiles% has no pwsh' {
+        $saved = $env:ProgramFiles
+        try {
+            $env:ProgramFiles = Join-Path $TestDrive 'Empty'
+            $null = New-Item -ItemType Directory -Path $env:ProgramFiles -Force
+            $expected = (Get-Command -Name 'pwsh' -CommandType Application | Select-Object -First 1).Path
+            InModuleScope UsaBanner { Find-UsaBannerPwsh } | Should -Be $expected
+        }
+        finally { $env:ProgramFiles = $saved }
     }
 
     It 'says what to install when there is no pwsh' {

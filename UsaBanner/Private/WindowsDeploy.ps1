@@ -387,6 +387,33 @@ function Stop-UsaBannerTask {
     Stop-ScheduledTask -TaskPath $script:UsaTaskPath -TaskName $Name
 }
 
+function Get-UsaBannerTaskFolderCount {
+    # In:  a folder of the task scheduler, as \UsagiTools\
+    # Out: how many tasks and folders it holds, hidden tasks too; -1 where
+    #      there is no such folder
+    # Why: the ScheduledTasks module has no command for task folders
+    [CmdletBinding()]
+    [OutputType([int])]
+    param([Parameter(Mandatory)][string]$Path)
+    $service = New-Object -ComObject 'Schedule.Service'
+    $service.Connect()
+    try { $folder = $service.GetFolder($Path.TrimEnd('\')) }
+    catch { return -1 }
+    # 1: TASK_ENUM_HIDDEN, the hidden tasks too
+    $folder.GetTasks(1).Count + $folder.GetFolders(0).Count
+}
+
+function Remove-UsaBannerTaskFolder {
+    # In:  an empty folder of the task scheduler, as \UsagiTools\
+    # Out: nothing; the folder is gone. The task scheduler refuses to delete
+    #      one that holds anything
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path)
+    $service = New-Object -ComObject 'Schedule.Service'
+    $service.Connect()
+    $service.GetFolder('\').DeleteFolder($Path.Trim('\'), 0)
+}
+
 function New-UsaBannerSampleTaskSpec {
     <#
     .SYNOPSIS
@@ -929,6 +956,7 @@ function Invoke-UsaBannerWindowsDeploy {
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Config, [switch]$ReplaceOld)
     $layout = Get-UsaBannerWindowsLayout
     Assert-UsaBannerWindowsHost -Layout $layout -Command 'Deploy-UsaBanner' -RefuseOldInstall:(-not $ReplaceOld)
+    Assert-UsaBannerModuleWhole -Command 'Deploy-UsaBanner'
     # Before anything changes, and before the record in the folder is read.
     Assert-UsaBannerDataFolderSafe -Path $layout.Data
     $recordPath = [System.IO.Path]::Combine($layout.Data, 'deploy.json')
@@ -1008,6 +1036,13 @@ function Invoke-UsaBannerWindowsRemove {
             Unregister-UsaBannerTask -Name $name
             "unregistered the task $script:UsaTaskPath$name"
         }
+    }
+    # Registering the first task made the folder, and unregistering the last one leaves it (a lab
+    # host, 2026-10-28). It goes once empty, and stays while it holds another tool's task.
+    if ((Get-UsaBannerTaskFolderCount -Path $script:UsaTaskPath) -eq 0 -and
+        $PSCmdlet.ShouldProcess($script:UsaTaskPath, 'Delete the empty task folder')) {
+        Remove-UsaBannerTaskFolder -Path $script:UsaTaskPath
+        "deleted the empty task folder $script:UsaTaskPath"
     }
     foreach ($path in $layout.Profiles) {
         if (-not [System.IO.File]::Exists($path)) { continue }

@@ -30,18 +30,22 @@ function Find-UsaBannerPwsh {
     .SYNOPSIS
     The path of pwsh (PowerShell 7), or nothing.
     .DESCRIPTION
-    pwsh on the PATH first, then the MSI's default location,
-    %ProgramFiles%\PowerShell\7\pwsh.exe.
+    The MSI's default location first, %ProgramFiles%\PowerShell\7\pwsh.exe,
+    then pwsh on the PATH. The task a deploy registers runs this path, and a
+    deploy registers it again where the text differs: a PowerShell remoting
+    session over SSH puts its own folder first on its PATH in the 8.3 form
+    sshd started it by (C:\progra~1\powershell\7, a production host,
+    2026-10-28), while %ProgramFiles% is the long form in every session.
     #>
     [CmdletBinding()]
     [OutputType([string])]
     param()
-    $onPath = @(Get-Command -Name 'pwsh' -CommandType Application -ErrorAction SilentlyContinue)
-    if ($onPath.Count -gt 0) { return $onPath[0].Path }
     if ($env:ProgramFiles) {
         $msi = Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe'
         if (Test-Path -LiteralPath $msi -PathType Leaf) { return $msi }
     }
+    $onPath = @(Get-Command -Name 'pwsh' -CommandType Application -ErrorAction SilentlyContinue)
+    if ($onPath.Count -gt 0) { return $onPath[0].Path }
 }
 
 function ConvertTo-UsaBannerHandoffScript {

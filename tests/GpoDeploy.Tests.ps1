@@ -212,11 +212,10 @@ BeforeAll {
 
     function New-FakeModule {
         # In:  where to make it
-        # Out: the folder, which stands in for the module: a manifest, a script each in Public and Private,
-        #      the two runners, a text file with CRLF line ends (and a lone CR), one with LF, and a binary
-        #      file with a NUL byte and a CRLF
+        # Out: the folder, which stands in for the module: a manifest that lists its files, a script each in
+        #      Public and Private, the two runners, a text file with CRLF line ends (and a lone CR), one with
+        #      LF, and a binary file with a NUL byte and a CRLF
         param([string]$At = (Join-Path $TestDrive ([guid]::NewGuid().ToString('n')) 'Mod'))
-        Write-TestFile (Join-Path $At 'UsaBanner.psd1') "@{ ModuleVersion = '0.0.1' }`n"
         Write-TestFile (Join-Path $At 'Public' 'Hello.ps1') "# hello`n"
         Write-TestFile (Join-Path $At 'Private' 'Old.ps1') "# old`n"
         Write-TestFile (Join-Path $At 'linux' 'adsys-startup.sh') "#!/bin/sh`necho startup`n"
@@ -224,7 +223,16 @@ BeforeAll {
         Write-TestFile (Join-Path $At 'data' 'crlf.txt') ([System.Text.Encoding]::ASCII.GetBytes("one`r`ntwo`r`nlone`rcr`r`n"))
         Write-TestFile (Join-Path $At 'data' 'lf.txt') "a`nb`n"
         Write-TestFile (Join-Path $At 'data' 'binary.bin') ([byte[]](0x00, 0x0D, 0x0A, 0xFF, 0x0D, 0x0A))
+        Set-FakeFileList $At
         $At
+    }
+
+    function Set-FakeFileList {
+        # In:  a fake module's folder
+        # Out: nothing; its manifest lists the files the folder holds, itself among them, as a release's does
+        param([string]$Folder)
+        $files = @(@(Get-FileList $Folder) + 'UsaBanner.psd1' | Sort-Object -Unique)
+        Write-TestFile (Join-Path $Folder 'UsaBanner.psd1') ("@{ ModuleVersion = '0.0.1'; FileList = @(" + (@($files | ForEach-Object { "'$_'" }) -join ', ') + ") }`n")
     }
 
     function Use-FakeModule {
@@ -707,6 +715,7 @@ Describe 'Deploy-UsaBannerGPO, what the staged copies hold' {
         $null = Invoke-Gpo
         $before = Get-IniVersion (Join-Path $script:D.Ubuntu 'GPT.INI')
         Remove-Item -LiteralPath (Join-Path $script:Mod 'Private' 'Old.ps1')
+        Set-FakeFileList $script:Mod
         $r = Invoke-Gpo
         $r.Error | Should -BeNullOrEmpty
         foreach ($copy in $script:D.Netlogon, $script:Ubuntu) {
@@ -714,7 +723,8 @@ Describe 'Deploy-UsaBannerGPO, what the staged copies hold' {
             Join-Path $copy 'UsaBanner' 'Public' 'Hello.ps1' | Should -Exist
         }
         Get-IniVersion (Join-Path $script:D.Ubuntu 'GPT.INI') | Should -Be ($before + 1)
-        (Get-ChangeLine $r)[0] | Should -BeLike 'staged * for Windows hosts: 0 file(s) written, 1 removed'
+        # Written: the manifest, whose FileList no longer lists the file (D32).
+        (Get-ChangeLine $r)[0] | Should -BeLike 'staged * for Windows hosts: 1 file(s) written, 1 removed'
     }
 
     It 'removes what its folder holds that the payload does not, a leftover temporary file too, but only in a folder with the mark' {
@@ -825,6 +835,30 @@ Describe 'Deploy-UsaBannerGPO, a run it refuses' {
         $r.Error | Should -BeLike "*2 GPOs are named 'UsaBanner' ($first, $second)*Nothing was written*"
         @(Get-DomainState $script:D) | Should -Be $before
         Join-Path $script:D.Netlogon 'usabanner.json' | Should -Not -Exist
+    }
+
+    It 'refuses a module folder that holds a file its manifest does not list, names it, and writes nothing (a production domain, 2026-10-28)' {
+        $mod = New-FakeModule
+        Use-FakeModule $mod
+        Write-TestFile (Join-Path $mod 'usabanner-contoso.json') '{ "company": "Contoso" }'
+        $before = @(Get-DomainState $script:D)
+        $r = Invoke-Gpo @{ LinkTarget = @($script:ServersOu) }
+        $r.Error | Should -BeLike "*the module's folder, $mod, is not the module its manifest lists: it holds 1 file(s) its manifest does not list: usabanner-contoso.json.*"
+        $r.Error | Should -BeLike '*a configuration belongs outside the module''s folder*Nothing was written*'
+        $r.Lines | Should -HaveCount 0
+        @(Get-DomainState $script:D) | Should -Be $before
+        $script:D.Gpos.Count | Should -Be 0
+    }
+
+    It 'refuses a module folder that lacks a file its manifest lists, names it, and writes nothing' {
+        $mod = New-FakeModule
+        Use-FakeModule $mod
+        Remove-Item -LiteralPath (Join-Path $mod 'Private' 'Old.ps1')
+        $before = @(Get-DomainState $script:D)
+        $r = Invoke-Gpo @{ LinkTarget = @($script:ServersOu) }
+        $r.Error | Should -BeLike "*is not the module its manifest lists: it lacks 1 file(s) its manifest lists: Private/Old.ps1.*Nothing was written*"
+        @(Get-DomainState $script:D) | Should -Be $before
+        $script:D.Gpos.Count | Should -Be 0
     }
 
     It 'refuses a -LinkTarget that is not there, names it, and writes nothing, though another is' {
@@ -1172,12 +1206,39 @@ Describe 'Deploy-UsaBannerGPO, the policies beside it' {
     BeforeAll {
         $script:TodayTasks = New-TasksFile @((New-TaskItem -Name 'Manatech MOTD sync' -Uid '{0A0A0A0A-1111-2222-3333-444444444444}' -Arguments '-File x.ps1'))
         $script:SshTasks = New-TasksFile @((New-TaskItem -Name 'UsaDeploy-WinSsh' -Uid '{0B0B0B0B-1111-2222-3333-444444444444}' -Arguments '-File y.ps1'))
+        $script:OwnTasks = New-TasksFile @((New-TaskItem -Name 'UsaBanner sync' -Uid '{0C0C0C0C-1111-2222-3333-444444444444}' -Arguments '-File z.ps1'))
         $script:Registered = '[{00000000-0000-0000-0000-000000000000}{CAB54552-DEEA-4691-817E-ED4A4D1AFC72}][{AADCED64-746C-4633-A97C-D61349046527}{CAB54552-DEEA-4691-817E-ED4A4D1AFC72}]'
     }
 
     BeforeEach {
         $script:D = New-FakeDomain
         Use-FakeDomain $script:D
+    }
+
+    It 'refuses to make a second GPO while one of another name carries this banner''s task, names it and -Name, and writes nothing (a production domain, 2026-10-28)' {
+        $renamed = Add-FakeGpo $script:D 'C-WL-Contoso-UsaBanner' -TasksXml $script:OwnTasks -Ext $script:Registered
+        $before = @(Get-DomainState $script:D)
+        $r = Invoke-Gpo @{ LinkTarget = @($script:LinuxOu) }
+        $r.Error | Should -BeExactly "UsaBanner: no GPO is named 'UsaBanner', but 'C-WL-Contoso-UsaBanner' ($renamed) carries this banner's task 'UsaBanner sync': a GPO this command made, renamed since. The staged copies are one per domain, so a second GPO would only run the same task again. Publish into it with -Name 'C-WL-Contoso-UsaBanner'. Nothing was written."
+        $r.Lines | Should -HaveCount 0
+        @(Get-DomainState $script:D) | Should -Be $before
+    }
+
+    It 'publishes into that GPO with -Name, and makes no second one' {
+        $null = Add-FakeGpo $script:D 'C-WL-Contoso-UsaBanner' -TasksXml $script:OwnTasks -Ext $script:Registered
+        $r = Invoke-Gpo @{ Name = 'C-WL-Contoso-UsaBanner'; LinkTarget = @($script:LinuxOu) }
+        $r.Error | Should -BeNullOrEmpty
+        $script:D.Gpos.Count | Should -Be 1
+        @($r.Warnings | Where-Object { $_ -like "*carries this banner's task*" }) | Should -HaveCount 0
+    }
+
+    It 'warns of another GPO that carries this banner''s task beside the one it publishes into, and where it is linked' {
+        $null = Add-FakeGpo $script:D 'UsaBanner'
+        $twin = Add-FakeGpo $script:D 'UsaBanner (copy)' -TasksXml $script:OwnTasks -Ext $script:Registered
+        $script:D.Links[$script:ServersOu].Add(@{ Guid = $twin; Flags = 0 })
+        $r = Invoke-Gpo @{ LinkTarget = @($script:LinuxOu) }
+        $r.Error | Should -BeNullOrEmpty
+        $r.Warnings | Should -Contain "UsaBanner: the GPO 'UsaBanner (copy)' ($twin) carries this banner's task 'UsaBanner sync' too, linked, enabled, at $($script:ServersOu): a host that applies both runs the runner twice at each refresh. The staged copies are one per domain, so one GPO is enough: delete the other in GPMC, or take the task out of it."
     }
 
     It 'warns, naming the GPO and where it is linked, while today''s banner is linked and enabled, and that the two undo each other' {

@@ -178,6 +178,42 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Ubuntu' -Skip:$IsWindows {
         Join-Path $Root 'etc/update-motd.d/05-usabanner' | Should -Exist
     }
 
+    It 'stops a run of the old job in progress before it deletes the unit, and leaves no old unit failed (a production host, 2026-10-28)' {
+        # The publish watcher had just started its service, a oneshot in its 30-second sleep: stopping the path unit
+        # left the run going, the unit was deleted under it, and systemd failed it ('resources').
+        Add-OldUbuntuBanner $Root
+        $global:UsaDeployUnits.Running += 'manatech-motd-publish.service'
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner)
+        $calls = @(Get-Calls)
+        $calls | Should -Contain 'systemctl stop manatech-motd-publish.service'
+        $calls.IndexOf('systemctl stop manatech-motd-publish.service') | Should -BeLessThan $calls.IndexOf('systemctl daemon-reload')
+        $lines | Should -Contain "cleared the failed state of manatech-motd-publish.service: a unit of the old banner's job"
+        $global:UsaDeployUnits.Failed | Should -BeNullOrEmpty
+    }
+
+    It 'clears the failed state of an old unit that failed before the move-off, and only says so under -WhatIf (a test host, 2026-10-27)' {
+        Add-OldUbuntuBanner $Root
+        $global:UsaDeployUnits.Failed += 'manatech-motd-update.service'
+        $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WhatIf
+        Get-Calls -Changes | Should -BeNullOrEmpty
+        $global:UsaDeployUnits.Failed | Should -Be @('manatech-motd-update.service')
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner)
+        $lines | Should -Contain "cleared the failed state of manatech-motd-update.service: a unit of the old banner's job"
+        $global:UsaDeployUnits.Failed | Should -BeNullOrEmpty
+    }
+
+    It 'clears a failed old unit on a host an earlier deploy moved off, at its next deploy, and changes nothing else' {
+        $null = Deploy-UsaBanner -Company Contoso
+        $global:UsaDeployUnits.Failed += 'manatech-motd-publish.service'
+        $before = Get-HostState $Root
+        $global:UsaDeployCalls.Clear()
+        $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner)
+        $lines | Should -Be @("cleared the failed state of manatech-motd-publish.service: a unit of the old banner's job")
+        Get-Calls -Changes | Should -Be @('systemctl reset-failed manatech-motd-publish.service')
+        Get-HostState $Root | Should -Be $before
+        $global:UsaDeployUnits.Failed | Should -BeNullOrEmpty
+    }
+
     It 'leaves what the old banner turned off on the deploy''s own record, as it was before the old banner came' {
         Add-OldUbuntuBanner $Root
         $null = Deploy-UsaBanner -Company Contoso -ReplaceOldBanner

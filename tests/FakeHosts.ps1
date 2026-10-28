@@ -167,6 +167,17 @@ function Use-StockAnswers {
                 return @{ ExitCode = 1; Output = @('inactive') }
             }
             '^systemctl reset-failed (\S+)$' { $units.Failed = @($units.Failed | Where-Object { $_ -ne $Matches[1] }); return $done }
+            '^systemctl daemon-reload$' {
+                # A run whose unit file is gone has nothing left to start once systemd reloads: "There's no 'start'
+                # task anymore we could start", "Failed with result 'resources'" (a production host, 2026-10-28).
+                foreach ($unit in @($units.Running)) {
+                    if (-not [System.IO.File]::Exists((Join-Path $global:UsaDeployRoot "etc/systemd/system/$unit"))) {
+                        $units.Running = @($units.Running | Where-Object { $_ -ne $unit })
+                        $units.Failed += $unit
+                    }
+                }
+                return $done
+            }
             '^dpkg -S (\S+)$' { return @{ ExitCode = 0; Output = @("landscape-common: $($Matches[1])") } }
             '^dpkg-statoverride --list (\S+)$' {
                 if ($Matches[1] -in $units.Overrides) { return @{ ExitCode = 0; Output = @("root root 644 $($Matches[1])") } }
@@ -320,15 +331,31 @@ function Use-WindowsHost {
         }
     }
     Mock -ModuleName UsaBanner Get-UsaBannerTask { $global:UsaWinTasks[$Name] }
+    # As the task scheduler keeps a task: its definition file in the folder of its path, the folder
+    # made for the first task in it, and left when the last one goes (a lab host, 2026-10-28).
     Mock -ModuleName UsaBanner Register-UsaBannerTask {
         $global:UsaWinCalls.Add("task registered: $($Spec.Path)$($Spec.Name)")
         $global:UsaWinTasks[$Spec.Name] = @{ Execute = $Spec.Execute; Arguments = $Spec.Arguments; Schedule = $Spec.Schedule }
+        $folder = "$global:UsaWinRoot/Windows/System32/Tasks/$($Spec.Path.Trim('\').Replace('\', '/'))"
+        $null = [System.IO.Directory]::CreateDirectory($folder)
+        [System.IO.File]::WriteAllText("$folder/$($Spec.Name)", "<Task><Actions><Exec><Command>$($Spec.Execute)</Command></Exec></Actions></Task>`r`n")
     }
     # A task in the root folder has its definition file there (Add-WindowsOldTask), which goes with it.
     Mock -ModuleName UsaBanner Unregister-UsaBannerTask {
         $global:UsaWinCalls.Add("task unregistered: $Name")
         $global:UsaWinTasks.Remove($Name)
         if ($Path -eq '\') { [System.IO.File]::Delete("$global:UsaWinRoot/Windows/System32/Tasks/$Name") }
+        else { [System.IO.File]::Delete("$global:UsaWinRoot/Windows/System32/Tasks/UsagiTools/$Name") }
+    }
+    Mock -ModuleName UsaBanner Get-UsaBannerTaskFolderCount {
+        $folder = "$global:UsaWinRoot/Windows/System32/Tasks/$($Path.Trim('\').Replace('\', '/'))"
+        if (-not [System.IO.Directory]::Exists($folder)) { return -1 }
+        @([System.IO.Directory]::GetFileSystemEntries($folder)).Count
+    }
+    # Directory.Delete refuses a folder that holds anything, as the task scheduler does.
+    Mock -ModuleName UsaBanner Remove-UsaBannerTaskFolder {
+        $global:UsaWinCalls.Add("task folder deleted: $Path")
+        [System.IO.Directory]::Delete("$global:UsaWinRoot/Windows/System32/Tasks/$($Path.Trim('\').Replace('\', '/'))")
     }
     Mock -ModuleName UsaBanner Start-UsaBannerTask {
         $global:UsaWinCalls.Add("task started: $Name")

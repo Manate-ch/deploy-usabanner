@@ -459,6 +459,22 @@ Describe 'Remove-UsaBanner on Windows Server' {
         $lines | Should -Contain 'put back the logon notice as it was before the deploy'
     }
 
+    It 'deletes the task folder \UsagiTools\ once its last task is gone, and keeps it while another tool''s task is in it (a lab host, 2026-10-28)' {
+        $null = Deploy-UsaBanner -Company Contoso
+        Join-Path $Root 'Windows/System32/Tasks/UsagiTools/UsaBanner sample' | Should -Exist
+        $lines = @(Remove-UsaBanner)
+        $lines | Should -Contain 'deleted the empty task folder \UsagiTools\'
+        Join-Path $Root 'Windows/System32/Tasks/UsagiTools' | Should -Not -Exist
+
+        $null = Deploy-UsaBanner -Company Contoso
+        [System.IO.File]::WriteAllText((Join-Path $Root 'Windows/System32/Tasks/UsagiTools/Contoso check'), "<Task />`r`n")
+        $global:UsaWinCalls.Clear()
+        $lines = @(Remove-UsaBanner)
+        $lines | Should -Not -Contain 'deleted the empty task folder \UsagiTools\'
+        Join-Path $Root 'Windows/System32/Tasks/UsagiTools/Contoso check' | Should -Exist
+        $global:UsaWinCalls | Should -Not -Contain 'task folder deleted: \UsagiTools\'
+    }
+
     It 'stops a sample still running before the banner''s folder goes, so it cannot write it again' {
         # The lab (Server 2022, 2026-10-23): a Remove-UsaBanner 9 s after a deploy, while the deploy's first
         # sample still ran, and the sample made the banner's folder again 4 s after it went.
@@ -566,7 +582,7 @@ Describe 'the module''s copy for every user' {
         # (2026-10-27); on Linux the file's mode. A module of one file with a mode of its own shows it.
         $source = Join-Path $TestDrive 'source/UsaBanner'
         $null = New-Item -ItemType Directory -Path $source -Force
-        [System.IO.File]::WriteAllText((Join-Path $source 'UsaBanner.psd1'), "@{ ModuleVersion = '9.9.9' }")
+        [System.IO.File]::WriteAllText((Join-Path $source 'UsaBanner.psd1'), "@{ ModuleVersion = '9.9.9'; FileList = @('UsaBanner.psd1', 'own.ps1') }")
         [System.IO.File]::WriteAllText((Join-Path $source 'own.ps1'), '1')
         [System.IO.File]::SetUnixFileMode((Join-Path $source 'own.ps1'), [System.IO.UnixFileMode]'UserRead, UserWrite, UserExecute')
         $modules = Join-Path $TestDrive 'modules'
@@ -584,6 +600,31 @@ Describe 'the module''s copy for every user' {
         $copied = Join-Path $modules 'UsaBanner/9.9.9/own.ps1'
         [System.IO.File]::ReadAllText($copied) | Should -BeExactly '1'
         [System.IO.File]::GetUnixFileMode($copied) -band [System.IO.UnixFileMode]::UserExecute | Should -Be ([System.IO.UnixFileMode]::None)
+    }
+
+    It 'copies the files the manifest lists alone: another file in the module''s folder stays out of the copy, and goes from a copy that holds it (D32)' {
+        # A production domain's publish (2026-10-28) took an admin's configuration file from the module's folder
+        # to every host's copy.
+        $source = Join-Path $TestDrive 'listed/UsaBanner'
+        $null = New-Item -ItemType Directory -Path $source -Force
+        [System.IO.File]::WriteAllText((Join-Path $source 'UsaBanner.psd1'), "@{ ModuleVersion = '9.9.8'; FileList = @('UsaBanner.psd1', 'own.ps1') }")
+        [System.IO.File]::WriteAllText((Join-Path $source 'own.ps1'), '1')
+        [System.IO.File]::WriteAllText((Join-Path $source 'usabanner-contoso.json'), '{}')
+        $modules = Join-Path $TestDrive 'modules-listed'
+        $null = New-Item -ItemType Directory -Path (Join-Path $modules 'UsaBanner/9.9.8') -Force
+        [System.IO.File]::WriteAllText((Join-Path $modules 'UsaBanner/9.9.8/usabanner-contoso.json'), '{}')
+        $lines = @(InModuleScope UsaBanner -Parameters @{ Source = $source; Modules = $modules } {
+                param($Source, $Modules)
+                $root, $manifest = $script:UsaBannerRoot, $script:UsaBannerManifest
+                try {
+                    $script:UsaBannerRoot = $Source
+                    $script:UsaBannerManifest = Join-Path $Source 'UsaBanner.psd1'
+                    Install-UsaBannerModuleCopy -Record @{} -Created $null -Modules $Modules -FileMode $null -FolderMode $null -Os windows
+                }
+                finally { $script:UsaBannerRoot, $script:UsaBannerManifest = $root, $manifest }
+            })
+        $lines | Should -Be @("installed the module UsaBanner 9.9.8 for every user: $modules/UsaBanner/9.9.8 (2 file(s) copied, 1 removed)")
+        @(Get-ChildItem -LiteralPath (Join-Path $modules 'UsaBanner/9.9.8') -Name | Sort-Object) | Should -Be @('own.ps1', 'UsaBanner.psd1')
     }
 
     It 'finds no file with the internet mark off Windows, which has no stream to carry one' -Skip:$IsWindows {

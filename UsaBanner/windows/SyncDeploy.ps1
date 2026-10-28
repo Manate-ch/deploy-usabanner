@@ -22,7 +22,7 @@ a policy of RemoteSigned would refuse them.
 Everything the deploy prints is written to the log, with Sync-UsaBanner.ps1's
 Write-SyncLog. A deploy that changes nothing prints nothing.
 
-With no PowerShell 7 on the host (the PATH, then %ProgramFiles%\PowerShell\7),
+With no PowerShell 7 on the host (%ProgramFiles%\PowerShell\7, then the PATH),
 the log says so and the run ends with exit code 0: deploy-usawinssh's policy
 installs PowerShell 7, and a later refresh deploys.
 

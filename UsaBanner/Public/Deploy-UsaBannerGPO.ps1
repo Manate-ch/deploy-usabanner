@@ -120,7 +120,9 @@ function Deploy-UsaBannerGPO {
     .PARAMETER UpdateSource
     The https address of the update channel's releases. Not for Group Policy.
     .PARAMETER Name
-    The GPO's display name; UsaBanner by default.
+    The GPO's display name; UsaBanner by default. A GPO this command made and
+    someone renamed is found only by its new name: where no GPO has this one
+    and another carries the task UsaBanner sync, the run stops and names it.
     .PARAMETER LinkTarget
     The distinguished names to link the GPO at, as 'OU=Servers,DC=ad,DC=example'
     or the domain's own. Each must exist. A link that exists is left as it is

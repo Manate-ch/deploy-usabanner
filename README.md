@@ -1450,7 +1450,9 @@ Accept wildcard characters: False
 
 ##### -Name
 
-The GPO's display name; UsaBanner by default.
+The GPO's display name; UsaBanner by default. A GPO this command made and
+someone renamed is found only by its new name: where no GPO has this one
+and another carries the task UsaBanner sync, the run stops and names it.
 
 ```yaml
 Type: String
@@ -2335,7 +2337,9 @@ the module's copy the deploy made. It returns a line for each change;
 -WhatIf says what it would change, and changes nothing.
 
 On Windows Server, as an administrator: unregisters the periodic job's
-task and the update job's; takes the block out of each all-users
+task and the update job's, and deletes their folder in the task
+scheduler, \\UsagiTools\\, once no other task is in it; takes the block
+out of each all-users
 profile, and the Banner
 line out of sshd\_config, turning back on any Banner the deploy turned
 off (sshd -t checks it; restart sshd yourself); puts the logon notice
