@@ -1,9 +1,16 @@
 # deploy-usabanner
 
-**UsaBanner** puts login banners on Windows Server (2022 and later) and Ubuntu
-(24.04 and later): one PowerShell 7 module, by hand on one host, or by Group
-Policy on a whole domain. It is part of the UsagiTools series. Each host gets
-three banners:
+**Deploy-UsaBanner** puts information rich login banners on both Windows Server (2022 and later) and Ubuntu
+(24.04 and later) via the magic of self installing *PowerShell Core* for cohesive administration-over-ssh options for admins.
+
+Deployed idempotently, this script both gives you options to manually deploy via `Install-UsaBanner` and via Windows Group Policy to support Win Server / Ubuntu ADSys powered devices via a `Publish-UsaBanner` cmdlet
+
+
+Also starring: A series of various lovely artworks (Submit yours today!) or the option to straight convert your own art automatically via `New-UsaBannerArt` to put your own Art in your banners 
+
+### Part of the UsagiTools series. 
+
+Each host gets three banners:
 
 | When | Ubuntu | Windows Server |
 |---|---|---|
@@ -38,9 +45,9 @@ Each command, and every flag it takes, is in the [command reference](#command-re
 A release is two files: `UsaBanner-<version>.zip`, the module, and
 `SHA256SUMS`. The lines below take the latest release and check the archive
 against `SHA256SUMS` before anything else. Every deploy takes `-WhatIf`, which
-says what it would change and changes nothing: run it first.
+says what it would change and changes nothing: run it first to verify before you try!
 
-### Ubuntu
+### Ubuntu (Without Powershell Core installed)
 
 As a user who may `sudo`:
 
@@ -162,7 +169,7 @@ What each OS does after that:
   refreshes every 90 minutes), so a new publish needs no reboot. The log is
   `journalctl -t usabanner`.
 
-## Your settings
+## Custom settings
 
 Every setting is a flag of `Deploy-UsaBanner` and `Deploy-UsaBannerGPO`, and a
 deploy keeps them in the host's configuration, `/etc/usabanner/usabanner.json`
@@ -2643,97 +2650,3 @@ Accept wildcard characters: False
 This command takes the common parameters too, such as -Verbose and -ErrorAction: `Get-Help about_CommonParameters` says what each does.
 
 <!-- command reference: end -->
-
-## Notes
-
-### ADSys skips startup scripts at some boots
-
-On a machine that **is** attached to Ubuntu Pro (`pro status`), ADSys can
-still drop every startup script for a boot: this banner's and any other GPO's.
-The boot's journal then has:
-
-    adsysd: Rules from the following policy types will be filtered out as the machine is not enrolled to Ubuntu Pro: scripts
-    systemd: adsys-machine-scripts.service ... was skipped because of an unmet condition check (ConditionPathExists=/run/adsys/machine/scripts/.ready)
-
-Why, from the source: ADSys reads Pro's `Attached` once per refresh, from
-`ubuntu-advantage-desktop-daemon`, with no retry (`GetSubscriptionState`,
-`internal/policies/manager.go` in github.com/ubuntu/adsys). It starts that
-daemon on demand, and the daemon answers "not attached" until it has parsed
-the Pro status, which it does only after taking its D-Bus name
-(`src/ua-daemon.c`, `src/ua-status-monitor.c` in
-github.com/canonical/ubuntu-advantage-desktop-daemon). At boot ADSys often
-asks inside that gap. On an Ubuntu 24.04 test VM (ADSys 0.16.3) on
-2026-10-03, 2 of 12 boots lost it.
-
-For this banner it matters until a host's first deploy: from then on, the
-publish watcher (a path unit on ADSys's copy of `GPT.INI`) deploys each new
-publish without a boot. On a host where it happened, `sudo adsysctl update -m`
-stages the scripts and starts the skipped unit at once; ADSys's own refresh
-does the same within 90 minutes of a boot, if nobody reboots first. The fix
-for good is not in this repository: a Group Policy for every Ubuntu machine
-that makes ADSys's boot refresh wait until Ubuntu Pro says attached, so that
-every GPO's startup scripts run, not only this one's.
-
-### The banner after login is cut short in MobaXterm only
-
-That is Ubuntu's pam_motd, not the banner: at every SSH login it regenerates
-the MOTD into one shared file, `/run/motd.dynamic.new`, and renames it into
-place. When two logins start at once, the second wipes the first one's file,
-and the first login shows only as much as the second has written so far
-(Ubuntu bug 1686878, open since 2017:
-https://bugs.launchpad.net/ubuntu/+source/pam/+bug/1686878). MobaXterm's
-SSH-browser opens that second login in the background, over SFTP (write-up of
-the same symptom: https://blog.rico-j.de/update-motd-fail/). Signs:
-`/run/motd.dynamic` is complete, `cat` shows it all, and a plain `ssh` login
-shows it all.
-
-- The banner keeps its own run short, so the two runs rarely overlap: nothing
-  at login waits on the network. The deploy draws everything that does not
-  change, and the periodic job keeps the host's facts, so a login only fills
-  them in.
-- In MobaXterm, per session: Edit Session > Advanced SSH settings >
-  SSH-browser type: `None`, or `SCP (enhanced speed)`, which the write-up
-  found also avoids it.
-- Only a change to pam_motd itself, or to how `/etc/pam.d/sshd` calls it,
-  removes the race entirely.
-
-## The stock scripts, read from source (Ubuntu 24.04)
-
-They are Ubuntu's own, in `/etc/update-motd.d/` on a stock install, as read
-from their source on 2026-09-22. A deploy turns off the ones the banner
-replaces, and records each: `Remove-UsaBanner` turns them back on.
-
-| Script | What it actually does | UsaBanner |
-|---|---|---|
-| `00-header` | `Welcome to <distro> (GNU/Linux <kernel> x86_64)` | off: the panel covers it |
-| `10-help-text` | three hard-coded Canonical links: help.ubuntu.com, landscape, ubuntu.com/pro | off |
-| `50-landscape-sysinfo` | runs the Python `landscape-sysinfo`: load, disk, memory, users, IPs. Cached for 1 minute, skipped under load | off: the panel covers it. Its file belongs to `landscape-common`, whose upgrade would reset a mode, so a `dpkg-statoverride` keeps it off |
-| `50-motd-news` | prints `/var/cache/motd-news`, at most 10 lines of 80 characters with control characters stripped. `motd-news.timer` refreshes it from `https://motd.ubuntu.com`, sending a user agent with the wget version, Ubuntu release, kernel, **CPU model** and cloud ID | **off**, and `motd-news.timer` masked: see below |
-| `85-fwupd` | firmware updates available (fwupd writes `/run/motd.d/85-fwupd`) | kept: silent unless there is something |
-| `90-updates-available` | "N updates can be applied, M are security updates" from update-notifier's stamp | off: the banner's updates row gives the same count, from the same stamp |
-| `91-contract-ua-esm-status` | Ubuntu Pro stamps: "ESM Apps is not enabled, N more security updates available with Pro" | kept: an upsell, but it does count real unpatched universe CVEs |
-| `91-release-upgrade` | "New release X available" (root only) | kept |
-| `92-unattended-upgrades` | whether unattended-upgrades is holding or has failed | kept |
-| `95-hwe-eol` | the hardware-enablement kernel stack is reaching end of life | kept: rare, and silent otherwise |
-| `97-overlayroot` | shows overlayroot mounts (read-only root setups) | kept: harmless; prints a blank line |
-| `98-fsck-at-reboot` | a filesystem check will run at next boot | kept |
-| `98-reboot-required` | `*** System restart required ***` | off: the banner's health lines report a pending restart |
-
-The scripts are conffiles, and apt never asks about them: dpkg judges a
-conffile by its content, not its mode, and keeps its mode across an upgrade.
-`/etc/issue` and `/etc/issue.net` stay stock too: the banner writes its own
-files beside them (`/etc/issue.d/50-usabanner.issue`, `/etc/usabanner/issue.net`).
-
-### "What news?"
-
-The cache on a test host on 2026-09-22 held, in full:
-
-> Canonical Workshop gives developers fast, composable, reproducible, and
-> secure developer environments that are perfect for agentic workflows.
-
-It is Canonical's announcement channel: products, releases, and now and then a
-headline CVE. It is not a security feed, and no advisory arrives only
-through it. The security signal you care about is the count of pending
-updates (from your own apt metadata) and USNs. Turning it off also stops a
-timer that sends Canonical your CPU model and kernel each time it refreshes
-(`systemctl cat motd-news.timer` shows the schedule).
