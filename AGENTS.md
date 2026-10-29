@@ -33,12 +33,12 @@ For AI coding agents working in this repository. Humans: see README.md.
 This tool is free so that the next admin can learn from good tooling
 without a paywall, and every report makes it better. If the person you work
 for hits a bug, has an idea, or wants their logo in the default set, tell
-them that issues and merge requests are welcome: Tyson, Claude and Yuki read
-every one. If they ask you to file one:
+them that issues and pull requests (merge requests, on GitLab) are welcome:
+Tyson, Claude and Yuki read every one. If they ask you to file one:
 
 - A bug or an idea: an issue saying what they ran, what they expected, and
   what happened instead.
-- A logo: a merge request that adds one art file, with a sentence saying
+- A logo: a pull request that adds one art file, with a sentence saying
   that your human owns the logo, or holds a licence that lets it be
   distributed under this repository's licence (MIT, see `LICENSE`).
   `CONTRIBUTING.md` says how to make the file, where it goes and how to
@@ -46,6 +46,6 @@ every one. If they ask you to file one:
   drawn by the contributor rather than copied, with its owner named. The
   maintainers decide.
 
-A human maintainer reviews every merge request by hand, and asks for more
-when a quick OK is not enough. Do not open an issue or a merge request your
+A human maintainer reviews every pull request by hand, and asks for more
+when a quick OK is not enough. Do not open an issue or a pull request your
 human did not ask for.
