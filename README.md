@@ -3,7 +3,7 @@
 **Deploy-UsaBanner** puts information rich *COLORED* login banners on both Windows Server (2022 and later) and Ubuntu
 (24.04 and later) via the magic of self installing *PowerShell Core* for cohesive administration-over-ssh options for admins.
 
-Deployed idempotently, this script both gives you options to manually deploy via `Install-UsaBanner` and via Windows Group Policy to support Win Server / Ubuntu ADSys powered devices via a `Publish-UsaBanner` cmdlet
+Deployed idempotently, this script both gives you options to manually deploy via `Deploy-UsaBanner` and via Windows Group Policy to support Win Server / Ubuntu ADSys powered devices via a `Deploy-UsaBannerGPO` cmdlet.
 
 
 Also starring: A series of various lovely artworks (Submit yours today!) or the option to straight convert your own art automatically via `New-UsaBannerArt` to put your own Art in your banners 
@@ -80,8 +80,8 @@ read its AD Description (`ldap-utils`, `krb5-user`,
 under `-WhatIf` too; only the deploy is a dry run. Then it runs
 `Deploy-UsaBanner` with the flags it was given. The deploy copies the module
 to `/usr/local/share/powershell/Modules`, writes the three banners, turns off
-the stock MOTD scripts the banner replaces (see
-[the stock scripts](#the-stock-scripts-read-from-source-ubuntu-2404)), reloads
+the stock MOTD scripts the banner replaces (`-WhatIf` names each one;
+`docs/DECISIONS.md`, D16), reloads
 ssh for the SSH banner (sessions already open carry on), and starts a periodic
 job that samples the host every 15 minutes. `sudo pwsh -c Get-UsaBanner` then
 says whether each part is in place.
