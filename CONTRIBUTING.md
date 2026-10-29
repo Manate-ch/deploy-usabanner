@@ -1,7 +1,7 @@
 # Contributing
 
-Issues and merge requests are welcome: Tyson, Claude and Yuki read every
-one. A human maintainer reviews each merge request by hand, and asks for
+Issues and pull requests are welcome: Tyson, Claude and Yuki read every
+one. A human maintainer reviews each pull request by hand, and asks for
 more when a quick OK is not enough. Coding agents: `AGENTS.md` says how to
 build and test here.
 
@@ -13,7 +13,7 @@ showed it, and add the output of the same command with `-ColorMode none`.
 
 ## A logo
 
-A logo comes as a merge request that adds one art file:
+A logo comes as a pull request that adds one art file:
 `UsaBanner/art/base/<name>.json` for art you own, or
 `UsaBanner/art/apps/<name>.json` for another owner's logo. The name is lower
 case letters, digits and hyphens, and `Show-UsaBannerArt <name>` draws it.
@@ -50,7 +50,7 @@ case letters, digits and hyphens, and `Show-UsaBannerArt <name>` draws it.
    pwsh -NoProfile -Command "Invoke-Pester -Path ./tests/Art.Tests.ps1"
    ```
 
-4. **Open the merge request**, with:
+4. **Open the pull request**, with:
    - a sentence saying that you own the logo, or hold a licence that lets it
      be distributed under this repository's licence (MIT, see `LICENSE`);
    - the output of `Show-UsaBannerArt <name> -ColorMode none`, in a code

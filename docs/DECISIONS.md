@@ -2249,8 +2249,11 @@ and `Public` folders: a script left there would have run on every host.
   folder that the list does not name is left out, with a warning. It
   refuses, before anything changes, a folder short of a listed file. It does
   not refuse an extra one: under Group Policy an Ubuntu host deploys from
-  ADSys's copy of SYSVOL, and whether that copy drops a file the publish
-  removed is not measured, so a refusal could stop every later deploy there.
+  ADSys's copy of SYSVOL, and when this was built, whether that copy drops a
+  file the publish removed was not measured, so a refusal could have stopped
+  every later deploy there. Measured since, on a production host
+  (2026-10-28): it drops it, as the 0.2.4 publish showed by giving no
+  warning. The warning stays, for an admin's own copy of the release.
 - `build/New-UsaBannerRelease.ps1` refuses a folder that is not the list, so
   no release ships a stray file.
 
