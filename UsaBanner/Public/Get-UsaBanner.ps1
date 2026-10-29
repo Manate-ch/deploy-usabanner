@@ -63,7 +63,9 @@ function Get-UsaBanner {
     +-----------+-----------------------------------------------------------+
 
     It changes nothing. Under Windows PowerShell 5.1 the command runs itself
-    in pwsh (PowerShell 7), and its answer comes back as text.
+    in pwsh (PowerShell 7), and its answer comes back as text; where there is
+    no pwsh, it offers to install PowerShell 7 first, as Deploy-UsaBanner
+    does.
     .PARAMETER Moment
     PostLogon, PreLogon or PreInit: show that banner as installed.
     .EXAMPLE

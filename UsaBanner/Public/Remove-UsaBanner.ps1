@@ -30,7 +30,10 @@ function Remove-UsaBanner {
     PowerShell itself stays: it may serve more than the banner.
 
     Under Windows PowerShell 5.1 the command runs itself in pwsh (PowerShell
-    7), and stops with what to install when there is none.
+    7). Where there is none, it offers to install it first: the newest 7.6
+    MSI from GitHub, checked against its release's SHA-256 and Microsoft's
+    signature. That takes an elevated PowerShell; the answer no, or -WhatIf,
+    installs nothing.
     .EXAMPLE
     Remove-UsaBanner -WhatIf
     .EXAMPLE

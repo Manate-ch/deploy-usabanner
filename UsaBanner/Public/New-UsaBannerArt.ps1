@@ -41,7 +41,10 @@ function New-UsaBannerArt {
     smaller, with a warning when -Width or -Height asked for the size.
 
     Under Windows PowerShell 5.1 the command runs itself in pwsh (PowerShell
-    7), and stops with what to install when there is none.
+    7). Where there is none, it offers to install it first: the newest 7.6
+    MSI from GitHub, checked against its release's SHA-256 and Microsoft's
+    signature. That takes an elevated PowerShell; the answer no installs
+    nothing.
     .PARAMETER Path
     The image file.
     .PARAMETER Width

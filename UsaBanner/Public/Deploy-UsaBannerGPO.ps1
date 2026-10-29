@@ -8,9 +8,11 @@ function Deploy-UsaBannerGPO {
     Management tools, as someone who may edit Group Policy objects and write
     NETLOGON and SYSVOL. Windows PowerShell 5.1 hands the work to pwsh
     (PowerShell 7), where the GroupPolicy module answers through the Windows
-    PowerShell compatibility session. Everything is read from and written to
-    the PDC emulator, so the GPO in AD, its folder in SYSVOL and the staged
-    files are all in one place.
+    PowerShell compatibility session; where there is no pwsh, it offers to
+    install PowerShell 7 first, as Deploy-UsaBanner does. The hosts the GPO
+    reaches get PowerShell 7 from deploy-usawinssh's policy, not from here.
+    Everything is read from and written to the PDC emulator, so the GPO in
+    AD, its folder in SYSVOL and the staged files are all in one place.
 
     The package is the configuration every host deploys, built from the flags
     as Deploy-UsaBanner builds one (docs/DECISIONS.md, D27): the defaults, or

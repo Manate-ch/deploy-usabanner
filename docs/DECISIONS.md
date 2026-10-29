@@ -1461,6 +1461,40 @@ and runs `Deploy-UsaBanner` with the same flags.
   Ubuntu's own on a host that installs .NET from Ubuntu [fetched: the same
   page]. Microsoft's .NET documentation says how to prefer one feed.
 
+**The Windows install, built (2026-10-29), for your review** (your ask on
+!74): `UsaBanner/Bootstrap/PwshInstall.ps1`. Under Windows PowerShell 5.1, a
+command that finds no pwsh offers to install it, then hands itself over as
+before. Until now it stopped and said what to install.
+
+- **What it installs:** the newest 7.6 release in GitHub's list
+  (`api.github.com/repos/PowerShell/PowerShell/releases`): its MSI for the
+  machine (x64 or arm64) and the release's `hashes.sha256`, taken from the
+  project's own release downloads only. Never a pre-release, a draft, or 7.7
+  and later, which ship no MSI.
+- **The checks:** the MSI's SHA-256 against the line of `hashes.sha256` that
+  names it, and Microsoft's Authenticode signature (deploy-usawinssh's check).
+  When either fails, nothing is installed, and the copy stays in TEMP for a
+  look.
+- **The install:** deploy-usawinssh's msiexec line (`ADD_PATH`,
+  `REGISTER_MANIFEST`, `USE_MU`, `ENABLE_MU`). Exit codes 0 and 3010 count as
+  installed; on any other, the log stays.
+- **It asks first** (ConfirmImpact High), because an install is more than the
+  command was asked to do. `-Confirm:$false` answers yes, for a script.
+  `-WhatIf` says what it would install, installs nothing, and the command
+  stops there. Where no one can answer, it stops and says what to do
+  instead [measured: under pwsh 7.6 -NonInteractive the question throws,
+  `tests/PwshInstall.Tests.ps1`]. Without elevation, it says so before it
+  downloads anything.
+- **Not the Group Policy's path:** the runner finds pwsh itself and never
+  reaches the hand-off (`windows/Sync-UsaBanner.ps1`). Hosts under the GPO get
+  PowerShell 7 from deploy-usawinssh (D21).
+- **Newest, as this decision says, not pinned:** a version pinned in the
+  module would install an older patch level (deploy-usawinssh pins 7.6.6)
+  until Microsoft Update caught up. The signature is the check either way.
+- **For the lab:** Windows PowerShell 5.1's own check of the new file for
+  suspicious content (PowerShell 7's flags nothing in it); the question over
+  SSH; and a real install on a Windows Server without PowerShell 7.
+
 ## D19. New-UsaBannerArt: which image formats
 
 PowerShell 7 on Linux has no image decoder of its own. "Starting in .NET 7,

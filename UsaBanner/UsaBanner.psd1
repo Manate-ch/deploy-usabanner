@@ -22,6 +22,7 @@
     FileList             = @(
         'Bootstrap/Handoff.Logged.ps1'
         'Bootstrap/Handoff.ps1'
+        'Bootstrap/PwshInstall.ps1'
         'NOTICE'
         'Private/AdDescription.Logged.ps1'
         'Private/AdDescription.ps1'
