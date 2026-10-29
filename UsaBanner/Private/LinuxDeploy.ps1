@@ -55,7 +55,7 @@ $script:UsaLinuxSshd = '/usr/sbin/sshd'
 # package's file, and goes by a statoverride.
 $script:UsaRetiredScripts = @('00-header', '10-help-text', '50-motd-news', '90-updates-available', '98-reboot-required')
 
-# What the old banner (this repository's install.sh) puts on a host: a deploy
+# What the old banner (this project's install.sh, before V1) puts on a host: a deploy
 # does not go beside it, and -ReplaceOldBanner takes it off first (D23,
 # OldBanner.ps1).
 $script:UsaOldInstall = @(
@@ -389,14 +389,14 @@ function Assert-UsaBannerLinuxHost {
     if (-not $RefuseOldInstall) { return }
     $found = @(Find-UsaBannerLinuxOldInstall -Root $Root)
     if ($found.Count) {
-        throw "UsaBanner: this host has the banner of this repository's install.sh ($($found -join ', ')). $Command does not install beside it: $Command -ReplaceOldBanner takes that banner off first, then deploys this one."
+        throw "UsaBanner: this host has the banner of this project's install.sh before V1 ($($found -join ', ')). $Command does not install beside it: $Command -ReplaceOldBanner takes that banner off first, then deploys this one."
     }
 }
 
 function Find-UsaBannerLinuxOldInstall {
     # In:  the host's root
-    # Out: each path of today's banner (this repository's install.sh) on the
-    #      host
+    # Out: each path of the old banner (this project's install.sh, before V1)
+    #      on the host
     param([AllowEmptyString()][string]$Root = '')
     $script:UsaOldInstall | Where-Object { [System.IO.File]::Exists("$Root$_") -or [System.IO.Directory]::Exists("$Root$_") }
 }

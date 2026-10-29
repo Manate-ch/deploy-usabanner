@@ -63,9 +63,9 @@ function Deploy-UsaBanner {
     host show; auto draws 256 colours and ASCII, which nearly every client
     shows.
 
-    A host with the old banner, which this repository's install.sh or
-    Install-ManatechBanner.ps1 installs, is refused unless -ReplaceOldBanner
-    takes that banner off first.
+    A host with the old banner, which this project's install.sh or
+    Install-ManatechBanner.ps1 installed before V1, is refused unless
+    -ReplaceOldBanner takes that banner off first.
 
     Under Windows PowerShell 5.1 the command runs itself in pwsh (PowerShell
     7), and stops with what to install when there is none.
@@ -137,14 +137,14 @@ function Deploy-UsaBanner {
     .../releases/latest/download. With the channel on and none given, this
     project's: https://github.com/Manate-ch/deploy-usabanner/releases/latest/download.
     .PARAMETER ReplaceOldBanner
-    Takes the old banner off first: the one this repository's install.sh
-    (Ubuntu) or Install-ManatechBanner.ps1 (Windows) installs. Its files and
-    jobs go, and what it changed comes back as the OS ships it; then this
-    banner deploys. It runs after every banner is drawn, so a configuration
-    that fails leaves the old banner in place. A Group Policy that delivers
-    the old banner puts it back at the next boot or refresh: take that GPO
-    off the host first. Get-UsaBanner's old banner check says when it is
-    back.
+    Takes the old banner off first: the one this project's install.sh
+    (Ubuntu) or Install-ManatechBanner.ps1 (Windows) installed before V1.
+    Its files and jobs go, and what it changed comes back as the OS ships
+    it; then this banner deploys. It runs after every banner is drawn, so a
+    configuration that fails leaves the old banner in place. A Group Policy
+    that delivers the old banner puts it back at the next boot or refresh:
+    take that GPO off the host first. Get-UsaBanner's old banner check says
+    when it is back.
     .EXAMPLE
     Deploy-UsaBanner -Company Contoso -Environment PROD -WhatIf
     .EXAMPLE

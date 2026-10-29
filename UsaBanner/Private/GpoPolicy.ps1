@@ -3,8 +3,8 @@
 # already. Nothing here talks to a domain or reads a share (GpoDeploy.ps1 does), so all of it
 # runs, and is tested, on any OS. It is ported from deploy-usawinssh's UsaDeploy-WinSsh.psm1
 # (the task, the extension, the version, GPT.INI, gPLink, the LDAP escape and the report),
-# which a lab domain proved, and from today's banner's ManatechMotdGpo.psm1 (the ADSys
-# startup values).
+# which a lab domain proved, and from the old banner's ManatechMotdGpo.psm1 (the ADSys
+# startup values; retired with it, in git history).
 #
 #   +------------------------------------+-----------------------------------------------------+
 #   | ConvertTo-UsaBannerGpoLfByte       | a file's bytes, each CRLF turned into LF            |

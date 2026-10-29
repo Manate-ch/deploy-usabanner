@@ -439,7 +439,7 @@ Describe 'Deploy-UsaBanner on Windows Server' {
         $null = New-Item -ItemType Directory -Path (Join-Path $Root 'ProgramData/Manatech')
         [System.IO.File]::WriteAllText((Join-Path $Root 'ProgramFiles/PowerShell/7/profile.ps1'), "# >>> Manatech banner (Install-ManatechBanner.ps1) >>>`r`n# <<< Manatech banner <<<`r`n")
         $before = Get-WindowsHostState $Root
-        { Deploy-UsaBanner -Company Contoso } | Should -Throw "*this host has the banner of this repository's Install-ManatechBanner.ps1 (*ProgramData/Manatech, *PowerShell/7/profile.ps1)*"
+        { Deploy-UsaBanner -Company Contoso } | Should -Throw "*this host has the banner of this project's Install-ManatechBanner.ps1 before V1 (*ProgramData/Manatech, *PowerShell/7/profile.ps1)*"
         Get-WindowsHostState $Root | Should -Be $before
     }
 }

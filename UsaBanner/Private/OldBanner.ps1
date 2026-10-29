@@ -1,5 +1,5 @@
-# OldBanner.ps1 - the old banner, which this repository's install.sh and
-# Install-ManatechBanner.ps1 install, taken off a host so that this banner
+# OldBanner.ps1 - the old banner, which this project's install.sh and
+# Install-ManatechBanner.ps1 installed before V1, taken off a host so that this banner
 # takes its place (docs/DECISIONS.md, D23). Deploy-UsaBanner -ReplaceOldBanner
 # does it after it has drawn every banner, and before it changes anything
 # else:
@@ -15,8 +15,8 @@
 #   |                | MOTD scripts, landscape-sysinfo, motd-news.timer; its  |
 #   |                | sshd drop-in (ssh reloads); its MOTD scripts, console  |
 #   |                | file and folders; the copy of its repository its timer |
-#   |                | ran install.sh from (a git clone, as the README sets   |
-#   |                | one up)                                                |
+#   |                | ran install.sh from (a git clone, as the old README    |
+#   |                | set one up)                                            |
 #   | Windows Server | its tasks; its block in both all-users profiles; its   |
 #   |                | Banner line in sshd_config, with each Banner it turned |
 #   |                | off back on, and the prototype banner's line (on, or   |
@@ -28,7 +28,7 @@
 # The old banner kept no record, so what it changed comes back as the OS ships
 # it. The deploy that follows turns the same stock scripts off again, on its
 # own record this time, so Remove-UsaBanner turns them back on. A clone's
-# remote URL can hold a deploy token (the README's private-fork steps): the
+# remote URL can hold a deploy token (the old README's private-fork steps): the
 # clone goes, and a warning says to revoke the token, which works until it is.
 # Left as they are: the OpenSSH default shell where it is a PowerShell (this
 # banner sets one where it is not, D21), and sshd_config.manatech-bak, the old
@@ -114,7 +114,8 @@ function Enable-UsaBannerExecutable {
 function Remove-UsaBannerLinuxOldInstall {
     <#
     .SYNOPSIS
-    Takes the old banner, this repository's install.sh, off this Ubuntu host.
+    Takes the old banner, this project's install.sh before V1, off this
+    Ubuntu host.
     .DESCRIPTION
     In:  the host's root, and the record of this banner's deploys
          (Read-UsaBannerDeployRecord).
@@ -313,8 +314,8 @@ function Remove-UsaBannerOldSshdBannerLine {
 function Remove-UsaBannerWindowsOldInstall {
     <#
     .SYNOPSIS
-    Takes the old banner, this repository's Install-ManatechBanner.ps1, off
-    this Windows host.
+    Takes the old banner, this project's Install-ManatechBanner.ps1 before
+    V1, off this Windows host.
     .DESCRIPTION
     In:  the layout (Get-UsaBannerWindowsLayout).
     Out: a line for each change, in the order made. Under -WhatIf,
@@ -325,7 +326,7 @@ function Remove-UsaBannerWindowsOldInstall {
     write (sshd -t checks the file, and one it refuses is put back; sshd is
     not restarted); its SSH banner file; the git
     clone its update task pulled into, which the task names, so it is read
-    before the task goes (the README puts the clone in the old banner's
+    before the task goes (the old README put the clone in the old banner's
     folder); its folder. The task a Group Policy makes comes back at the
     next policy refresh while the GPO applies: a warning says so.
     #>
@@ -423,8 +424,8 @@ function Test-UsaBannerOldRepo {
 function Test-UsaBannerRepoSignIn {
     # In:  a copy of a repository
     # Out: $true when a remote URL in its .git/config holds sign-in details
-    #      (https://user:token@host/...), as the README's private-fork steps
-    #      clone it; $null when the file is there and cannot be read, so no
+    #      (https://user:token@host/...), as the old README's private-fork
+    #      steps cloned it; $null when the file is there and cannot be read, so no
     #      one can say; $false otherwise. The URL itself is never returned
     # Why: Install-ManatechBanner.ps1 -UpdateTask sets the clone's ACL with
     #      icacls /T, which leaves each file already in it with no access for
@@ -479,10 +480,10 @@ function Remove-UsaBannerOldRepo {
     if ($refusal) { Write-Warning "UsaBanner: could not delete ${Path}, the copy of the old banner's repository ${What}: $refusal" }
     else { "deleted $Path and the $($files.Count) file(s) in it: the copy of the old banner's repository $What" }
     if ($signIn) {
-        Write-Warning "UsaBanner: a remote URL in $Path held sign-in details, as the README's private-fork steps put a deploy token there. Deleting the copy does not end the token: revoke it where it was issued."
+        Write-Warning "UsaBanner: a remote URL in $Path held sign-in details, as the old banner's private-fork steps put a deploy token there. Deleting the copy does not end the token: revoke it where it was issued."
     }
     elseif ($null -eq $signIn) {
-        Write-Warning "UsaBanner: $([System.IO.Path]::Combine($Path, '.git', 'config')) could not be read (Install-ManatechBanner.ps1 -UpdateTask leaves the clone's files so), so whether a remote URL in it held a deploy token is not known. If it was cloned with a token, as the README's private-fork steps do, revoke it where it was issued."
+        Write-Warning "UsaBanner: $([System.IO.Path]::Combine($Path, '.git', 'config')) could not be read (Install-ManatechBanner.ps1 -UpdateTask leaves the clone's files so), so whether a remote URL in it held a deploy token is not known. If it was cloned with a token, as the old banner's private-fork steps did, revoke it where it was issued."
     }
 }
 

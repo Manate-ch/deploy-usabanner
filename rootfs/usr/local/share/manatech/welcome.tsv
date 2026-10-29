@@ -1,7 +1,0 @@
-# welcome.tsv - the line under the art: "Welcome to <name>". The name is
-# drawn in a gradient from the first colour to the second (r g b, 0-255
-# each), or in the 16-colour SGR code on a 16-colour terminal. ASCII only.
-# The first row counts; without one, or when it is not a name, six 0-255
-# numbers and an SGR code, the banner shows the row below.
-# name	r1	g1	b1	r2	g2	b2	sgr16
-Manatech	120	200	255	255	200	80	1;34

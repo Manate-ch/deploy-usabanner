@@ -450,7 +450,7 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Windows Server' {
         Join-Path $Root 'ProgramData/ssh/sshd_config.manatech-bak' | Should -Exist
     }
 
-    It 'deletes the git clone its update task pulled into, read-only objects too, before the folder the README puts it in' {
+    It 'deletes the git clone its update task pulled into, read-only objects too, before the folder the old README put it in' {
         Add-OldWindowsBanner $Root
         Add-OldRepoCopy $Root 'ProgramData/Manatech/repo'
         $global:UsaWinTasks['Manatech banner update'].Arguments = "-NoProfile -NonInteractive -File `"$Root/ProgramData/Manatech/repo/windows/Update-ManatechBanner.ps1`""
@@ -592,7 +592,7 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Windows Server' {
         # A production host, 2026-10-27: the task the old banner's GPO made put it back at its midnight run, half an
         # hour after Get-UsaBanner had found none of it; and the task stays when the GPO stops applying.
         Add-WindowsOldTask -Name 'Manatech MOTD sync' -Arguments '-File Sync-ManatechBanner.ps1' -Schedule 'gpo'
-        { Deploy-UsaBanner -Company Contoso } | Should -Throw "*Install-ManatechBanner.ps1 (the task \Manatech MOTD sync)*"
+        { Deploy-UsaBanner -Company Contoso } | Should -Throw "*Install-ManatechBanner.ps1 before V1 (the task \Manatech MOTD sync)*"
         $lines = @(Deploy-UsaBanner -Company Contoso -ReplaceOldBanner -WarningAction SilentlyContinue)
         $lines[0] | Should -BeExactly "unregistered the task \Manatech MOTD sync: the old banner's"
         Join-Path $Root 'Windows/System32/Tasks/Manatech MOTD sync' | Should -Not -Exist

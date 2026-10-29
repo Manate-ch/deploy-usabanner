@@ -5,8 +5,8 @@
 
 BeforeDiscovery {
     # Desc: the Description as AD holds it; Tier, Role and Prefix: how it reads. The first
-    # fourteen are today's cases (windows/tests/AdDescription.Tests.ps1), with this
-    # banner's tiers.
+    # fourteen are the old banner's cases (its windows/tests/AdDescription.Tests.ps1,
+    # retired 2026-10-29), with this banner's tiers.
     $script:Cases = @(
         @{ Desc = 'PROD: Hyper-V host'; Tier = 'PROD'; Role = 'Hyper-V host'; Prefix = 'PROD' }
         @{ Desc = 'PROD : Hyper-V host'; Tier = 'PROD'; Role = 'Hyper-V host'; Prefix = 'PROD' }

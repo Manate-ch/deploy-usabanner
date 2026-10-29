@@ -224,14 +224,14 @@ beside `-Path` change only what they name.
 
 ## Moving off the banner before V1
 
-This project's first banner, installed by `install.sh` on Ubuntu and
+This project's first banner, which `install.sh` installed on Ubuntu and
 `windows/Install-ManatechBanner.ps1` on Windows Server, is replaced by
 UsaBanner: `Deploy-UsaBanner -ReplaceOldBanner` takes it off a host first (its
 jobs, its files, its sshd lines, the copy of this repository its update job
 pulled), turns back on what it turned off, then deploys UsaBanner. The Group
-Policy runners pass `-ReplaceOldBanner` at every run. Until its code is retired
-from this repository, the old banner's own documentation is
-[docs/OLD-BANNER.md](docs/OLD-BANNER.md).
+Policy runners pass `-ReplaceOldBanner` at every run. Its code left this
+repository on 2026-10-29; its own documentation, as it last stood, is
+[docs/OLD-BANNER.md at 7bae2be](https://github.com/Manate-ch/deploy-usabanner/blob/7bae2bef729f940dd208f38c965a34003646364b/docs/OLD-BANNER.md).
 
 ## Bugs, ideas and logos
 
@@ -342,9 +342,9 @@ no terminal to ask. -ColorMode and -Glyphs say what the clients of this
 host show; auto draws 256 colours and ASCII, which nearly every client
 shows.
 
-A host with the old banner, which this repository's install.sh or
-Install-ManatechBanner.ps1 installs, is refused unless -ReplaceOldBanner
-takes that banner off first.
+A host with the old banner, which this project's install.sh or
+Install-ManatechBanner.ps1 installed before V1, is refused unless
+-ReplaceOldBanner takes that banner off first.
 
 Under Windows PowerShell 5.1 the command runs itself in pwsh (PowerShell
 7), and stops with what to install when there is none.
@@ -762,14 +762,14 @@ Accept wildcard characters: False
 
 ##### -ReplaceOldBanner
 
-Takes the old banner off first: the one this repository's install.sh
-(Ubuntu) or Install-ManatechBanner.ps1 (Windows) installs. Its files and
-jobs go, and what it changed comes back as the OS ships it; then this
-banner deploys. It runs after every banner is drawn, so a configuration
-that fails leaves the old banner in place. A Group Policy that delivers
-the old banner puts it back at the next boot or refresh: take that GPO
-off the host first. Get-UsaBanner's old banner check says when it is
-back.
+Takes the old banner off first: the one this project's install.sh
+(Ubuntu) or Install-ManatechBanner.ps1 (Windows) installed before V1.
+Its files and jobs go, and what it changed comes back as the OS ships
+it; then this banner deploys. It runs after every banner is drawn, so a
+configuration that fails leaves the old banner in place. A Group Policy
+that delivers the old banner puts it back at the next boot or refresh:
+take that GPO off the host first. Get-UsaBanner's old banner check says
+when it is back.
 
 ```yaml
 Type: SwitchParameter
@@ -874,10 +874,11 @@ refusal leaves the domain as it was. Then, in this order:
 - Each -LinkTarget gets a link, enabled. Without it the links stay as they
   are: no link is made at the domain root or anywhere else, since a link is
   your act. A GPO linked nowhere applies to no host, and a warning says so.
-- It warns while today's banner GPO, the one with the task "Manatech MOTD
-  sync", is linked and enabled anywhere (on a host that both apply to, the
-  two undo each other at each refresh), and when no GPO of deploy-usawinssh
-  is linked and enabled (a server without PowerShell 7 then gets no banner).
+- It warns while the old banner's GPO, the one with the task "Manatech
+  MOTD sync", is linked and enabled anywhere (on a host that both apply
+  to, the two undo each other at each refresh), and when no GPO of
+  deploy-usawinssh is linked and enabled (a server without PowerShell 7
+  then gets no banner).
 - Everything is read back, a line each: 'ok' or 'FAIL' and the check. The
   run fails if one does.
 
