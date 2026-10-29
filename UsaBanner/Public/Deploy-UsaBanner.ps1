@@ -134,7 +134,8 @@ function Deploy-UsaBanner {
     .PARAMETER UpdateSource
     The https address the releases' files are downloaded from: SHA256SUMS
     and UsaBanner-<version>.zip are under it, as under a GitHub repository's
-    .../releases/latest/download.
+    .../releases/latest/download. With the channel on and none given, this
+    project's: https://github.com/Manate-ch/deploy-usabanner/releases/latest/download.
     .PARAMETER ReplaceOldBanner
     Takes the old banner off first: the one this repository's install.sh
     (Ubuntu) or Install-ManatechBanner.ps1 (Windows) installs. Its files and

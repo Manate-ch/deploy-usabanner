@@ -5,6 +5,11 @@ one. A human maintainer reviews each pull request by hand, and asks for
 more when a quick OK is not enough. Coding agents: `AGENTS.md` says how to
 build and test here.
 
+This repository is a mirror: the maintainers work in their own GitLab, and
+it pushes here. A pull request is reviewed here, then merged there with its
+commits as you wrote them, and arrives back with the next push; GitHub then
+shows it closed rather than merged.
+
 ## A bug or an idea
 
 Open an issue saying what you ran, what you expected, and what happened
