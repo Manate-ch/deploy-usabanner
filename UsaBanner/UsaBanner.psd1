@@ -6,7 +6,7 @@
 # (docs/DECISIONS.md, D32). tests\Loader.Tests.ps1 holds it to the folder.
 @{
     RootModule           = 'UsaBanner.psm1'
-    ModuleVersion        = '0.2.4'
+    ModuleVersion        = '0.2.5'
     GUID                 = '27da0669-2d84-41c1-aa5e-217086ee70cc'
     Author               = 'Tyson C Rasanen'
     CompanyName          = 'Manatech'
