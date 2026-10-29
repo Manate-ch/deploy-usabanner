@@ -1,7 +1,8 @@
 # The commands CONTRIBUTING.md shows a contributor: each must run as written,
 # so every parameter it names is one the command has. AGENTS.md points to it.
 # And README.md's command reference, which build/Update-UsaBannerReadme.ps1
-# writes from the commands' own help (docs/DECISIONS.md, D27).
+# writes from the commands' own help (docs/DECISIONS.md, D27). And every
+# command README.md and CONTRIBUTING.md name is one the module has.
 
 BeforeDiscovery {
     $repoRoot = Split-Path $PSScriptRoot -Parent
@@ -135,5 +136,19 @@ Describe 'README.md''s command reference (D27)' {
     It 'keeps a list a list, the paragraph after it apart, and a drawn table as drawn' {
         $text = "Puts in place:`n- one`n  more of one`n- two`nAfter the list.`n`n+---+`n| a |`n+---+`n`nLast."
         @(ConvertTo-ReferenceBlock $text) | Should -BeExactly @('Puts in place:', '', '- one', '  more of one', '- two', '', 'After the list.', '', '```text', '+---+', '| a |', '+---+', '```', '', 'Last.')
+    }
+}
+
+Describe 'The commands the docs name' {
+    BeforeAll {
+        # The manifest's list, which tests\Loader.Tests.ps1 holds to the files in Public\.
+        $exported = @((Import-PowerShellDataFile (Join-Path $repoRoot 'UsaBanner' 'UsaBanner.psd1')).FunctionsToExport)
+    }
+
+    It '<File> names only commands the module has' -ForEach @(@{ File = 'README.md' }, @{ File = 'CONTRIBUTING.md' }) {
+        # Each Verb-Usa... word, but not a script's name, such as Sync-UsaBanner.ps1.
+        $named = @([regex]::Matches((Get-Content -LiteralPath (Join-Path $repoRoot $File) -Raw), '\b[A-Z][a-z]+-Usa[A-Za-z]+\b(?!\.ps1)') | ForEach-Object Value | Sort-Object -Unique)
+        $named.Count | Should -BeGreaterThan 0 -Because "else this checks nothing in $File"
+        @($named | Where-Object { $exported -notcontains $_ }) | Should -BeNullOrEmpty -Because "a reader runs what $File names"
     }
 }
