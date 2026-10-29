@@ -194,8 +194,15 @@ Describe 'the configuration a deploy builds' {
         Get-Setting (New-DeployConfig @{ Company = 'Contoso' }) 'update.mode' | Should -BeExactly 'off'
     }
 
-    It 'refuses an update channel turned on with no source to look at' {
-        Get-Failure { New-DeployConfig @{ Update = 'install' } } | Should -BeLike '*the update channel is set to install, with no source to look at: give -UpdateSource*'
+    It 'looks at this project''s releases on GitHub where the update channel is on and no source is given (D14)' {
+        $config = New-DeployConfig @{ Update = 'install' }
+        $config['update']['mode'] | Should -BeExactly 'install'
+        $config['update']['source'] | Should -BeExactly 'https://github.com/Manate-ch/deploy-usabanner/releases/latest/download'
+    }
+
+    It 'leaves the source empty where the update channel is off, so a host that never turns it on holds no address' {
+        (New-DeployConfig @{})['update']['source'] | Should -BeExactly ''
+        (New-DeployConfig @{ Update = 'off' })['update']['source'] | Should -BeExactly ''
     }
 
     It 'refuses a source that is not https, naming the flag' {

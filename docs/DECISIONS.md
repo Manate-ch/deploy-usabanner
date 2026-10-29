@@ -957,7 +957,8 @@ explicit `-Channel main`. Two additions:
 - **An "update available" line.** When the job sees a newer release than the
   one installed, and is not set to install it, the banner adds one line:
   "This banner has an update available. See <releases page> for more info!"
-  Until the GitHub home exists, that is this project's GitLab releases page.
+  The page is that of the releases the job looks at: by default this
+  project's, on GitHub.
 - **Only root / SYSTEM and Administrators may change the installed files.**
   Everyone may read them, because the banner runs as whoever logs in. On
   Ubuntu that already holds: root owns the files, mode 644/755. On Windows,
@@ -1001,6 +1002,14 @@ files are downloaded from (`-UpdateSource`).
 - **`source` has no default, approved in !49.** The default would be this
   project's releases, and its address cannot go into public code until the
   public home exists (M7). Until then a host names its source itself.
+  **Built (M7, 2026-10-29):** the public home is
+  `github.com/Manate-ch/deploy-usabanner`, and a channel turned on with no
+  `-UpdateSource` looks at its releases,
+  `https://github.com/Manate-ch/deploy-usabanner/releases/latest/download`.
+  The address is written into a host's configuration then and only then: it
+  is not in the defaults, so a configuration whose channel is off holds no
+  address, and a deploy changes nothing on the many hosts that never turn the
+  channel on.
 - **A release is two files**, built by `build/New-UsaBannerRelease.ps1`:
   `UsaBanner-<version>.zip`, the module's folder at its root, and
   `SHA256SUMS`, as `sha256sum` writes it. Both forges serve the latest

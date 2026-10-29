@@ -28,7 +28,9 @@
 #   | Services     | services       | the names, or default                |
 #   | Update       | update.mode    | off, notify or install (D14)         |
 #   | UpdateSource | update.source  | the https address of the releases'   |
-#   |              |                | files                                |
+#   |              |                | files; this project's on GitHub      |
+#   |              |                | where the channel is on and no       |
+#   |              |                | address is given                     |
 #   +--------------+----------------+--------------------------------------+
 #
 # The naming standard is a table of tables: it comes from a file alone.
@@ -58,6 +60,11 @@ $script:UsaDeployFlags = [ordered]@{
     Update       = 'update.mode'
     UpdateSource = 'update.source'
 }
+
+# The releases an update channel turned on with no -UpdateSource looks at: this project's, on
+# GitHub, its public home (docs/DECISIONS.md, D14). Not in the defaults: a configuration whose
+# channel is off holds no address, so a host that never turns it on never sees one.
+$script:UsaDefaultUpdateSource = 'https://github.com/Manate-ch/deploy-usabanner/releases/latest/download'
 
 function Get-UsaBannerDeployFlagName {
     <#
@@ -179,11 +186,10 @@ function New-UsaBannerDeployConfig {
     if ($config['legal']['template'] -ceq 'custom' -and @(@($config['legal']['text']) | Where-Object { "$_".Trim() }).Count -eq 0) {
         throw 'UsaBanner: the legal template is custom, but there is no text for it: give the lines with -LegalText.'
     }
-    # The schema cannot say this without a branch, and D27 keeps it free of them.
+    # A channel turned on with no source looks at this project's releases; the schema could not
+    # say so without a branch, and D27 keeps it free of them.
     $mode = [string]$config['update']['mode']
-    if ($mode -cne 'off' -and -not [string]$config['update']['source']) {
-        throw "UsaBanner: the update channel is set to $mode, with no source to look at: give -UpdateSource, the https address the releases' files are downloaded from (docs/DECISIONS.md, D14)."
-    }
+    if ($mode -cne 'off' -and -not [string]$config['update']['source']) { $config['update']['source'] = $script:UsaDefaultUpdateSource }
     $problems = @(Test-UsaBannerConfig -Json (ConvertTo-UsaBannerConfigJson -Config $config))
     if ($problems.Count) {
         $named = foreach ($problem in $problems) {

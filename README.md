@@ -201,7 +201,8 @@ beside `-Path` change only what they name.
   any part of the banner before V1 still on the host.
 - **The update channel** is off unless `-Update notify` or `-Update install`
   turns it on: a daily job that looks for a newer release at the address
-  `-UpdateSource` gives, checks its archive against `SHA256SUMS`, and either
+  `-UpdateSource` gives (this project's releases on GitHub when it gives
+  none), checks its archive against `SHA256SUMS`, and either
   says at login that an update is there or installs it (`docs/DECISIONS.md`,
   D14). Under Group Policy the GPO is the update path, and a package that turns
   the channel on is refused.
@@ -732,7 +733,8 @@ Accept wildcard characters: False
 
 The https address the releases' files are downloaded from: SHA256SUMS
 and UsaBanner-\<version\>.zip are under it, as under a GitHub repository's
-.../releases/latest/download.
+.../releases/latest/download. With the channel on and none given, this
+project's: https://github.com/Manate-ch/deploy-usabanner/releases/latest/download.
 
 ```yaml
 Type: String
