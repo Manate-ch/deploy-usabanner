@@ -1,6 +1,6 @@
 # deploy-usabanner
 
-**Deploy-UsaBanner** puts information rich login banners on both Windows Server (2022 and later) and Ubuntu
+**Deploy-UsaBanner** puts information rich *COLORED* login banners on both Windows Server (2022 and later) and Ubuntu
 (24.04 and later) via the magic of self installing *PowerShell Core* for cohesive administration-over-ssh options for admins.
 
 Deployed idempotently, this script both gives you options to manually deploy via `Install-UsaBanner` and via Windows Group Policy to support Win Server / Ubuntu ADSys powered devices via a `Publish-UsaBanner` cmdlet
@@ -8,8 +8,20 @@ Deployed idempotently, this script both gives you options to manually deploy via
 
 Also starring: A series of various lovely artworks (Submit yours today!) or the option to straight convert your own art automatically via `New-UsaBannerArt` to put your own Art in your banners 
 
-### Part of the UsagiTools series. 
-
+### Part of the UsagiTools 2 series. 
+```
+   ^^       ^^    U
+  /::\     /::\   S
+ |::::|   |::::|  A
+ |::::|   |::::|  G
+  \:::|   |:::/   I
+ .-\__/---\__/-.  T
+/:::oo:(o):oo:::\ O
+|:(o):::::::(o):| O
+|::::::,',::::::| L
+|::::\_/:\_/::::| S
+ '-.__________.-' 2
+ ```
 Each host gets three banners:
 
 | When | Ubuntu | Windows Server |
