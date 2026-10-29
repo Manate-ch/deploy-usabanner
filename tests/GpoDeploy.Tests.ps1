@@ -1241,23 +1241,23 @@ Describe 'Deploy-UsaBannerGPO, the policies beside it' {
         $r.Warnings | Should -Contain "UsaBanner: the GPO 'UsaBanner (copy)' ($twin) carries this banner's task 'UsaBanner sync' too, linked, enabled, at $($script:ServersOu): a host that applies both runs the runner twice at each refresh. The staged copies are one per domain, so one GPO is enough: delete the other in GPMC, or take the task out of it."
     }
 
-    It 'warns, naming the GPO and where it is linked, while today''s banner is linked and enabled, and that the two undo each other' {
+    It 'warns, naming the GPO and where it is linked, while the old banner is linked and enabled, and that the two undo each other' {
         $today = Add-FakeGpo $script:D 'Manatech MOTD' -TasksXml $script:TodayTasks -Ext $script:Registered
         $script:D.Links[$script:LinuxOu].Add(@{ Guid = $today; Flags = 0 })
         $script:D.Links[$script:ServersOu].Add(@{ Guid = $today; Flags = 0 })
         $script:D.Links[$script:RootDn].Add(@{ Guid = $today; Flags = 1 })
         $r = Invoke-Gpo @{ LinkTarget = @($script:LinuxOu) }
-        $warning = @($r.Warnings | Where-Object { $_ -like "*delivers today's banner*" })
+        $warning = @($r.Warnings | Where-Object { $_ -like "*delivers the old banner*" })
         $warning | Should -HaveCount 1
-        $warning[0] | Should -BeLike "UsaBanner: the GPO 'Manatech MOTD' ($today) delivers today's banner (its task is 'Manatech MOTD sync') and is linked, enabled, at $script:ServersOu; $($script:LinuxOu): while it applies to a host, it and this GPO undo each other at each refresh. Take it off those hosts (D29)."
+        $warning[0] | Should -BeLike "UsaBanner: the GPO 'Manatech MOTD' ($today) delivers the old banner (its task is 'Manatech MOTD sync') and is linked, enabled, at $script:ServersOu; $($script:LinuxOu): while it applies to a host, it and this GPO undo each other at each refresh. Take it off those hosts (D29)."
         # The link at the domain root is disabled, so the hosts under it are not reached: it is not in the list above.
     }
 
-    It 'does not warn of today''s banner when its links are disabled or it is linked nowhere' {
+    It 'does not warn of the old banner when its links are disabled or it is linked nowhere' {
         $today = Add-FakeGpo $script:D 'Manatech MOTD' -TasksXml $script:TodayTasks -Ext $script:Registered
         $script:D.Links[$script:RootDn].Add(@{ Guid = $today; Flags = 1 })
         $r = Invoke-Gpo @{ LinkTarget = @($script:LinuxOu) }
-        @($r.Warnings | Where-Object { $_ -like "*today's banner*" }) | Should -HaveCount 0
+        @($r.Warnings | Where-Object { $_ -like "*delivers the old banner*" }) | Should -HaveCount 0
     }
 
     It 'warns of a Windows server without PowerShell 7 when no GPO of deploy-usawinssh is linked and enabled, though one exists' {
@@ -1267,7 +1267,7 @@ Describe 'Deploy-UsaBannerGPO, the policies beside it' {
         $r.Warnings | Should -Contain "UsaBanner: no GPO that makes the task 'UsaDeploy-WinSsh' is linked and enabled, so Windows servers without PowerShell 7 get no banner: deploy-usawinssh installs it (D21)."
     }
 
-    It 'warns of neither when today''s banner is off the hosts and the GPO of deploy-usawinssh is linked and enabled' {
+    It 'warns of neither when the old banner is off the hosts and the GPO of deploy-usawinssh is linked and enabled' {
         $ssh = Add-FakeGpo $script:D 'C-W-OpenSSH_Server' -TasksXml $script:SshTasks -Ext $script:Registered
         $script:D.Links[$script:RootDn].Add(@{ Guid = $ssh; Flags = 0 })
         $today = Add-FakeGpo $script:D 'Manatech MOTD' -TasksXml $script:TodayTasks -Ext $script:Registered

@@ -1,20 +1,20 @@
 # Who a host is (UsaBanner/Private/Identity.ps1): its name decoded by the
 # naming standard (docs/DECISIONS.md, D20), the VLAN its address is in, its
 # tier, and the named colours they are drawn in. Each table starts out as
-# today's banner has it, in rootfs/usr/local/share/manatech.
+# the old banner had it (tests/fixtures/old-banner).
 
 BeforeAll {
     $repoRoot = Split-Path $PSScriptRoot -Parent
     Import-Module (Join-Path $repoRoot 'UsaBanner' 'UsaBanner.psd1') -Force
     $schema = Get-Content -LiteralPath (Join-Path $repoRoot 'UsaBanner' 'config' 'usabanner.schema.json') -Raw | ConvertFrom-Json -AsHashtable
-    $today = Join-Path $repoRoot 'rootfs' 'usr' 'local' 'share' 'manatech'
+    $oldTables = Join-Path $PSScriptRoot 'fixtures' 'old-banner'
 
-    function Read-TodayTable {
-        # In:  the name of one of today's TSV files
+    function Read-OldTable {
+        # In:  the name of one of the old banner's TSV files
         # Out: each row that is not a comment, as its fields
-        # Why: the module's tables start out as today's, row for row
+        # Why: the module's tables start out as the old banner's, row for row
         param([string]$Name)
-        foreach ($line in Get-Content -LiteralPath (Join-Path $today $Name)) {
+        foreach ($line in Get-Content -LiteralPath (Join-Path $oldTables $Name)) {
             if ($line -match '^\s*(#|$)') { continue }
             , ($line -split "`t")
         }
@@ -37,13 +37,13 @@ BeforeAll {
 AfterAll { Remove-Module UsaBanner -ErrorAction SilentlyContinue }
 
 Describe 'the naming standard' {
-    It 'ships today''s schema-names.tsv row for row, as D20 decided' {
+    It 'ships the old banner''s schema-names.tsv row for row, as D20 decided' {
         $naming = InModuleScope UsaBanner { (Get-UsaBannerConfigDefault)['naming'] }
         $lists = [ordered]@{ site = 'sites'; type = 'types'; subtype = 'subtypes'; os = 'os' }
         $shipped = foreach ($field in $lists.Keys) {
             foreach ($row in $naming[$lists[$field]]) { "$field`t$($row['code'])`t$($row['name'])`t$($row['color'])" }
         }
-        @($shipped) | Should -BeExactly @(foreach ($f in Read-TodayTable 'schema-names.tsv') { $f -join "`t" })
+        @($shipped) | Should -BeExactly @(foreach ($f in Read-OldTable 'schema-names.tsv') { $f -join "`t" })
     }
 
     It 'decodes <Name> as <Decoded>' -ForEach @(
@@ -124,12 +124,12 @@ Describe 'the VLAN an address is in' {
 }
 
 Describe 'the named colours' {
-    It 'are today''s colors.tsv, each in 24-bit and as its 16-colour code' {
-        $problems = foreach ($f in Read-TodayTable 'colors.tsv') {
+    It 'are the old banner''s colors.tsv, each in 24-bit and as its 16-colour code' {
+        $problems = foreach ($f in Read-OldTable 'colors.tsv') {
             $found = InModuleScope UsaBanner -Parameters @{ Name = $f[0] } { param($Name) $c = Get-UsaBannerNamedColor -Name $Name; @{ Hex = $c.Hex; Sgr = $script:UsaBasicSgr[$c.Basic] } }
             $hex = '#{0:X2}{1:X2}{2:X2}' -f [int]$f[2], [int]$f[3], [int]$f[4]
-            if ($found.Hex -cne $hex) { "$($f[0]): $($found.Hex), today $hex" }
-            if ($found.Sgr -ne [int]$f[5]) { "$($f[0]): code $($found.Sgr), today $($f[5])" }
+            if ($found.Hex -cne $hex) { "$($f[0]): $($found.Hex), old $hex" }
+            if ($found.Sgr -ne [int]$f[5]) { "$($f[0]): code $($found.Sgr), old $($f[5])" }
         }
         @($problems) | Should -BeNullOrEmpty
     }
@@ -148,7 +148,7 @@ Describe 'the tiers' {
         InModuleScope UsaBanner { @($script:UsaTiers.Keys) } | Should -BeExactly $schema['properties']['environment']['enum']
     }
 
-    It 'draw <Tier> in <Color>, its colour today, and say it holds <Meaning>' -ForEach @(
+    It 'draw <Tier> in <Color>, as the old banner did, and say it holds <Meaning>' -ForEach @(
         @{ Tier = 'UNSET'; Color = 'Grey'; Meaning = 'not set yet' }
         @{ Tier = 'DEV-TEST'; Color = 'Black'; Meaning = 'sandbox and development' }
         @{ Tier = 'LAB'; Color = 'Orange'; Meaning = 'larger-scale testing' }

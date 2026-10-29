@@ -6,7 +6,7 @@ For AI coding agents working in this repository. Humans: see README.md.
 
 - PowerShell 7.4 or later, with Pester. Run each `*.Tests.ps1` file in its own
   `pwsh` process, for example
-  `pwsh -NoProfile -Command "Invoke-Pester -Path ./windows/tests/Units.Tests.ps1"`:
+  `pwsh -NoProfile -Command "Invoke-Pester -Path ./tests/Identity.Tests.ps1"`:
   the stubs one file defines collide with another's when they share a process.
 - Run the suite on Linux. Some tests run the shell scripts under `sh` and
   `awk`, and check the systemd units with `systemd-analyze verify`.

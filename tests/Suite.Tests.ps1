@@ -5,7 +5,7 @@
 
 BeforeDiscovery {
     $repoRoot = Split-Path $PSScriptRoot -Parent
-    $testFiles = @(foreach ($folder in 'tests', 'windows/tests', 'prototype/tests') {
+    $testFiles = @(foreach ($folder in 'tests', 'prototype/tests') {
         $path = Join-Path $repoRoot $folder
         if (Test-Path -LiteralPath $path) {
             foreach ($file in Get-ChildItem -LiteralPath $path -Filter '*.Tests.ps1' -File) { @{ File = "$folder/$($file.Name)"; Path = $file.FullName } }

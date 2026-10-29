@@ -45,10 +45,11 @@ function Deploy-UsaBannerGPO {
     - Each -LinkTarget gets a link, enabled. Without it the links stay as they
       are: no link is made at the domain root or anywhere else, since a link is
       your act. A GPO linked nowhere applies to no host, and a warning says so.
-    - It warns while today's banner GPO, the one with the task "Manatech MOTD
-      sync", is linked and enabled anywhere (on a host that both apply to, the
-      two undo each other at each refresh), and when no GPO of deploy-usawinssh
-      is linked and enabled (a server without PowerShell 7 then gets no banner).
+    - It warns while the old banner's GPO, the one with the task "Manatech
+      MOTD sync", is linked and enabled anywhere (on a host that both apply
+      to, the two undo each other at each refresh), and when no GPO of
+      deploy-usawinssh is linked and enabled (a server without PowerShell 7
+      then gets no banner).
     - Everything is read back, a line each: 'ok' or 'FAIL' and the check. The
       run fails if one does.
 

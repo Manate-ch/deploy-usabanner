@@ -766,7 +766,7 @@ function Get-UsaBannerGpoTaskItems {
         if (-not [System.IO.File]::Exists($file)) { continue }
         try { $names = @(Get-UsaBannerGpoTaskItemName -Xml ([System.IO.File]::ReadAllText($file))) }
         catch {
-            Write-Information -MessageData "  note: the ScheduledTasks.xml of the GPO '$($gpo.Name)' ($($gpo.Guid)) could not be read ($($_.Exception.Message)), so it is skipped when looking for this banner's task, today's banner and deploy-usawinssh" -InformationAction Continue
+            Write-Information -MessageData "  note: the ScheduledTasks.xml of the GPO '$($gpo.Name)' ($($gpo.Guid)) could not be read ($($_.Exception.Message)), so it is skipped when looking for this banner's task, the old banner and deploy-usawinssh" -InformationAction Continue
             continue
         }
         [pscustomobject]@{ Guid = $gpo.Guid; Name = $gpo.Name; Items = $names }
@@ -781,7 +781,7 @@ function Write-UsaBannerGpoNeighbourWarning {
     In:  the run.
     Out: nothing; warnings only. Read from the GPOs that have the Scheduled
     Tasks extension (their ScheduledTasks.xml, from SYSVOL; one that cannot be
-    read is skipped, with a note). Today's banner: a GPO with the task "Manatech
+    read is skipped, with a note). The old banner: a GPO with the task "Manatech
     MOTD sync" that an enabled link reaches undoes this one at each refresh.
     deploy-usawinssh: with no GPO that has its task "UsaDeploy-WinSsh" linked by
     an enabled link, a Windows server without PowerShell 7 gets no banner. This
@@ -806,7 +806,7 @@ function Write-UsaBannerGpoNeighbourWarning {
         if ($isWinSsh) { $winssh.Add($gpo.Name) }
     }
     foreach ($old in $today) {
-        Write-Warning "UsaBanner: the GPO '$($old.Name)' ($($old.Guid)) delivers today's banner (its task is '$script:UsaOldGpoTask') and is linked, enabled, at $($old.Dn -join '; '): while it applies to a host, it and this GPO undo each other at each refresh. Take it off those hosts (D29)."
+        Write-Warning "UsaBanner: the GPO '$($old.Name)' ($($old.Guid)) delivers the old banner (its task is '$script:UsaOldGpoTask') and is linked, enabled, at $($old.Dn -join '; '): while it applies to a host, it and this GPO undo each other at each refresh. Take it off those hosts (D29)."
     }
     if (-not $winssh.Count) {
         Write-Warning "UsaBanner: no GPO that makes the task '$script:UsaGpoWinSshTask' is linked and enabled, so Windows servers without PowerShell 7 get no banner: deploy-usawinssh installs it (D21)."

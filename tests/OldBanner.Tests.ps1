@@ -450,7 +450,7 @@ Describe 'Deploy-UsaBanner -ReplaceOldBanner on Windows Server' {
         Join-Path $Root 'ProgramData/ssh/sshd_config.manatech-bak' | Should -Exist
     }
 
-    It 'deletes the git clone its update task pulled into, read-only objects too, before the folder the README puts it in' {
+    It 'deletes the git clone its update task pulled into, read-only objects too, before the folder the old README put it in' {
         Add-OldWindowsBanner $Root
         Add-OldRepoCopy $Root 'ProgramData/Manatech/repo'
         $global:UsaWinTasks['Manatech banner update'].Arguments = "-NoProfile -NonInteractive -File `"$Root/ProgramData/Manatech/repo/windows/Update-ManatechBanner.ps1`""

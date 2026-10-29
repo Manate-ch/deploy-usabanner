@@ -111,7 +111,7 @@ Describe 'Get-UsaBanner on Ubuntu' -Skip:$IsWindows {
         Use-LinuxHost -Root (New-StockHost)
         Write-TestFile $global:UsaDeployRoot 'etc/update-motd.d/05-manatech-banner' "#!/bin/sh`n" -Mode '755'
         (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeExactly ("there is no /etc/usabanner/usabanner.json: no banner is deployed here. " +
-            "This host has the banner of this repository's install.sh (/etc/update-motd.d/05-manatech-banner), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one")
+            "This host has the banner of this project's install.sh before V1 (/etc/update-motd.d/05-manatech-banner), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one")
     }
 
     It 'finds the banners drawn for the old name after a rename, until the periodic job draws them again' {
@@ -357,7 +357,7 @@ Describe 'Get-UsaBanner on Windows Server' {
     It 'names the banner of this repository''s Install-ManatechBanner.ps1 on a host that has it' {
         Use-WindowsHost (New-WindowsHost)
         $null = New-Item -ItemType Directory -Path (Join-Path $global:UsaWinRoot 'ProgramData/Manatech')
-        (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this repository's Install-ManatechBanner.ps1 (*ProgramData/Manatech), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one"
+        (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this project's Install-ManatechBanner.ps1 before V1 (*ProgramData/Manatech), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one"
     }
 
     It 'names the old banner''s task, by its file, where it is all that is left and no banner is deployed' {
@@ -365,7 +365,7 @@ Describe 'Get-UsaBanner on Windows Server' {
         # hour after Get-UsaBanner had found none of it; and the task stays when the GPO stops applying.
         Use-WindowsHost (New-WindowsHost)
         Add-WindowsOldTask -Name 'Manatech MOTD sync' -Arguments '-File Sync-ManatechBanner.ps1' -Schedule 'gpo'
-        (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this repository's Install-ManatechBanner.ps1 (the task \Manatech MOTD sync), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one"
+        (Get-Check (Get-ReadOnlyStatus) 'configuration').Detail | Should -BeLike "*This host has the banner of this project's Install-ManatechBanner.ps1 before V1 (the task \Manatech MOTD sync), which Deploy-UsaBanner -ReplaceOldBanner takes off before it deploys this one"
     }
 
     It 'has the old banner check differ where only the old banner''s task is left, read from its file, never asked of the task scheduler' {

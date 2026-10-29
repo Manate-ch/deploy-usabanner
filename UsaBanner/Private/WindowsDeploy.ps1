@@ -667,14 +667,14 @@ function Assert-UsaBannerWindowsHost {
     if (-not $RefuseOldInstall) { return }
     $found = @(Find-UsaBannerWindowsOldInstall -Layout $Layout)
     if ($found.Count) {
-        throw "UsaBanner: this host has the banner of this repository's Install-ManatechBanner.ps1 ($($found -join ', ')). $Command does not install beside it: $Command -ReplaceOldBanner takes that banner off first, then deploys this one."
+        throw "UsaBanner: this host has the banner of this project's Install-ManatechBanner.ps1 before V1 ($($found -join ', ')). $Command does not install beside it: $Command -ReplaceOldBanner takes that banner off first, then deploys this one."
     }
 }
 
 function Find-UsaBannerWindowsOldInstall {
     # In:  the layout (Get-UsaBannerWindowsLayout)
-    # Out: each file and folder of today's banner
-    #      (windows/Install-ManatechBanner.ps1) on the host, each profile
+    # Out: each file and folder of the old banner
+    #      (Install-ManatechBanner.ps1, before V1) on the host, each profile
     #      that holds its block, and each of its two tasks, as "the task
     #      \<name>"
     # Why: on a production host the old banner's GPO task put the banner
