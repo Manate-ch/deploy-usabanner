@@ -15,9 +15,10 @@ function Invoke-UsaBannerHandoff {
     measured 2026-10-21); so the console reads UTF-8 for the call, as pwsh
     writes it, and gets its own encoding back after. A process without a
     console keeps its encoding.
-    Throws when no pwsh is found, saying what to install, and when pwsh
-    exits with an error. A command that reads keys would need pwsh on the
-    console rather than behind a pipe; none does yet.
+    Where no pwsh is found, Install-UsaBannerPwsh offers to install it
+    (PwshInstall.ps1, D18). Throws when none is installed, saying what to do,
+    and when pwsh exits with an error. A command that reads keys would need
+    pwsh on the console rather than behind a pipe; none does yet.
     #>
     [CmdletBinding()]
     param(
@@ -27,7 +28,9 @@ function Invoke-UsaBannerHandoff {
         [string]$Manifest = $script:UsaBannerManifest
     )
     if (-not $Pwsh) { $Pwsh = Find-UsaBannerPwsh }
+    if (-not $Pwsh) { $Pwsh = Install-UsaBannerPwsh -Command $Command }
     if (-not $Pwsh) {
+        if ($WhatIfPreference) { throw "UsaBanner: $Command needs PowerShell 7, and none was found. -WhatIf installs nothing, so this stops here: run $Command again without -WhatIf to install it." }
         throw "UsaBanner: $Command needs PowerShell 7, and none was found. Install it (deploy-usawinssh does, or the MSI from https://github.com/PowerShell/PowerShell/releases), then run $Command again."
     }
     $script = ConvertTo-UsaBannerHandoffScript -Command $Command -Parameters $Parameters -Manifest $Manifest -Pwsh $Pwsh

@@ -535,7 +535,7 @@ Describe 'Deploy-UsaBanner from a module folder that is not the files its manife
             $installed = Join-Path $global:UsaDeployRoot "usr/local/share/powershell/Modules/UsaBanner/$script:Version"
             Join-Path $installed 'usabanner-contoso.json' | Should -Not -Exist
             Join-Path $installed 'art/base/globe.json' | Should -Exist
-            $all | Should -Contain "installed the module UsaBanner $script:Version for every user: /usr/local/share/powershell/Modules/UsaBanner/$script:Version (83 file(s) copied, 0 removed)"
+            $all | Should -Contain "installed the module UsaBanner $script:Version for every user: /usr/local/share/powershell/Modules/UsaBanner/$script:Version (84 file(s) copied, 0 removed)"
         }
         finally { Remove-Item -LiteralPath $extra }
     }

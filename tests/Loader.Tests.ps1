@@ -167,9 +167,10 @@ Describe 'the hand-off to pwsh' {
         finally { $env:ProgramFiles = $saved }
     }
 
-    It 'says what to install when there is no pwsh' {
+    It 'says what to install when there is no pwsh, and none was installed' {
         InModuleScope UsaBanner {
             Mock Find-UsaBannerPwsh { }
+            Mock Install-UsaBannerPwsh { }
             { Invoke-UsaBannerHandoff -Command 'Show-UsaBannerArt' } | Should -Throw '*Show-UsaBannerArt needs PowerShell 7, and none was found. Install it*'
         }
     }

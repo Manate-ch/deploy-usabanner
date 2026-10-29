@@ -88,17 +88,20 @@ says whether each part is in place.
 
 ### Windows Server
 
-In an elevated PowerShell 7. The module needs PowerShell 7 (the MSI from
-Microsoft), and the SSH banners need the OpenSSH Server
+In an elevated PowerShell. The module runs in PowerShell 7: where the host has
+none, the first command run in Windows PowerShell offers to install it, the
+newest 7.6 MSI from GitHub, checked against its release's SHA-256 and
+Microsoft's signature (`-WhatIf` says that it would, and stops there). The SSH
+banners need the OpenSSH Server
 (`Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0`, then start
 `sshd` once so that it writes its `sshd_config`):
 
     $base = 'https://github.com/Manate-ch/deploy-usabanner/releases/latest/download'
     $dir = Join-Path $env:TEMP ('usabanner-' + [guid]::NewGuid())
     $null = New-Item -ItemType Directory -Path $dir
-    Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile "$dir\SHA256SUMS"
+    Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile "$dir\SHA256SUMS" -UseBasicParsing
     $sha, $zip = -split (Get-Content -LiteralPath "$dir\SHA256SUMS" -TotalCount 1)
-    Invoke-WebRequest -Uri "$base/$zip" -OutFile "$dir\$zip"
+    Invoke-WebRequest -Uri "$base/$zip" -OutFile "$dir\$zip" -UseBasicParsing
     if ((Get-FileHash -LiteralPath "$dir\$zip").Hash -ne $sha) { throw "$zip does not match SHA256SUMS" }
     Unblock-File -LiteralPath "$dir\$zip"
     Expand-Archive -LiteralPath "$dir\$zip" -DestinationPath $dir
@@ -347,7 +350,10 @@ Install-ManatechBanner.ps1 installs, is refused unless -ReplaceOldBanner
 takes that banner off first.
 
 Under Windows PowerShell 5.1 the command runs itself in pwsh (PowerShell
-7), and stops with what to install when there is none.
+7). Where there is none, it offers to install it first: the newest 7.6
+MSI from GitHub, checked against its release's SHA-256 and Microsoft's
+signature. That takes an elevated PowerShell; the answer no, or -WhatIf,
+installs nothing.
 
 #### Examples
 
@@ -836,9 +842,11 @@ Run it on a domain controller, or a domain member with the Group Policy
 Management tools, as someone who may edit Group Policy objects and write
 NETLOGON and SYSVOL. Windows PowerShell 5.1 hands the work to pwsh
 (PowerShell 7), where the GroupPolicy module answers through the Windows
-PowerShell compatibility session. Everything is read from and written to
-the PDC emulator, so the GPO in AD, its folder in SYSVOL and the staged
-files are all in one place.
+PowerShell compatibility session; where there is no pwsh, it offers to
+install PowerShell 7 first, as Deploy-UsaBanner does. The hosts the GPO
+reaches get PowerShell 7 from deploy-usawinssh's policy, not from here.
+Everything is read from and written to the PDC emulator, so the GPO in
+AD, its folder in SYSVOL and the staged files are all in one place.
 
 The package is the configuration every host deploys, built from the flags
 as Deploy-UsaBanner builds one (docs/DECISIONS.md, D27): the defaults, or
@@ -1786,7 +1794,9 @@ With -Moment, a banner as installed, a string per line:
 ```
 
 It changes nothing. Under Windows PowerShell 5.1 the command runs itself
-in pwsh (PowerShell 7), and its answer comes back as text.
+in pwsh (PowerShell 7), and its answer comes back as text; where there is
+no pwsh, it offers to install PowerShell 7 first, as Deploy-UsaBanner
+does.
 
 #### Examples
 
@@ -1884,7 +1894,10 @@ may take 64 columns and 30 rows; a picture that would take more is made
 smaller, with a warning when -Width or -Height asked for the size.
 
 Under Windows PowerShell 5.1 the command runs itself in pwsh (PowerShell
-7), and stops with what to install when there is none.
+7). Where there is none, it offers to install it first: the newest 7.6
+MSI from GitHub, checked against its release's SHA-256 and Microsoft's
+signature. That takes an elevated PowerShell; the answer no installs
+nothing.
 
 #### Examples
 
@@ -2185,7 +2198,10 @@ deploy does: the record it reads there says what to delete.
 PowerShell itself stays: it may serve more than the banner.
 
 Under Windows PowerShell 5.1 the command runs itself in pwsh (PowerShell
-7), and stops with what to install when there is none.
+7). Where there is none, it offers to install it first: the newest 7.6
+MSI from GitHub, checked against its release's SHA-256 and Microsoft's
+signature. That takes an elevated PowerShell; the answer no, or -WhatIf,
+installs nothing.
 
 #### Examples
 
@@ -2292,7 +2308,10 @@ draws a Unicode border set as Classic. On Windows, the locale is not
 read: unicode.
 
 Under Windows PowerShell 5.1 the command runs itself in pwsh
-(PowerShell 7), and stops with what to install when there is none.
+(PowerShell 7). Where there is none, it offers to install it first: the
+newest 7.6 MSI from GitHub, checked against its release's SHA-256 and
+Microsoft's signature. That takes an elevated PowerShell; the answer no
+installs nothing.
 
 #### Examples
 
@@ -2495,7 +2514,10 @@ ours, apps for another owner's logo, drawn by us), its size in columns by
 rows, its title, who drew it (and whose logo it is), and its licence.
 
 Under Windows PowerShell 5.1 the command runs itself in pwsh
-(PowerShell 7), and stops with what to install when there is none.
+(PowerShell 7). Where there is none, it offers to install it first: the
+newest 7.6 MSI from GitHub, checked against its release's SHA-256 and
+Microsoft's signature. That takes an elevated PowerShell; the answer no
+installs nothing.
 
 #### Examples
 
